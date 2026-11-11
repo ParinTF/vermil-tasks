@@ -246,4 +246,10 @@ $('update').onclick = () => {
 checkUpdate();
 setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
 
-invoke('get_todos').then((t) => { todos = t; render(true); });
+invoke('quick_shortcut').then((ok) => {
+  $('quick-hint').textContent = ok ? 'Quick add from anywhere: Ctrl+Alt+T' : 'Quick add shortcut Ctrl+Alt+T is in use by another app';
+});
+
+const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
+window.__TAURI__.event.listen('todos-changed', () => load()); // the backend changed tasks (quick add)
+load(true);

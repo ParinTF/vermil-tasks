@@ -17,6 +17,20 @@
         "minWidth": 400,
         "minHeight": 520,
         "backgroundColor": "#f4f1ea"
+      },
+      {
+        "label": "quick",
+        "url": "quick.html",
+        "title": "Quick add",
+        "width": 640,
+        "height": 80,
+        "decorations": false,
+        "resizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "center": true,
+        "backgroundColor": "#12110f"
       }
     ],
     "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost" }

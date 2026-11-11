@@ -6,9 +6,10 @@ use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex, time::Duration};
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Manager, State, WindowEvent,
+    AppHandle, Emitter, Manager, State, WindowEvent,
 };
 use tauri_plugin_autostart::ManagerExt as _;
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 
@@ -37,6 +38,8 @@ struct Data {
     #[serde(default)]
     autostart_set: bool,
 }
+
+const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
 
 struct Store {
     file: PathBuf,
@@ -151,6 +154,40 @@ fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
     (if on { launcher.enable() } else { launcher.disable() }).map_err(|e| e.to_string())
 }
 
+/// Adds a task typed into the quick-add bar and tells the main window to reload.
+#[tauri::command]
+fn quick_add(app: AppHandle, store: State<Store>, title: String) -> Result<(), String> {
+    let title: String = title.trim().chars().take(200).collect();
+    if title.is_empty() {
+        return Ok(());
+    }
+    let now = chrono::Utc::now();
+    let mut extra = serde_json::Map::new();
+    extra.insert("createdAt".into(), now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true).into());
+    extra.insert("completedAt".into(), serde_json::Value::Null);
+    {
+        let mut data = store.data.lock().unwrap();
+        data.todos.push(Todo { id: format!("q{}", now.timestamp_micros()), title, due: None, remind_before: None, done: false, extra });
+        save(&store.file, &data)?;
+    }
+    let _ = app.emit("todos-changed", ());
+    Ok(())
+}
+
+/// False when another program already owns the shortcut.
+#[tauri::command]
+fn quick_shortcut(app: AppHandle) -> bool {
+    app.global_shortcut().is_registered(QUICK_SHORTCUT)
+}
+
+fn show_quick(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("quick") {
+        let _ = win.center();
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+}
+
 fn show(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
@@ -162,12 +199,28 @@ fn show(app: &AppHandle) {
 fn main() {
     tauri::Builder::default()
         // a second instance would fire every reminder twice
-        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show(app)))
+        .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
+            // `vermil-tasks.exe --quick` opens the quick-add bar of the running app
+            if args.iter().any(|a| a == "--quick") {
+                show_quick(app)
+            } else {
+                show(app)
+            }
+        }))
         .plugin(tauri_plugin_notification::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        show_quick(app);
+                    }
+                })
+                .build(),
+        )
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -196,19 +249,22 @@ fn main() {
                     let _ = save(&store.file, &data);
                 }
             }
+            let _ = app.global_shortcut().register(QUICK_SHORTCUT); // fails harmlessly if the keys are taken
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());
             }
 
             let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+            let quick = MenuItem::with_id(app, "quick", "Quick add", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Vermil Tasks")
-                .menu(&Menu::with_items(app, &[&open, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &quick, &quit])?)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
+                    "quick" => show_quick(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
