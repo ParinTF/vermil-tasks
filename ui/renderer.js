@@ -282,9 +282,16 @@ $('import').onchange = async (e) => {
   // merge by id so an import never deletes anything; the backup wins for tasks both sides have
   const ids = new Set(incoming.map((t) => t && t.id));
   const replacing = todos.filter((t) => ids.has(t.id)).length;
-  if (!confirm(`Import ${incoming.length} tasks? ${incoming.length - replacing} are new, ${replacing} replace tasks you already have.`)) return;
+  if (!confirm(`Import ${incoming.length} tasks from this backup?\nNew: ${incoming.length - replacing}\nReplacing tasks you already have: ${replacing}`)) return;
   if (await commit([...todos.filter((t) => !ids.has(t.id)), ...incoming])) $('backup-msg').textContent = `Imported ${incoming.length} tasks`;
 };
+
+// The left column stays pinned while the list scrolls. When it is taller than the window it is pinned
+// by its bottom edge instead, otherwise the Add button could never be scrolled into view.
+const side = document.querySelector('.side');
+const pinSide = () => side.style.setProperty('--side-top', Math.min(56, innerHeight - side.offsetHeight) + 'px');
+new ResizeObserver(pinSide).observe(side);
+addEventListener('resize', pinSide);
 
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();
