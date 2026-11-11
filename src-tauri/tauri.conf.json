@@ -1,0 +1,23 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Vermil Tasks",
+  "version": "1.0.0",
+  "identifier": "com.vermil.tasks",
+  "build": { "frontendDist": "../ui" },
+  "app": {
+    "withGlobalTauri": true,
+    "windows": [
+      {
+        "label": "main",
+        "title": "Vermil Tasks",
+        "width": 1120,
+        "height": 800,
+        "minWidth": 400,
+        "minHeight": 520,
+        "backgroundColor": "#f4f1ea"
+      }
+    ],
+    "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost" }
+  },
+  "bundle": { "active": true, "targets": ["nsis"], "icon": ["icons/icon.ico"] }
+}

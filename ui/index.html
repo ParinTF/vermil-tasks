@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Vermil Tasks</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <span class="brand">Vermil <span>Tasks</span><i></i></span>
+    <time id="today"></time>
+  </header>
+
+  <main>
+    <section class="hero">
+      <p class="eyebrow">Open tasks</p>
+      <h1>
+        <span class="line"><span id="h-top">Still left</span></span>
+        <span class="line"><span><b id="count">00</b> <span id="h-unit">tasks</span></span></span>
+      </h1>
+      <p class="stats" id="stats" aria-live="polite"></p>
+    </section>
+
+    <div class="marquee" aria-hidden="true"><div class="track" id="track"></div></div>
+
+    <div class="grid">
+      <section class="compose" aria-labelledby="compose-h">
+        <h2 id="compose-h">What's<br>next?</h2>
+        <form id="form">
+          <label class="field">Task
+            <input id="title" required maxlength="200" placeholder="Type a task">
+          </label>
+          <div class="row">
+            <label class="field">Due
+              <input id="due" type="datetime-local">
+            </label>
+            <label class="field">Remind me
+              <select id="remind">
+                <option value="0">At due time</option>
+                <option value="10">10 minutes before</option>
+                <option value="60">1 hour before</option>
+                <option value="1440">1 day before</option>
+                <option value="">Don't remind</option>
+              </select>
+            </label>
+          </div>
+          <label class="repeat"><input id="repeat" type="checkbox"> Repeat every day</label>
+          <div class="actions">
+            <button class="primary"><span id="submit">Add task</span><span class="arrow" aria-hidden="true">→</span></button>
+            <button id="cancel" class="ghost" type="button" hidden>Cancel</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="board">
+        <nav role="tablist">
+          <button id="tab-pending" role="tab">To do<sup id="n-pending"></sup></button>
+          <button id="tab-history" role="tab">History<sup id="n-history"></sup></button>
+        </nav>
+        <input id="search" type="search" placeholder="Search history" aria-label="Search history" hidden>
+        <div id="list"></div>
+      </section>
+    </div>
+  </main>
+
+  <script src="renderer.js"></script>
+</body>
+</html>
