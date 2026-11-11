@@ -1,10 +1,25 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence } = require('../ui/logic.js');
+const { nextOccurrence, streak } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
 
+test('streak counts back from today, or from yesterday while today is open', () => {
+  const days = (...list) => new Set(list.map((d) => '2026-11-' + d));
+  assert.equal(streak('daily', days(), wed), 0);
+  assert.equal(streak('daily', days('11'), wed), 1);
+  assert.equal(streak('daily', days('09', '10', '11'), wed), 3);
+  assert.equal(streak('daily', days('09', '10'), wed), 2); // today not done yet
+  assert.equal(streak('daily', days('08', '09'), wed), 0); // missed yesterday
+  assert.equal(streak('daily', days('07', '09', '10'), wed), 2); // gap on the 8th
+});
+test('weekday streaks ignore the weekend', () => {
+  const days = new Set(['2026-11-12', '2026-11-13', '2026-11-16']); // Thu, Fri, Mon
+  assert.equal(streak('weekdays', days, new Date(2026, 10, 16)), 3);
+  assert.equal(streak('daily', days, new Date(2026, 10, 16)), 1);
+  assert.equal(streak('weekdays', days, new Date(2026, 10, 15)), 2); // asked on Sunday
+});
 test('daily: tomorrow, also when overdue by days', () => {
   assert.equal(next('daily', null), '2026-11-12');
   assert.equal(next('daily', '2026-11-11T08:30'), '2026-11-12');

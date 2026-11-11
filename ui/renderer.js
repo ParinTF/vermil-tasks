@@ -4,6 +4,7 @@ let todos = [];
 let tab = 'pending';
 let editingId = null;
 let marqueeKey;
+let streaks = new Map(); // open task id -> current streak, refreshed on every render
 
 const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
 const remindLabel = { 0: 'reminds at due time', 10: 'reminds 10 min before', 60: 'reminds 1 h before', 1440: 'reminds 1 day before' };
@@ -53,6 +54,21 @@ function backLabel(day) {
   return 'Back ' + (day === localDay(tomorrow) ? 'tomorrow' : fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short' }));
 }
 
+function seriesStreaks() {
+  const days = new Map(); // series -> days it was completed on
+  for (const t of todos) {
+    if (!t.done || !t.repeat || !t.completedAt) continue;
+    const key = t.series || t.id;
+    if (!days.has(key)) days.set(key, new Set());
+    days.get(key).add(localDay(new Date(t.completedAt)));
+  }
+  const out = new Map();
+  for (const t of todos) {
+    if (!t.done && (t.repeat === 'daily' || t.repeat === 'weekdays')) out.set(t.id, streak(t.repeat, days.get(t.series || t.id) || new Set(), new Date()));
+  }
+  return out;
+}
+
 function resetForm() {
   editingId = null;
   $('form').reset();
@@ -79,6 +95,7 @@ function pendingItem(t) {
     t.due && t.remindBefore != null ? remindLabel[t.remindBefore] : '',
     t.snoozeUntil > Date.now() ? 'snoozed to ' + fmt(t.snoozeUntil, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
     t.repeat || '',
+    streaks.get(t.id) > 1 ? streaks.get(t.id) + '-day streak' : '',
   ].filter(Boolean);
   const meta = parts.length ? el('div', { className: 'meta' + (overdue ? ' overdue' : '') }, parts.join(' · ')) : '';
   const lead = later
@@ -119,6 +136,7 @@ function historyItem(t) {
 
 function renderHero(open, done) {
   const late = open.filter(isOverdue).length;
+  const best = Math.max(0, ...streaks.values());
   const plural = (n, word) => `${n} ${word}${n === 1 ? '' : 's'}`;
   $('today').textContent = fmt(new Date(), { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
   $('h-top').textContent = open.length ? 'Still left' : 'All clear';
@@ -126,7 +144,8 @@ function renderHero(open, done) {
   $('h-unit').textContent = open.length === 1 ? 'task' : 'tasks';
   $('stats').replaceChildren(
     ...(late ? [el('b', { className: 'late' }, `${late} overdue`), ' · '] : []),
-    el('b', {}, plural(done.length, 'task')), ' done so far');
+    el('b', {}, plural(done.length, 'task')), ' done so far',
+    ...(best > 1 ? [' · ', el('b', {}, best + '-day streak')] : []));
 }
 
 function renderMarquee(done) {
@@ -151,6 +170,7 @@ function render(enter = false) {
   const open = todos.filter((t) => !t.done && !isLater(t)).sort(byDue);
   const later = todos.filter((t) => !t.done && isLater(t)).sort(byDue);
   const done = todos.filter((t) => t.done).sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+  streaks = seriesStreaks();
   renderHero(open, done);
   renderMarquee(done);
 

@@ -23,4 +23,16 @@ function nextOccurrence(repeat, due, today) {
   return localDay(d);
 }
 
-if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence };
+// How many scheduled days in a row a daily or weekdays task was completed. `days` is a Set of completion days.
+function streak(repeat, days, today) {
+  const d = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  if (!days.has(localDay(d))) d.setDate(d.getDate() - 1); // today still being open does not break the streak
+  let n = 0;
+  for (;; d.setDate(d.getDate() - 1)) {
+    if (repeat === 'weekdays' && (d.getDay() === 0 || d.getDay() === 6)) continue;
+    if (!days.has(localDay(d))) return n;
+    n++;
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence, streak };
