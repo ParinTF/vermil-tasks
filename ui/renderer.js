@@ -4,6 +4,7 @@ let todos = [];
 let tab = 'pending';
 let editingId = null;
 let marqueeKey;
+const openNotes = new Set(); // ids whose notes are expanded, so a re-render does not collapse them
 let streaks = new Map(); // open task id -> current streak, refreshed on every render
 
 const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
@@ -76,6 +77,17 @@ function resetForm() {
   $('cancel').hidden = true;
 }
 
+function notesBlock(t) {
+  if (!t.notes) return '';
+  const copy = el('button', { type: 'button', textContent: 'Copy' });
+  copy.onclick = () => navigator.clipboard.writeText(t.notes).then(
+    () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); },
+    () => { copy.textContent = 'Copy failed'; });
+  const box = el('details', { className: 'notes', open: openNotes.has(t.id) }, el('summary', {}, 'Notes'), el('pre', {}, t.notes), copy);
+  box.ontoggle = () => (box.open ? openNotes.add(t.id) : openNotes.delete(t.id));
+  return box;
+}
+
 function removeButton(t) {
   const btn = el('button', { type: 'button', className: 'danger', textContent: 'Delete' });
   btn.onclick = () => {
@@ -103,7 +115,7 @@ function pendingItem(t) {
     : el('input', { type: 'checkbox', ariaLabel: 'Mark done: ' + t.title });
   const edit = el('button', { type: 'button', textContent: 'Edit' });
   const li = el('li', { className: 'item' + (later ? ' later' : ''), id: 'r-' + t.id }, lead,
-    el('div', {}, el('span', { className: 'title' }, t.title), meta),
+    el('div', {}, el('span', { className: 'title' }, t.title), meta, notesBlock(t)),
     el('div', { className: 'tools' }, edit, removeButton(t)));
   lead.onchange = () => {
     lead.disabled = true;
@@ -117,6 +129,7 @@ function pendingItem(t) {
     $('due').value = t.due || '';
     $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('repeat').value = t.repeat || '';
+    $('notes').value = t.notes || '';
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
     $('title').focus();
@@ -130,7 +143,7 @@ function historyItem(t) {
   return el('li', { className: 'item', id: 'r-' + t.id },
     el('span', { className: 'tick', ariaHidden: 'true' }, '✓'),
     el('div', {}, el('span', { className: 'title' }, t.title),
-      el('div', { className: 'meta' }, 'Done at ' + fmt(t.completedAt, { timeStyle: 'short' }) + (t.repeat ? ' · ' + t.repeat : ''))),
+      el('div', { className: 'meta' }, 'Done at ' + fmt(t.completedAt, { timeStyle: 'short' }) + (t.repeat ? ' · ' + t.repeat : '')), notesBlock(t)),
     el('div', { className: 'tools' }, restore, removeButton(t)));
 }
 
@@ -190,7 +203,7 @@ function render(enter = false) {
     if (open.length + later.length) list.append(el('ul', {}, ...[...open, ...later].map(pendingItem)));
   } else {
     const q = $('search').value.trim().toLowerCase();
-    const items = done.filter((t) => t.title.toLowerCase().includes(q));
+    const items = done.filter((t) => (t.title + '\n' + (t.notes || '')).toLowerCase().includes(q));
     if (!items.length) return empty(q ? 'No matches' : 'No history yet');
     let day, ul;
     for (const t of items) {
@@ -221,6 +234,7 @@ $('form').onsubmit = (e) => {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
     repeat: $('repeat').value || null,
+    notes: $('notes').value.trim() || null,
   };
   const next = editingId
     // a new due date cancels a pending snooze, so the reminder follows the new time
