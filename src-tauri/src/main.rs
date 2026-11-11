@@ -8,6 +8,7 @@ use tauri::{
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
     AppHandle, Manager, State, WindowEvent,
 };
+use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
 
@@ -32,6 +33,9 @@ struct Data {
     // todo id -> the remind time already fired, so editing a due date re-arms the reminder
     #[serde(default)]
     notified: HashMap<String, i64>,
+    // true once "start with Windows" has been switched on for the first time
+    #[serde(default)]
+    autostart_set: bool,
 }
 
 struct Store {
@@ -136,6 +140,17 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+#[tauri::command]
+fn get_autostart(app: AppHandle) -> bool {
+    app.autolaunch().is_enabled().unwrap_or(false)
+}
+
+#[tauri::command]
+fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
+    let launcher = app.autolaunch();
+    (if on { launcher.enable() } else { launcher.disable() }).map_err(|e| e.to_string())
+}
+
 fn show(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
@@ -149,8 +164,10 @@ fn main() {
         // a second instance would fire every reminder twice
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| show(app)))
         .plugin(tauri_plugin_notification::init())
+        // launched at sign-in with --hidden, so it starts in the tray
+        .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -167,6 +184,21 @@ fn main() {
                 fs::copy(&old, &file)?;
             }
             app.manage(Store { data: Mutex::new(load(&file)), file });
+
+            // reminders only fire while the app runs, so start with Windows by default;
+            // done once, after that the checkbox in the footer decides
+            if !cfg!(debug_assertions) {
+                let store = app.state::<Store>();
+                let mut data = store.data.lock().unwrap();
+                if !data.autostart_set {
+                    let _ = app.autolaunch().enable();
+                    data.autostart_set = true;
+                    let _ = save(&store.file, &data);
+                }
+            }
+            if !std::env::args().any(|a| a == "--hidden") {
+                show(app.handle());
+            }
 
             let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;

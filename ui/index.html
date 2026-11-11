@@ -51,7 +51,7 @@
               </select>
             </label>
           </div>
-          <label class="repeat"><input id="repeat" type="checkbox"> Repeat every day</label>
+          <label class="check"><input id="repeat" type="checkbox"> Repeat every day</label>
           <div class="actions">
             <button class="primary"><span id="submit">Add task</span><span class="arrow" aria-hidden="true">→</span></button>
             <button id="cancel" class="ghost" type="button" hidden>Cancel</button>
@@ -69,6 +69,10 @@
         <div id="list"></div>
       </section>
   </main>
+
+  <footer class="foot">
+    <label class="check"><input id="autostart" type="checkbox"> Start with Windows</label>
+  </footer>
 
   <script src="renderer.js"></script>
 </body>

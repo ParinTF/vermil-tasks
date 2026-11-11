@@ -216,6 +216,12 @@ setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overd
 $('title').focus({ preventScroll: true });
 window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
 
+invoke('get_autostart').then((on) => { $('autostart').checked = on; });
+$('autostart').onchange = (e) => invoke('set_autostart', { on: e.target.checked }).catch((err) => {
+  e.target.checked = !e.target.checked;
+  alert('Could not change the startup setting: ' + err);
+});
+
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();
 $('win-max').onclick = () => win.toggleMaximize();
