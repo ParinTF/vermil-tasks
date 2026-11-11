@@ -50,6 +50,13 @@ button { cursor: pointer; }
 .eyebrow, .field, #list h2 { text-transform: uppercase; }
 .brand i { display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--accent); }
 #today { color: var(--mute); }
+.update {
+  margin-left: auto; margin-right: 20px; padding: 6px 16px; border: 0; border-radius: 999px;
+  background: var(--accent); color: var(--paper); font-size: 13px; font-weight: 600;
+  transition: background .35s var(--ease);
+}
+.update:hover { background: var(--ink); }
+.update:disabled { background: var(--mute); cursor: default; }
 
 /* ── hero: the headline is the picture ── */
 .hero { padding-block: clamp(28px, 7vh, 80px) clamp(24px, 5vh, 56px); }

@@ -215,4 +215,24 @@ setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overd
 // ready to type on launch without the autofocus scroll jumping past the hero
 $('title').focus({ preventScroll: true });
 window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
+
+// Offer new versions without interrupting: the button appears only when the release feed has one.
+const checkUpdate = () => invoke('check_update').then((v) => {
+  if (!v) return;
+  $('update').textContent = `Update to v${v} →`;
+  $('update').hidden = false;
+}).catch(() => {}); // offline or feed unreachable: try again later
+$('update').onclick = () => {
+  const label = $('update').textContent;
+  $('update').disabled = true;
+  $('update').textContent = 'Updating…';
+  invoke('install_update').catch((e) => {
+    alert('Update failed: ' + e);
+    $('update').disabled = false;
+    $('update').textContent = label;
+  });
+};
+checkUpdate();
+setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
+
 invoke('get_todos').then((t) => { todos = t; render(true); });
