@@ -44,7 +44,7 @@ function complete(t) {
     const day = localDay(tomorrow);
     next.push({
       ...t, id: crypto.randomUUID(), series, done: false, completedAt: null,
-      createdAt: new Date().toISOString(), hideUntil: day,
+      createdAt: new Date().toISOString(), hideUntil: day, snoozeUntil: null,
       due: t.due ? day + t.due.slice(10) : null, // same time of day, tomorrow
     });
   }
@@ -75,6 +75,7 @@ function pendingItem(t) {
     later ? 'Back tomorrow' : '',
     t.due ? (overdue ? 'Overdue ' : 'Due ') + fmt(t.due, { dateStyle: 'medium', timeStyle: 'short' }) : '',
     t.due && t.remindBefore != null ? remindLabel[t.remindBefore] : '',
+    t.snoozeUntil > Date.now() ? 'snoozed to ' + fmt(t.snoozeUntil, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
     t.repeat === 'daily' ? 'daily' : '',
   ].filter(Boolean);
   const meta = parts.length ? el('div', { className: 'meta' + (overdue ? ' overdue' : '') }, parts.join(' · ')) : '';
@@ -200,7 +201,8 @@ $('form').onsubmit = (e) => {
     repeat: $('repeat').checked ? 'daily' : null,
   };
   const next = editingId
-    ? todos.map((t) => (t.id === editingId ? { ...t, ...fields } : t))
+    // a new due date cancels a pending snooze, so the reminder follows the new time
+    ? todos.map((t) => (t.id === editingId ? { ...t, ...fields, snoozeUntil: t.due === due ? t.snoozeUntil : null } : t))
     : [...todos, { id: crypto.randomUUID(), ...fields, done: false, createdAt: new Date().toISOString(), completedAt: null }];
   resetForm();
   commit(next);
@@ -251,5 +253,5 @@ invoke('quick_shortcut').then((ok) => {
 });
 
 const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
-window.__TAURI__.event.listen('todos-changed', () => load()); // the backend changed tasks (quick add)
+window.__TAURI__.event.listen('todos-changed', () => load()); // the backend changed tasks (quick add, snooze)
 load(true);

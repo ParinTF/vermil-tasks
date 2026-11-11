@@ -10,8 +10,8 @@ use tauri::{
 };
 use tauri_plugin_autostart::ManagerExt as _;
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
-use tauri_plugin_notification::NotificationExt;
 use tauri_plugin_updater::UpdaterExt;
+use tauri_winrt_notification::{Scenario, Toast};
 
 #[derive(Serialize, Deserialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -24,6 +24,8 @@ struct Todo {
     remind_before: Option<i64>, // minutes; None = no reminder
     #[serde(default)]
     done: bool,
+    #[serde(default)]
+    snooze_until: Option<i64>, // epoch ms; set by the snooze buttons on a reminder, replaces the normal remind time
     #[serde(flatten)]
     extra: serde_json::Map<String, serde_json::Value>, // fields only the UI uses (createdAt, completedAt)
 }
@@ -57,6 +59,9 @@ fn remind_at(todo: &Todo) -> Option<i64> {
     if todo.done {
         return None;
     }
+    if let Some(at) = todo.snooze_until {
+        return Some(at);
+    }
     let due = parse_due(todo.due.as_deref()?)?;
     Some(due.timestamp_millis() - todo.remind_before? * 60_000)
 }
@@ -88,6 +93,56 @@ fn save(file: &PathBuf, data: &Data) -> Result<(), String> {
     fs::rename(&tmp, file).map_err(|e| e.to_string()) // atomic: a crash mid-write cannot truncate the real file
 }
 
+/// When a snooze button's action should fire again; None for anything that is not a snooze action.
+fn snooze_time(action: &str, now: chrono::DateTime<Local>) -> Option<i64> {
+    let at = match action {
+        "10" => now + chrono::Duration::minutes(10),
+        "60" => now + chrono::Duration::hours(1),
+        "tomorrow" => {
+            let nine = (now.date_naive() + chrono::Days::new(1)).and_hms_opt(9, 0, 0)?;
+            Local.from_local_datetime(&nine).earliest()?
+        }
+        _ => return None,
+    };
+    Some(at.timestamp_millis())
+}
+
+fn snooze(app: &AppHandle, id: &str, until: i64) {
+    let store = app.state::<Store>();
+    {
+        let mut data = store.data.lock().unwrap();
+        if let Some(todo) = data.todos.iter_mut().find(|t| t.id == id) {
+            todo.snooze_until = Some(until);
+        }
+        let _ = save(&store.file, &data);
+    }
+    let _ = app.emit("todos-changed", ());
+}
+
+/// Shows a reminder that stays on screen until answered, with snooze buttons.
+fn notify(app: &AppHandle, todo: &Todo) {
+    // toasts need a registered app id: the installer registers ours, a build run from target/ borrows PowerShell's
+    let dev = std::env::current_exe().map(|p| p.to_string_lossy().contains(r"\target\")).unwrap_or(false);
+    let app_id = if dev { Toast::POWERSHELL_APP_ID.to_string() } else { app.config().identifier.clone() };
+    let due = todo.due.as_deref().and_then(parse_due).map(|d| d.format("%d/%m/%Y %H:%M").to_string());
+    let (handle, id) = (app.clone(), todo.id.clone());
+    let _ = Toast::new(&app_id)
+        .title(&format!("Reminder: {}", todo.title))
+        .text1(&format!("Due {}", due.unwrap_or_default()))
+        .scenario(Scenario::Reminder)
+        .add_button("10 min", "10")
+        .add_button("1 hour", "60")
+        .add_button("Tomorrow", "tomorrow")
+        .on_activated(move |action| {
+            match action.as_deref().and_then(|a| snooze_time(a, Local::now())) {
+                Some(until) => snooze(&handle, &id, until),
+                None => show(&handle), // clicked the reminder itself
+            }
+            Ok(())
+        })
+        .show();
+}
+
 fn check_reminders(app: &AppHandle) {
     let store = app.state::<Store>();
     let mut data = store.data.lock().unwrap();
@@ -96,13 +151,7 @@ fn check_reminders(app: &AppHandle) {
         return;
     }
     for (todo, at) in hits {
-        let due = todo.due.as_deref().and_then(parse_due).map(|d| d.format("%d/%m/%Y %H:%M").to_string());
-        let _ = app
-            .notification()
-            .builder()
-            .title(format!("Reminder: {}", todo.title))
-            .body(format!("Due {}", due.unwrap_or_default()))
-            .show();
+        notify(app, &todo);
         data.notified.insert(todo.id, at);
     }
     let _ = save(&store.file, &data);
@@ -167,7 +216,7 @@ fn quick_add(app: AppHandle, store: State<Store>, title: String) -> Result<(), S
     extra.insert("completedAt".into(), serde_json::Value::Null);
     {
         let mut data = store.data.lock().unwrap();
-        data.todos.push(Todo { id: format!("q{}", now.timestamp_micros()), title, due: None, remind_before: None, done: false, extra });
+        data.todos.push(Todo { id: format!("q{}", now.timestamp_micros()), title, due: None, remind_before: None, done: false, snooze_until: None, extra });
         save(&store.file, &data)?;
     }
     let _ = app.emit("todos-changed", ());
@@ -207,7 +256,6 @@ fn main() {
                 show(app)
             }
         }))
-        .plugin(tauri_plugin_notification::init())
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, _shortcut, event| {
@@ -295,7 +343,7 @@ mod tests {
         parse_due(s).unwrap().timestamp_millis()
     }
     fn todo(due: Option<&str>, remind_before: Option<i64>, done: bool) -> Todo {
-        Todo { id: "a".into(), title: "t".into(), due: due.map(Into::into), remind_before, done, extra: Default::default() }
+        Todo { id: "a".into(), title: "t".into(), due: due.map(Into::into), remind_before, done, snooze_until: None, extra: Default::default() }
     }
     fn fires(t: Todo, notified: &[(&str, i64)]) -> bool {
         let notified = notified.iter().map(|(id, at)| (id.to_string(), *at)).collect();
@@ -331,6 +379,22 @@ mod tests {
         assert!(!fires(todo(Some("2026-11-11T09:00"), Some(0), true), &[]));
         assert!(!fires(todo(None, Some(0), false), &[]));
         assert!(!fires(todo(Some("2026-11-11T09:00"), None, false), &[]));
+    }
+    #[test]
+    fn snooze_replaces_the_remind_time() {
+        let mut t = todo(Some("2026-11-11T09:00"), Some(0), false);
+        t.snooze_until = Some(ms("2026-11-11T10:30"));
+        // the original 09:00 reminder already fired; the snoozed one is not due until 10:30
+        assert!(due_reminders(&[t.clone()], &HashMap::from([("a".to_string(), ms("2026-11-11T09:00"))]), ms(NOW)).is_empty());
+        assert_eq!(due_reminders(&[t], &HashMap::new(), ms("2026-11-11T10:30")).len(), 1);
+    }
+    #[test]
+    fn snooze_buttons_map_to_times() {
+        let now = parse_due(NOW).unwrap();
+        assert_eq!(snooze_time("10", now), Some(ms("2026-11-11T10:10")));
+        assert_eq!(snooze_time("60", now), Some(ms("2026-11-11T11:00")));
+        assert_eq!(snooze_time("tomorrow", now), Some(ms("2026-11-12T09:00")));
+        assert_eq!(snooze_time("", now), None);
     }
     #[test]
     fn ui_only_fields_survive_a_round_trip() {
