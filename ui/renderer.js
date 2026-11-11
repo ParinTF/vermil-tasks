@@ -214,4 +214,5 @@ setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overd
 
 // ready to type on launch without the autofocus scroll jumping past the hero
 $('title').focus({ preventScroll: true });
+window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
 invoke('get_todos').then((t) => { todos = t; render(true); });

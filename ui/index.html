@@ -7,11 +7,14 @@
 </head>
 <body>
   <header class="top">
-    <span class="brand">Vermil <span>Tasks</span><i></i></span>
+    <span class="brand">Vermil <span>Tasks</span><i></i><small id="version"></small></span>
     <time id="today"></time>
   </header>
 
-  <main>
+  <div class="marquee" aria-hidden="true"><div class="track" id="track"></div></div>
+
+  <main class="grid">
+    <div class="side">
     <section class="hero">
       <p class="eyebrow">Open tasks</p>
       <h1>
@@ -21,11 +24,8 @@
       <p class="stats" id="stats" aria-live="polite"></p>
     </section>
 
-    <div class="marquee" aria-hidden="true"><div class="track" id="track"></div></div>
-
-    <div class="grid">
       <section class="compose" aria-labelledby="compose-h">
-        <h2 id="compose-h">What's<br>next?</h2>
+        <h2 id="compose-h">What's next?</h2>
         <form id="form">
           <label class="field">Task
             <input id="title" required maxlength="200" placeholder="Type a task">
@@ -51,6 +51,7 @@
           </div>
         </form>
       </section>
+    </div>
 
       <section class="board">
         <nav role="tablist">
@@ -60,7 +61,6 @@
         <input id="search" type="search" placeholder="Search history" aria-label="Search history" hidden>
         <div id="list"></div>
       </section>
-    </div>
   </main>
 
   <script src="renderer.js"></script>

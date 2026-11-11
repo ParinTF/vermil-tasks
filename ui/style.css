@@ -41,11 +41,12 @@ button { cursor: pointer; }
 /* ── top bar ── */
 .top {
   display: flex; justify-content: space-between; align-items: center;
-  padding-block: 18px; border-bottom: 1px solid var(--line);
+  padding-block: 18px;
   font-size: 13px; letter-spacing: .04em;
 }
 .brand { font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
 .brand span { font-weight: 400; }
+.brand small { margin-left: 12px; font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: none; color: var(--mute); }
 .eyebrow, .field, #list h2 { text-transform: uppercase; }
 .brand i { display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--accent); }
 #today { color: var(--mute); }
@@ -88,10 +89,20 @@ h1 {
 .track i { font-style: normal; color: var(--accent); }
 
 /* ── two uneven columns ── */
-.grid { display: grid; gap: 56px; padding-top: clamp(40px, 7vh, 80px); }
+.grid { display: grid; gap: 48px; }
+.board { min-width: 0; }
+/* wide windows: headline and form on the left, the task list beside them, nothing below the fold */
 @media (min-width: 860px) {
-  .grid { grid-template-columns: 5fr 7fr; gap: clamp(40px, 7vw, 112px); }
-  .compose { position: sticky; top: 28px; align-self: start; }
+  .grid { grid-template-columns: 5fr 7fr; gap: clamp(40px, 6vw, 96px); }
+  .hero { padding-block: clamp(24px, 5vh, 48px) clamp(20px, 4vh, 36px); }
+  /* vh term keeps the Add button above the fold on short windows */
+  h1 { font-size: clamp(56px, min(8vw, 12vh), 150px); animation: none; }
+  .compose h2 { position: absolute; clip-path: inset(50%); } /* visually hidden, still names the form */
+  .board { padding-top: clamp(24px, 5vh, 48px); }
+}
+/* pin the left column only when it fits, otherwise its lower half would be unreachable */
+@media (min-width: 860px) and (min-height: 740px) {
+  .side { position: sticky; top: 0; align-self: start; }
 }
 
 /* ── compose ── */
