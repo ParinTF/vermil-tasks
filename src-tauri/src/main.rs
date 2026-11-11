@@ -220,7 +220,9 @@ fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
 
 /// Adds a task typed into the quick-add bar and tells the main window to reload.
 #[tauri::command]
-fn quick_add(app: AppHandle, store: State<Store>, title: String) -> Result<(), String> {
+fn quick_add(app: AppHandle, store: State<Store>, title: String, due: Option<String>) -> Result<(), String> {
+    let due = due.filter(|d| parse_due(d).is_some());
+    let remind_before = due.as_ref().map(|_| 0); // a due date set from the bar reminds at that time
     let title: String = title.trim().chars().take(200).collect();
     if title.is_empty() {
         return Ok(());
@@ -231,7 +233,7 @@ fn quick_add(app: AppHandle, store: State<Store>, title: String) -> Result<(), S
     extra.insert("completedAt".into(), serde_json::Value::Null);
     {
         let mut data = store.data.lock().unwrap();
-        data.todos.push(Todo { id: format!("q{}", now.timestamp_micros()), title, due: None, remind_before: None, done: false, snooze_until: None, extra });
+        data.todos.push(Todo { id: format!("q{}", now.timestamp_micros()), title, due, remind_before, done: false, snooze_until: None, extra });
         save(&store.file, &data)?;
     }
     let _ = app.emit("todos-changed", ());
