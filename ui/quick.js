@@ -10,7 +10,8 @@ document.getElementById('q').onsubmit = async (e) => {
     await invoke('quick_add', { title: input.value });
     hide();
   } catch (err) {
-    alert('Could not save: ' + err);
+    input.value = '';
+    input.placeholder = 'Could not save: ' + err;
   }
 };
 addEventListener('keydown', (e) => { if (e.key === 'Escape') hide(); });

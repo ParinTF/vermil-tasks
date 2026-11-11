@@ -312,7 +312,17 @@ fn main() {
                     let _ = save(&store.file, &data);
                 }
             }
-            let _ = app.global_shortcut().register(QUICK_SHORTCUT); // fails harmlessly if the keys are taken
+            // Right after an update the outgoing process can still hold the shortcut for a moment,
+            // so retry for a few seconds before giving up (it stays off if another program owns the keys).
+            let shortcuts = app.handle().clone();
+            std::thread::spawn(move || {
+                for _ in 0..8 {
+                    if shortcuts.global_shortcut().register(QUICK_SHORTCUT).is_ok() {
+                        break;
+                    }
+                    std::thread::sleep(Duration::from_millis(500));
+                }
+            });
             if !std::env::args().any(|a| a == "--hidden") {
                 show(app.handle());
             }

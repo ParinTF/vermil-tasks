@@ -108,19 +108,6 @@ h1 {
 /* ── two uneven columns ── */
 .grid { display: grid; gap: 48px; }
 .board { min-width: 0; }
-/* wide windows: headline and form on the left, the task list beside them, nothing below the fold */
-@media (min-width: 860px) {
-  .grid { grid-template-columns: 5fr 7fr; gap: clamp(40px, 6vw, 96px); }
-  .hero { padding-block: clamp(24px, 5vh, 48px) clamp(20px, 4vh, 36px); }
-  /* vh term keeps the Add button above the fold on short windows */
-  h1 { font-size: clamp(56px, min(8vw, 12vh), 150px); animation: none; }
-  .compose h2 { position: absolute; clip-path: inset(50%); } /* visually hidden, still names the form */
-  .board { padding-top: clamp(24px, 5vh, 48px); }
-}
-@media (min-width: 860px) {
-  /* --side-top comes from renderer.js: under the bar when the column fits, negative when it is taller than the window */
-  .side { position: sticky; top: var(--side-top, 56px); align-self: start; }
-}
 
 /* ── compose ── */
 .compose h2 { margin: 0 0 28px; font-size: clamp(30px, 3.4vw, 48px); font-weight: 700; line-height: 1.2; letter-spacing: -.01em; }
@@ -235,6 +222,15 @@ body.quick { padding: 0; background: var(--ink); color: var(--paper); overflow: 
 .quick input::placeholder { color: #f4f1ea55; }
 .quick kbd { font: inherit; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #f4f1ea77; }
 
+/* ── in-app dialog (replaces the browser's confirm/alert boxes) ── */
+dialog {
+  width: min(440px, calc(100vw - 48px)); padding: 32px; border: 0; border-radius: 4px;
+  background: var(--paper); color: var(--ink); box-shadow: 0 24px 80px #12110f55;
+}
+dialog::backdrop { background: #12110f73; }
+dialog p { margin: 0 0 28px; font-size: 20px; font-weight: 600; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
+dialog[open] { animation: rise-in .35s var(--ease) both; }
+
 /* ── motion ── */
 @keyframes rise { from { transform: translateY(105%); } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(18px); } }
@@ -252,4 +248,23 @@ body.quick { padding: 0; background: var(--ink); color: var(--paper); overflow: 
   *, *::before, *::after, ::view-transition-group(*), ::view-transition-old(*), ::view-transition-new(*) {
     animation: none !important; transition: none !important;
   }
+}
+
+/* keep this block last: it overrides the base rules above */
+/* Wide windows are a fixed shell: the window itself never scrolls, only the task list does
+   (and the form column, as a fallback on a very short window). Sizes follow the window height so it all fits. */
+@media (min-width: 860px) {
+  body { height: 100vh; display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; }
+  .top, .marquee, .foot { flex: none; }
+  .marquee { padding-block: clamp(8px, 1.4vh, 14px); }
+  .grid { flex: 1; min-height: 0; grid-template-columns: 5fr 7fr; grid-template-rows: minmax(0, 1fr); gap: clamp(40px, 6vw, 96px); }
+  .side, #list { overflow-y: auto; scrollbar-width: thin; scrollbar-color: #12110f33 transparent; }
+  .side { margin-inline: -4px; padding: 0 4px 12px; } /* room for focus rings inside the scroll box */
+  .board { display: flex; flex-direction: column; min-height: 0; padding-top: clamp(16px, 3.5vh, 48px); }
+  #list { flex: 1; min-height: 0; padding-right: 12px; }
+  .hero { padding-block: clamp(16px, 3.5vh, 48px) clamp(14px, 3vh, 36px); }
+  h1 { font-size: clamp(48px, min(8vw, 9.5vh), 150px); animation: none; }
+  form { gap: clamp(12px, 2.4vh, 22px); }
+  .compose h2 { position: absolute; clip-path: inset(50%); } /* visually hidden, still names the form */
+  .foot { margin-top: 0; padding-block: 14px; }
 }

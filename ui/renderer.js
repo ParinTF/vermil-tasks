@@ -14,6 +14,22 @@ const isOverdue = (t) => t.due && new Date(t.due) < new Date();
 // a repeating task that was finished waits here until its hideUntil day arrives
 const isLater = (t) => t.hideUntil && t.hideUntil > localDay(new Date());
 
+// In-app replacement for confirm(): resolves true when the action button is pressed, false on Cancel or Esc.
+function ask(text, ok = 'OK', cancel = 'Cancel') {
+  const dlg = $('dlg');
+  if (dlg.open) dlg.close();
+  $('dlg-text').textContent = text;
+  $('dlg-ok').textContent = ok;
+  $('dlg-cancel').textContent = cancel;
+  $('dlg-cancel').hidden = !cancel;
+  dlg.returnValue = '';
+  dlg.showModal();
+  return new Promise((resolve) => { dlg.onclose = () => resolve(dlg.returnValue === 'ok'); });
+}
+const tell = (text) => ask(text, 'OK', ''); // replacement for tell()
+$('dlg-ok').onclick = () => $('dlg').close('ok');
+$('dlg-cancel').onclick = () => $('dlg').close();
+
 function el(tag, props = {}, ...children) {
   const node = Object.assign(document.createElement(tag), props);
   node.append(...children);
@@ -24,7 +40,7 @@ async function commit(next) {
   try {
     await invoke('save_todos', { todos: next });
   } catch (e) {
-    alert('Could not save: ' + e);
+    tell('Could not save: ' + e);
     render();
     return false;
   }
@@ -92,8 +108,8 @@ function notesBlock(t) {
 
 function removeButton(t) {
   const btn = el('button', { type: 'button', className: 'danger', textContent: 'Delete' });
-  btn.onclick = () => {
-    if (!confirm(`Delete "${t.title}" permanently?`)) return;
+  btn.onclick = async () => {
+    if (!(await ask(`Delete "${t.title}" permanently?`, 'Delete'))) return;
     if (editingId === t.id) resetForm();
     commit(todos.filter((x) => x.id !== t.id));
   };
@@ -198,6 +214,9 @@ function render(enter = false) {
 
   const list = $('list');
   list.classList.toggle('enter', enter);
+  // rebuilding the rows resets the list's own scroll position: put it back unless the tab just changed
+  const scrolled = list.scrollTop;
+  if (!enter) queueMicrotask(() => { list.scrollTop = scrolled; });
   list.replaceChildren();
   const empty = (text) => list.append(el('div', { className: 'empty' }, text));
 
@@ -260,12 +279,12 @@ window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' +
 invoke('get_autostart').then((on) => { $('autostart').checked = on; });
 $('autostart').onchange = (e) => invoke('set_autostart', { on: e.target.checked }).catch((err) => {
   e.target.checked = !e.target.checked;
-  alert('Could not change the startup setting: ' + err);
+  tell('Could not change the startup setting: ' + err);
 });
 
 $('export').onclick = () => invoke('export_todos').then(
   (path) => { $('backup-msg').textContent = 'Backup saved to ' + path; },
-  (e) => alert('Export failed: ' + e));
+  (e) => tell('Export failed: ' + e));
 $('import-btn').onclick = () => $('import').click();
 $('import').onchange = async (e) => {
   const file = e.target.files[0];
@@ -277,21 +296,14 @@ $('import').onchange = async (e) => {
     incoming = Array.isArray(data) ? data : data.todos;
     if (!Array.isArray(incoming)) throw new Error('no task list');
   } catch {
-    return alert('That file is not a Vermil Tasks backup.');
+    return tell('That file is not a Vermil Tasks backup.');
   }
   // merge by id so an import never deletes anything; the backup wins for tasks both sides have
   const ids = new Set(incoming.map((t) => t && t.id));
   const replacing = todos.filter((t) => ids.has(t.id)).length;
-  if (!confirm(`Import ${incoming.length} tasks from this backup?\nNew: ${incoming.length - replacing}\nReplacing tasks you already have: ${replacing}`)) return;
+  if (!(await ask(`Import ${incoming.length} tasks from this backup?\nNew: ${incoming.length - replacing}\nReplacing tasks you already have: ${replacing}`, 'Import'))) return;
   if (await commit([...todos.filter((t) => !ids.has(t.id)), ...incoming])) $('backup-msg').textContent = `Imported ${incoming.length} tasks`;
 };
-
-// The left column stays pinned while the list scrolls. When it is taller than the window it is pinned
-// by its bottom edge instead, otherwise the Add button could never be scrolled into view.
-const side = document.querySelector('.side');
-const pinSide = () => side.style.setProperty('--side-top', Math.min(56, innerHeight - side.offsetHeight) + 'px');
-new ResizeObserver(pinSide).observe(side);
-addEventListener('resize', pinSide);
 
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();
@@ -309,7 +321,7 @@ $('update').onclick = () => {
   $('update').disabled = true;
   $('update').textContent = 'Updating…';
   invoke('install_update').catch((e) => {
-    alert('Update failed: ' + e);
+    tell('Update failed: ' + e);
     $('update').disabled = false;
     $('update').textContent = label;
   });
@@ -317,9 +329,11 @@ $('update').onclick = () => {
 checkUpdate();
 setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
 
-invoke('quick_shortcut').then((ok) => {
+const quickHint = () => invoke('quick_shortcut').then((ok) => {
   $('quick-hint').textContent = ok ? 'Quick add from anywhere: Ctrl+Alt+T' : 'Quick add shortcut Ctrl+Alt+T is in use by another app';
 });
+quickHint();
+setTimeout(quickHint, 5000); // the backend keeps retrying for a few seconds after launch
 
 const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
 window.__TAURI__.event.listen('todos-changed', () => load()); // the backend changed tasks (quick add, snooze)
