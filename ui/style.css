@@ -219,6 +219,9 @@ input[type=checkbox]:checked { border-color: var(--accent); background: var(--ac
   font-size: 13px; color: var(--mute);
 }
 .foot .check { font-size: 13px; gap: 10px; }
+.foot button { padding: 0; border: 0; background: none; color: var(--mute); text-decoration: underline; text-underline-offset: 4px; }
+.foot button:hover, #backup-msg { color: var(--ink); }
+#backup-msg { overflow-wrap: anywhere; }
 .foot input[type=checkbox] { width: 18px; height: 18px; border-width: 1.5px; box-shadow: none; }
 .foot input[type=checkbox]:checked { box-shadow: inset 0 0 0 3px var(--paper); }
 

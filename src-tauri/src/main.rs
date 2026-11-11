@@ -192,6 +192,21 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+/// Writes a backup of all tasks to the Downloads folder and returns its path.
+#[tauri::command]
+fn export_todos(app: AppHandle, store: State<Store>) -> Result<String, String> {
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    let file = dir.join(format!("vermil-tasks-backup-{}.json", Local::now().format("%Y-%m-%d-%H%M%S")));
+    let backup = serde_json::json!({
+        "app": "vermil-tasks",
+        "version": app.package_info().version.to_string(),
+        "todos": store.data.lock().unwrap().todos,
+    });
+    let text = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
+    fs::write(&file, text).map_err(|e| e.to_string())?;
+    Ok(file.display().to_string())
+}
+
 #[tauri::command]
 fn get_autostart(app: AppHandle) -> bool {
     app.autolaunch().is_enabled().unwrap_or(false)
@@ -268,7 +283,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();

@@ -25,11 +25,13 @@ async function commit(next) {
     await invoke('save_todos', { todos: next });
   } catch (e) {
     alert('Could not save: ' + e);
-    return render();
+    render();
+    return false;
   }
   const apply = () => { todos = next; render(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
   if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
+  return true;
 }
 
 // Marks a task done. A repeating task also leaves a fresh copy for its next day, so each occurrence gets its own history entry.
@@ -182,7 +184,8 @@ function render(enter = false) {
   const byDue = (a, b) => (a.due || '9').localeCompare(b.due || '9'); // dated first, soonest on top
   const open = todos.filter((t) => !t.done && !isLater(t)).sort(byDue);
   const later = todos.filter((t) => !t.done && isLater(t)).sort(byDue);
-  const done = todos.filter((t) => t.done).sort((a, b) => b.completedAt.localeCompare(a.completedAt));
+  // imported data may lack completedAt
+  const done = todos.filter((t) => t.done).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
   streaks = seriesStreaks();
   renderHero(open, done);
   renderMarquee(done);
@@ -259,6 +262,29 @@ $('autostart').onchange = (e) => invoke('set_autostart', { on: e.target.checked 
   e.target.checked = !e.target.checked;
   alert('Could not change the startup setting: ' + err);
 });
+
+$('export').onclick = () => invoke('export_todos').then(
+  (path) => { $('backup-msg').textContent = 'Backup saved to ' + path; },
+  (e) => alert('Export failed: ' + e));
+$('import-btn').onclick = () => $('import').click();
+$('import').onchange = async (e) => {
+  const file = e.target.files[0];
+  e.target.value = ''; // so picking the same file again fires change
+  if (!file) return;
+  let incoming;
+  try {
+    const data = JSON.parse(await file.text());
+    incoming = Array.isArray(data) ? data : data.todos;
+    if (!Array.isArray(incoming)) throw new Error('no task list');
+  } catch {
+    return alert('That file is not a Vermil Tasks backup.');
+  }
+  // merge by id so an import never deletes anything; the backup wins for tasks both sides have
+  const ids = new Set(incoming.map((t) => t && t.id));
+  const replacing = todos.filter((t) => ids.has(t.id)).length;
+  if (!confirm(`Import ${incoming.length} tasks? ${incoming.length - replacing} are new, ${replacing} replace tasks you already have.`)) return;
+  if (await commit([...todos.filter((t) => !ids.has(t.id)), ...incoming])) $('backup-msg').textContent = `Imported ${incoming.length} tasks`;
+};
 
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();

@@ -84,6 +84,10 @@
   <footer class="foot">
     <label class="check"><input id="autostart" type="checkbox"> Start with Windows</label>
     <span id="quick-hint"></span>
+    <button id="export" type="button">Export backup</button>
+    <button id="import-btn" type="button">Import backup</button>
+    <input id="import" type="file" accept=".json,application/json" hidden>
+    <span id="backup-msg" aria-live="polite"></span>
   </footer>
 
   <script src="logic.js"></script>
