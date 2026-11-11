@@ -216,6 +216,11 @@ setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overd
 $('title').focus({ preventScroll: true });
 window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
 
+const win = window.__TAURI__.window.getCurrentWindow();
+$('win-min').onclick = () => win.minimize();
+$('win-max').onclick = () => win.toggleMaximize();
+$('win-close').onclick = () => win.close(); // the backend turns this into "hide to tray"
+
 // Offer new versions without interrupting: the button appears only when the release feed has one.
 const checkUpdate = () => invoke('check_update').then((v) => {
   if (!v) return;

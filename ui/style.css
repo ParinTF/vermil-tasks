@@ -40,10 +40,20 @@ button { cursor: pointer; }
 
 /* ── top bar ── */
 .top {
-  display: flex; justify-content: space-between; align-items: center;
-  padding-block: 18px;
+  position: sticky; top: 0; z-index: 2; height: 56px;
+  display: flex; align-items: center;
+  margin-inline: calc(var(--pad) * -1); padding-left: var(--pad);
+  background: var(--paper); user-select: none;
   font-size: 13px; letter-spacing: .04em;
 }
+/* clicks on the labels fall through to the bar so they drag the window too */
+.brand, #today { pointer-events: none; }
+.brand { margin-right: auto; }
+.win { display: flex; align-self: stretch; margin-left: 20px; }
+.win button { width: 46px; border: 0; background: none; transition: background .2s var(--ease), color .2s var(--ease); }
+.win button:hover { background: #12110f14; }
+.win #win-close:hover { background: var(--accent); color: var(--paper); }
+.win svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; }
 .brand { font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
 .brand span { font-weight: 400; }
 .brand small { margin-left: 12px; font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: none; color: var(--mute); }
@@ -51,7 +61,7 @@ button { cursor: pointer; }
 .brand i { display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--accent); }
 #today { color: var(--mute); }
 .update {
-  margin-left: auto; margin-right: 20px; padding: 6px 16px; border: 0; border-radius: 999px;
+  margin-right: 20px; padding: 6px 16px; border: 0; border-radius: 999px;
   background: var(--accent); color: var(--paper); font-size: 13px; font-weight: 600;
   transition: background .35s var(--ease);
 }
@@ -109,7 +119,7 @@ h1 {
 }
 /* pin the left column only when it fits, otherwise its lower half would be unreachable */
 @media (min-width: 860px) and (min-height: 740px) {
-  .side { position: sticky; top: 0; align-self: start; }
+  .side { position: sticky; top: 56px; align-self: start; }
 }
 
 /* ── compose ── */
