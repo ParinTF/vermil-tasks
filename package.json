@@ -1,11 +1,11 @@
 {
   "name": "vermil-tasks",
-  "version": "1.2.3",
+  "version": "1.2.4",
   "description": "Vermil Tasks: to-dos with due dates, reminders, daily repeats and history",
   "private": true,
   "scripts": {
     "start": "tauri dev",
-    "test": "cargo test --manifest-path src-tauri/Cargo.toml",
+    "test": "cargo test --manifest-path src-tauri/Cargo.toml && node --test \"tests/*.test.js\"",
     "dist": "tauri build",
     "release": "node release.mjs"
   },

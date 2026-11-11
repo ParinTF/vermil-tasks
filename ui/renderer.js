@@ -9,9 +9,7 @@ const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
 const remindLabel = { 0: 'reminds at due time', 10: 'reminds 10 min before', 60: 'reminds 1 h before', 1440: 'reminds 1 day before' };
 const calm = matchMedia('(prefers-reduced-motion: reduce)');
 const isOverdue = (t) => t.due && new Date(t.due) < new Date();
-// local calendar day as "2026-11-12", the same shape datetime-local uses, so the two compare and splice as text
-const localDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-// a daily task finished today waits here until its hideUntil day arrives
+// a repeating task that was finished waits here until its hideUntil day arrives
 const isLater = (t) => t.hideUntil && t.hideUntil > localDay(new Date());
 
 function el(tag, props = {}, ...children) {
@@ -32,23 +30,27 @@ async function commit(next) {
   if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
 }
 
-// Marks a task done. A daily task also leaves a fresh copy for tomorrow, so each day gets its own history entry.
+// Marks a task done. A repeating task also leaves a fresh copy for its next day, so each occurrence gets its own history entry.
 function complete(t) {
   const next = todos.map((x) => (x.id === t.id ? { ...x, done: true, completedAt: new Date().toISOString() } : x));
   const series = t.series || t.id;
   // a restored history entry shares the series, so only spawn when no open copy exists yet
   const hasOpenCopy = todos.some((x) => x.id !== t.id && !x.done && (x.series || x.id) === series);
-  if (t.repeat === 'daily' && !hasOpenCopy) {
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    const day = localDay(tomorrow);
+  if (t.repeat && !hasOpenCopy) {
+    const day = nextOccurrence(t.repeat, t.due, new Date());
     next.push({
       ...t, id: crypto.randomUUID(), series, done: false, completedAt: null,
       createdAt: new Date().toISOString(), hideUntil: day, snoozeUntil: null,
-      due: t.due ? day + t.due.slice(10) : null, // same time of day, tomorrow
+      due: t.due ? day + t.due.slice(10) : null, // same time of day
     });
   }
   return next;
+}
+
+function backLabel(day) {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  return 'Back ' + (day === localDay(tomorrow) ? 'tomorrow' : fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short' }));
 }
 
 function resetForm() {
@@ -72,11 +74,11 @@ function pendingItem(t) {
   const later = isLater(t);
   const overdue = !later && isOverdue(t);
   const parts = [
-    later ? 'Back tomorrow' : '',
+    later ? backLabel(t.hideUntil) : '',
     t.due ? (overdue ? 'Overdue ' : 'Due ') + fmt(t.due, { dateStyle: 'medium', timeStyle: 'short' }) : '',
     t.due && t.remindBefore != null ? remindLabel[t.remindBefore] : '',
     t.snoozeUntil > Date.now() ? 'snoozed to ' + fmt(t.snoozeUntil, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
-    t.repeat === 'daily' ? 'daily' : '',
+    t.repeat || '',
   ].filter(Boolean);
   const meta = parts.length ? el('div', { className: 'meta' + (overdue ? ' overdue' : '') }, parts.join(' · ')) : '';
   const lead = later
@@ -97,7 +99,7 @@ function pendingItem(t) {
     $('title').value = t.title;
     $('due').value = t.due || '';
     $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
-    $('repeat').checked = t.repeat === 'daily';
+    $('repeat').value = t.repeat || '';
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
     $('title').focus();
@@ -111,7 +113,7 @@ function historyItem(t) {
   return el('li', { className: 'item', id: 'r-' + t.id },
     el('span', { className: 'tick', ariaHidden: 'true' }, '✓'),
     el('div', {}, el('span', { className: 'title' }, t.title),
-      el('div', { className: 'meta' }, 'Done at ' + fmt(t.completedAt, { timeStyle: 'short' }) + (t.repeat === 'daily' ? ' · daily' : ''))),
+      el('div', { className: 'meta' }, 'Done at ' + fmt(t.completedAt, { timeStyle: 'short' }) + (t.repeat ? ' · ' + t.repeat : ''))),
     el('div', { className: 'tools' }, restore, removeButton(t)));
 }
 
@@ -198,7 +200,7 @@ $('form').onsubmit = (e) => {
   const fields = {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
-    repeat: $('repeat').checked ? 'daily' : null,
+    repeat: $('repeat').value || null,
   };
   const next = editingId
     // a new due date cancels a pending snooze, so the reminder follows the new time
@@ -212,7 +214,7 @@ $('tab-pending').onclick = () => { tab = 'pending'; render(true); };
 $('tab-history').onclick = () => { tab = 'history'; render(true); };
 $('search').oninput = () => render();
 
-setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overdue colouring and bring back daily tasks after midnight
+setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overdue colouring and bring back repeating tasks after midnight
 
 // ready to type on launch without the autofocus scroll jumping past the hero
 $('title').focus({ preventScroll: true });
