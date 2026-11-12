@@ -181,7 +181,17 @@
   const group = { module: 'money', title: 'Money', items: [['N', 'New entry'], [['←', '→'], 'Previous or next month'], ['T', 'This month']] };
   const commandFn = () => [{ label: 'Add expense', hint: 'Money', kind: 'Command', run: async () => { await setView('money'); $('mo-amount').focus(); } }];
 
+  // other modules (Shopping) record a spend through here, so this module's copy stays the one that is saved
+  function addEntry({ day, kind, amount, cat, note }) {
+    const entry = { id: crypto.randomUUID(), day, kind, amount, cat, note: note || '' };
+    data.entries.push(entry);
+    checkBudget(entry);
+    save();
+    if ($('mo-title')) paint();
+  }
+
   defineModule('money', {
+    addEntry,
     weekly(since, until) {
       const list = data.entries.filter((e) => e.day >= since && e.day <= until);
       if (!list.length) return { title: 'Money', lines: ['Nothing recorded'] };

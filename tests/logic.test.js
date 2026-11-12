@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -442,4 +442,16 @@ test('review text: a title line, then each section with its lines as bullets', (
   const text = reviewText('6 Nov to 12 Nov', [{ title: 'Tasks', lines: ['9 done', '2 overdue'] }, { title: 'Money', lines: ['Spent ฿1,200'] }]);
   assert.equal(text, 'Review: 6 Nov to 12 Nov\n\nTasks\n- 9 done\n- 2 overdue\n\nMoney\n- Spent ฿1,200\n');
   assert.equal(reviewText('x', []), 'Review: x\n');
+});
+
+test('shopping: ingredients from a meal, usual items, the week', () => {
+  assert.deepEqual(parseIngredients('Pad thai: noodles, shrimp, egg'), ['noodles', 'shrimp', 'egg']);
+  assert.deepEqual(parseIngredients('Omelette (egg; cheese , ham)'), ['egg', 'cheese', 'ham']);
+  assert.deepEqual(parseIngredients('Leftovers'), []);
+  assert.deepEqual(parseIngredients('Soup:'), []);
+  assert.deepEqual(topItems({ milk: 5, eggs: 9, bread: 5, rice: 1 }, 3), ['eggs', 'bread', 'milk']);
+  assert.deepEqual(topItems({ milk: 5, eggs: 9 }, 5, ['Eggs']), ['milk']); // already on the list
+  assert.deepEqual(weekDays('2026-11-12'), ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']);
+  assert.equal(weekDays('2026-11-15')[0], '2026-11-09'); // a Sunday belongs to the week before it
+  assert.equal(weekDays('2026-11-09')[6], '2026-11-15');
 });

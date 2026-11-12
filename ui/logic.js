@@ -480,4 +480,24 @@ function reviewText(range, sections) {
   return [`Review: ${range}`, '', ...sections.flatMap((s) => [s.title, ...s.lines.map((l) => '- ' + l), ''])].join('\n').trim() + '\n';
 }
 
-if (typeof module !== 'undefined') module.exports = { reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── shopping and meals ──
+// "Pad thai: noodles, shrimp, egg" or "Omelette (egg, cheese)" -> the ingredients; text without a list gives none
+function parseIngredients(text) {
+  const m = /[:(]\s*([^()]+?)\s*\)?\s*$/.exec(String(text));
+  return m ? m[1].split(/[,;]/).map((s) => s.trim()).filter(Boolean) : [];
+}
+
+// the things added most often, most first (ties alphabetical), leaving out what is already on the list
+function topItems(history, n, exclude = []) {
+  const skip = new Set(exclude.map((s) => s.toLowerCase()));
+  return Object.entries(history).filter(([name]) => !skip.has(name.toLowerCase())).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([name]) => name);
+}
+
+// the seven days of the week (Monday first) that contain `day`
+function weekDays(day) {
+  const dow = (parseDay(day).getDay() + 6) % 7;
+  const monday = shiftDay(day, -dow);
+  return Array.from({ length: 7 }, (_, i) => shiftDay(monday, i));
+}
+
+if (typeof module !== 'undefined') module.exports = { parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
