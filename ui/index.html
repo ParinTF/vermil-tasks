@@ -13,6 +13,7 @@
     <div class="views" role="tablist" aria-label="Views">
       <button id="view-tasks" role="tab" type="button" aria-selected="true">Tasks</button>
       <button id="view-notes" role="tab" type="button" aria-selected="false">Notes</button>
+      <button id="view-calendar" role="tab" type="button" aria-selected="false">Calendar</button>
     </div>
     <button id="update" class="update" type="button" hidden></button>
     <button id="theme" class="theme" type="button" title="Theme: auto">◐ auto</button>
@@ -110,6 +111,31 @@
       <div class="note-foot"><span id="note-meta"></span><button id="note-delete" class="linkish" type="button">Delete note</button></div>
     </section>
     <div id="note-hint" class="empty" hidden>No notes yet. Press Ctrl+N to write one.</div>
+  </main>
+
+  <main class="calendar-page" id="calendar-view" hidden>
+    <section class="cal-main" aria-label="Calendar">
+      <div class="cal-head">
+        <h2 id="cal-title"></h2>
+        <div class="cal-nav">
+          <button id="cal-prev" class="linkish" type="button" aria-label="Previous month">‹</button>
+          <button id="cal-today" class="linkish" type="button">Today</button>
+          <button id="cal-next" class="linkish" type="button" aria-label="Next month">›</button>
+        </div>
+      </div>
+      <div class="cal-week" id="cal-week" aria-hidden="true"></div>
+      <div class="cal-grid" id="cal-grid" role="grid"></div>
+    </section>
+    <aside class="cal-day" aria-label="Selected day">
+      <h3 id="cal-day-title"></h3>
+      <p id="cal-day-count"></p>
+      <ul id="cal-day-list"></ul>
+      <form id="cal-add">
+        <input id="cal-new" maxlength="200" placeholder="Add a task on this day" aria-label="Task for the selected day" autocomplete="off">
+        <input id="cal-time" type="time" value="09:00" aria-label="Time">
+        <button class="primary" type="submit"><span>Add</span><span class="arrow" aria-hidden="true">→</span></button>
+      </form>
+    </aside>
   </main>
 
   <footer class="foot">

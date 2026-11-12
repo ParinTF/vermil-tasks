@@ -1,6 +1,6 @@
 {
   "name": "vermil-tasks",
-  "version": "1.4.3",
+  "version": "1.4.4",
   "description": "Vermil Tasks: to-dos with due dates, reminders, daily repeats and history",
   "private": true,
   "scripts": {

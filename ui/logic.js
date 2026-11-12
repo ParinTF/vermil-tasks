@@ -151,4 +151,38 @@ function niceMax(n) {
   return n <= 10 ? Math.max(2, Math.ceil(n / 2) * 2) : Math.ceil(n / 10) * 10;
 }
 
-if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── calendar maths: weeks start on Monday ──
+// The six weeks of a month view (42 days), from the Monday on or before the 1st. `month` is 0 to 11.
+function monthGrid(year, month) {
+  const lead = (new Date(year, month, 1).getDay() + 6) % 7; // days since Monday
+  return Array.from({ length: 42 }, (_, i) => {
+    const d = new Date(year, month, 1 - lead + i);
+    return { day: localDay(d), inMonth: d.getMonth() === month };
+  });
+}
+
+function shiftDay(day, n) {
+  const d = parseDay(day);
+  return localDay(new Date(d.getFullYear(), d.getMonth(), d.getDate() + n));
+}
+
+// The same day number in another month, clamped to that month's length: 31 Jan plus a month is 28 Feb.
+function shiftMonth(day, n) {
+  const d = parseDay(day);
+  const target = new Date(d.getFullYear(), d.getMonth() + n, 1);
+  const last = new Date(target.getFullYear(), target.getMonth() + 1, 0).getDate();
+  return localDay(new Date(target.getFullYear(), target.getMonth(), Math.min(d.getDate(), last)));
+}
+
+// Tasks that have a due date, by day, earliest first. Tasks without one are not on a calendar.
+function groupByDay(todos) {
+  const days = {};
+  for (const t of todos) {
+    if (!t.due) continue;
+    (days[t.due.slice(0, 10)] ||= []).push(t);
+  }
+  for (const list of Object.values(days)) list.sort((a, b) => a.due.localeCompare(b.due) || a.title.localeCompare(b.title));
+  return days;
+}
+
+if (typeof module !== 'undefined') module.exports = { monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

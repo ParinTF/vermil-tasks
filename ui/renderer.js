@@ -56,7 +56,7 @@ async function commit(next, { undo = true } = {}) {
     undoStack.push(before);
     if (undoStack.length > 20) undoStack.shift();
   }
-  const apply = () => { todos = next; render(); };
+  const apply = () => { todos = next; render(); if (view === 'calendar') renderCalendar(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
   if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
   return true;
@@ -387,7 +387,7 @@ $('cancel').onclick = resetForm;
 for (const name of TABS) $('tab-' + name).onclick = () => { tab = name; render(true); };
 $('search').oninput = () => render();
 
-setInterval(() => { if (tab !== 'history') render(); }, 60000); // refresh overdue colouring and bring back repeating tasks after midnight
+setInterval(() => { if (tab !== 'history') render(); if (view === 'calendar') renderCalendar(); }, 60000); // refresh overdue colouring and bring back repeating tasks after midnight
 
 // ready to type on launch without the autofocus scroll jumping past the hero
 $('title').focus({ preventScroll: true });
@@ -493,7 +493,7 @@ checkUpdate();
 setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
 
 // ── notes view: a list of notes and a plain-text editor that saves itself ──
-const VIEWS = ['tasks', 'notes'];
+const VIEWS = ['tasks', 'notes', 'calendar'];
 let view = 'tasks';
 let selectedNoteId = null;
 let draftNote = null; // a new note nothing has been typed into yet: not saved, and dropped when left empty
@@ -649,8 +649,10 @@ async function setView(next) {
   view = next;
   $('tasks-view').hidden = view !== 'tasks';
   $('notes-view').hidden = view !== 'notes';
+  $('calendar-view').hidden = view !== 'calendar';
   for (const v of VIEWS) $('view-' + v).ariaSelected = String(view === v);
   if (view === 'tasks') { render(); return fitSide(); } // a note may have changed while the task list was hidden
+  if (view === 'calendar') return renderCalendar();
   if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList();
 }
 
@@ -680,6 +682,90 @@ $('note-search').oninput = renderNoteList;
 $('note-title').oninput = $('note-body').oninput = touchNote;
 addEventListener('blur', flushNote); // the window lost focus: do not leave typing unsaved
 
+// ── calendar view: a month of tasks by due date, and the selected day beside it ──
+let calDay = localDay(new Date()); // the selected day
+let calMonth = calDay.slice(0, 7); // the month on show, "2026-11"
+const taskCount = (n) => `${n} ${n === 1 ? 'task' : 'tasks'}`;
+
+function dayCell(cell, list, cap, today) {
+  const date = parseDay(cell.day);
+  const lines = list.length > cap ? list.slice(0, Math.max(0, cap - 1)) : list; // the last line becomes "+N more"
+  const more = list.length - lines.length;
+  const now = new Date();
+  const btn = el('button', {
+    type: 'button', role: 'gridcell', tabIndex: cell.day === calDay ? 0 : -1,
+    className: 'cal-cell' + (cell.inMonth ? '' : ' out') + (cell.day === today ? ' today' : '') + (cell.day === calDay ? ' sel' : ''),
+    ariaLabel: `${fmt(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${taskCount(list.length)}`,
+  }, el('span', { className: 'cal-d' }, String(date.getDate())),
+  ...lines.map((t) => el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') }, `${t.due.slice(11, 16)} ${t.title}`)),
+  ...(more ? [el('span', { className: 'cal-more' }, `+${more} more`)] : []));
+  btn.ariaSelected = String(cell.day === calDay);
+  btn.dataset.day = cell.day;
+  btn.onclick = () => selectDay(cell.day);
+  return btn;
+}
+
+function renderDayPanel(list) {
+  $('cal-day-title').textContent = fmt(parseDay(calDay), { weekday: 'long', day: 'numeric', month: 'long' });
+  $('cal-day-count').textContent = list.length ? taskCount(list.length) : 'Nothing due';
+  $('cal-day-list').replaceChildren(...list.map((t) => {
+    const box = el('input', { type: 'checkbox', checked: t.done, ariaLabel: (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title });
+    box.onchange = () => commit(t.done ? todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)) : complete(t));
+    const open = el('button', { type: 'button', className: 'cal-open' + (t.done ? ' done' : '') }, t.title);
+    open.onclick = () => showTask(t.id);
+    return el('li', {}, box, open, el('time', {}, t.due.slice(11, 16)));
+  }));
+}
+
+function renderCalendar() {
+  const [y, m] = calMonth.split('-').map(Number);
+  const grid = $('cal-grid');
+  const byDay = groupByDay(todos);
+  const today = localDay(new Date());
+  const title = fmt(new Date(y, m - 1, 1), { month: 'long', year: 'numeric' });
+  $('cal-title').textContent = title;
+  grid.ariaLabel = title;
+  // how many task lines a cell has room for: its padding and border take 13px, the day number 28px, each line 18px
+  const cap = grid.clientHeight > 0 ? Math.max(1, Math.floor((grid.clientHeight / 6 - 41) / 18)) : 3;
+  const days = monthGrid(y, m - 1);
+  grid.replaceChildren(...Array.from({ length: 6 }, (_, w) =>
+    el('div', { className: 'cal-row', role: 'row' }, ...days.slice(w * 7, w * 7 + 7).map((cell) => dayCell(cell, byDay[cell.day] || [], cap, today)))));
+  renderDayPanel(byDay[calDay] || []);
+}
+
+function selectDay(day, focus) {
+  calDay = day;
+  calMonth = day.slice(0, 7);
+  renderCalendar();
+  if (focus) document.querySelector(`#cal-grid [data-day="${day}"]`)?.focus();
+}
+
+function calendarKeys(e) {
+  const t = e.target.matches ? e.target : document.body;
+  if ((e.ctrlKey || e.metaKey) && !e.altKey) return;
+  if (e.key === 'Escape' && isField(t)) { t.blur(); return; }
+  if (isField(t)) return;
+  const step = { ArrowLeft: () => shiftDay(calDay, -1), ArrowRight: () => shiftDay(calDay, 1), ArrowUp: () => shiftDay(calDay, -7), ArrowDown: () => shiftDay(calDay, 7), PageUp: () => shiftMonth(calDay, -1), PageDown: () => shiftMonth(calDay, 1) }[e.key];
+  if (step) { e.preventDefault(); selectDay(step(), true); return; }
+  if (e.code === 'KeyT') selectDay(localDay(new Date()), true);
+  else if (e.key === 'Enter' || e.code === 'KeyN') { e.preventDefault(); $('cal-new').focus(); } // Enter would also click the focused day
+}
+
+$('cal-week').replaceChildren(...Array.from({ length: 7 }, (_, i) => el('span', {}, fmt(new Date(2024, 0, 1 + i), { weekday: 'short' })))); // 1 Jan 2024 is a Monday
+$('cal-prev').onclick = () => selectDay(shiftMonth(calDay, -1));
+$('cal-next').onclick = () => selectDay(shiftMonth(calDay, 1));
+$('cal-today').onclick = () => selectDay(localDay(new Date()));
+$('cal-add').onsubmit = async (e) => {
+  e.preventDefault();
+  const title = $('cal-new').value.trim();
+  if (!title) return;
+  const task = { id: crypto.randomUUID(), title, due: `${calDay}T${$('cal-time').value || '09:00'}`, remindBefore: 0, done: false, createdAt: new Date().toISOString(), completedAt: null };
+  $('cal-new').value = '';
+  await commit([...todos, task]);
+  $('cal-new').focus(); // ready for the next one
+};
+new ResizeObserver(() => { if (view === 'calendar') renderCalendar(); }).observe($('cal-grid')); // more or fewer lines fit now
+
 // ── keyboard ──
 const SHORTCUTS = [
   '↑ ↓: select a task',
@@ -690,8 +776,9 @@ const SHORTCUTS = [
   'Delete: delete the selected task',
   'N: new task',
   'T: switch theme (auto, light, dark)',
-  'Ctrl+1, Ctrl+2: Tasks, Notes',
+  'Ctrl+1, 2, 3: Tasks, Notes, Calendar',
   'Ctrl+N (in Notes): new note',
+  'In Calendar: arrows move a day, PageUp and PageDown a month, T today, Enter adds a task',
   '1 2 3 4: To do, Today, Week, History',
   'Ctrl+Alt+T (from anywhere): quick add',
   'Ctrl+Alt+J (in quick add): due date',
@@ -733,8 +820,8 @@ addEventListener('keydown', (e) => {
   const t = e.target.matches ? e.target : document.body;
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
-  if (mod && !e.altKey && (e.code === 'Digit1' || e.code === 'Digit2')) { e.preventDefault(); setView(e.code === 'Digit1' ? 'tasks' : 'notes'); return; }
-  if (view !== 'tasks') return notesKeys(e);
+  if (mod && !e.altKey && /^Digit[1-3]$/.test(e.code)) { e.preventDefault(); setView(VIEWS[+e.code.slice(5) - 1]); return; }
+  if (view !== 'tasks') return view === 'notes' ? notesKeys(e) : calendarKeys(e);
 
   if (e.key === 'Escape') {
     if (t.id === 'search' && t.value) { t.value = ''; render(); }
@@ -809,6 +896,7 @@ const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).
   render(enter);
   fillNoteLinks();
   if (view === 'notes') renderNoteList();
+  if (view === 'calendar') renderCalendar();
 });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
 window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load(); });

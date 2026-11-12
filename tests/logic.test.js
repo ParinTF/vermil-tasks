@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -134,4 +134,41 @@ test('dailyCounts crosses a month end', () => {
 test('niceMax gives an even top so the middle tick is a whole number', () => {
   assert.deepEqual([0, 1, 2, 3, 5, 9, 10].map(niceMax), [2, 2, 2, 4, 6, 10, 10]);
   assert.deepEqual([11, 13, 20, 21, 101].map(niceMax), [20, 20, 20, 30, 110]);
+});
+
+// ── calendar maths ──
+test('monthGrid: six full weeks starting on a Monday', () => {
+  const nov = monthGrid(2026, 10); // 1 Nov 2026 is a Sunday
+  assert.equal(nov.length, 42);
+  assert.equal(nov[0].day, '2026-10-26');
+  assert.equal(nov[41].day, '2026-12-06');
+  assert.equal(nov.filter((c) => c.inMonth).length, 30);
+  assert.equal(nov[6].day, '2026-11-01');
+  assert.equal(nov[6].inMonth, true);
+  assert.equal(nov[5].inMonth, false);
+});
+test('monthGrid: a month that starts on a Monday has no lead days, a leap February has 29', () => {
+  const feb = monthGrid(2027, 1); // 1 Feb 2027 is a Monday
+  assert.equal(feb[0].day, '2027-02-01');
+  assert.equal(feb.filter((c) => c.inMonth).length, 28);
+  assert.equal(monthGrid(2028, 1).filter((c) => c.inMonth).length, 29);
+  assert.equal(monthGrid(2026, 11)[0].day, '2026-11-30'); // 1 Dec 2026 is a Tuesday
+});
+test('shiftDay crosses month and year ends', () => {
+  assert.equal(shiftDay('2026-12-31', 1), '2027-01-01');
+  assert.equal(shiftDay('2026-03-01', -1), '2026-02-28');
+  assert.equal(shiftDay('2026-11-11', 7), '2026-11-18');
+});
+test('shiftMonth keeps the day number and clamps to the length of the new month', () => {
+  assert.equal(shiftMonth('2026-11-11', 1), '2026-12-11');
+  assert.equal(shiftMonth('2026-01-31', 1), '2026-02-28');
+  assert.equal(shiftMonth('2026-03-31', -1), '2026-02-28');
+  assert.equal(shiftMonth('2026-12-15', 1), '2027-01-15');
+  assert.equal(shiftMonth('2026-01-15', -1), '2025-12-15');
+});
+test('groupByDay: dated tasks only, earliest time first, ties by title', () => {
+  const t = (title, due) => ({ title, due });
+  const days = groupByDay([t('b', '2026-11-11T09:00'), t('a', '2026-11-11T09:00'), t('late', '2026-11-11T18:30'), t('early', '2026-11-11T07:15'), t('no date', null), t('other', '2026-11-12T10:00')]);
+  assert.deepEqual(Object.keys(days).sort(), ['2026-11-11', '2026-11-12']);
+  assert.deepEqual(days['2026-11-11'].map((x) => x.title), ['early', 'a', 'b', 'late']);
 });
