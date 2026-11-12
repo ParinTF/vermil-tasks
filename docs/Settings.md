@@ -35,4 +35,14 @@ Week start and clock are read while drawing, so changing them reloads the window
 
 The three that work from any app: **Quick add a task** (`Ctrl+Alt+T`), **Quick note** (`Ctrl+Alt+N`) and the **Today widget** (`Ctrl+Alt+W`). Press a button, then the new keys: Ctrl, Alt or Shift with one key. `Esc` cancels. If another program already uses the combination, or another Vermil shortcut does, you are told and the old one stays. **Back to the usual keys** resets all three. The shortcut list (`?`) and its warning follow your choice. The keys inside the quick bar (`Ctrl+Alt+J`, `Ctrl+Alt+N`) do not change.
 
+## Data
+
+- **Backup** and **Sync between computers** (they were on Home): see [Home, backup and sync](Home.md).
+- Where your data file is and how big it is, with **Open the data folder**.
+- **What each module has saved**: the size of each module's data, and **Delete** to empty it (it asks and says it cannot be undone; Tasks and Notes are not in this list). A module that is on starts again empty; one that is off stays off.
+
+## About
+
+The version, **Check for updates now**, and a switch for looking for updates by itself.
+
 Other modules can add their own section to this page (the [Assistant](Assistant.md) adds its key there).

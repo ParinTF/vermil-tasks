@@ -202,13 +202,53 @@ function shortcutsSection() {
   return stSection('Shortcuts', box);
 }
 
-const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection, shortcutsSection];
+// ── Data: backup, sync, where it lives, deleting a module's data ──
+const fileSize = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+function dataSection() {
+  const info = el('p', { id: 'st-data-info', className: 'st-fine' });
+  invoke('data_info').then((d) => { info.textContent = `Your data is one file, ${fileSize(d.bytes)}, in ${d.dir}`; });
+  const open = el('button', { id: 'st-open-data', type: 'button', className: 'linkish', textContent: 'Open the data folder', onclick: () => invoke('open_data_folder').catch((e) => tell('Could not open it: ' + e)) });
+  // a module's own data: switch it off or delete it (Tasks and Notes are core data and have their own screens)
+  const own = MODULES.filter((m) => moduleData[m.id] != null && m.id !== '_on' && JSON.stringify(moduleData[m.id]) !== '{}' && JSON.stringify(moduleData[m.id]) !== '[]');
+  const rows = own.map((m) => {
+    const del = el('button', { type: 'button', className: 'linkish st-del', id: 'st-del-' + m.id, textContent: 'Delete', ariaLabel: `Delete the data of ${m.name}` });
+    del.onclick = async () => {
+      if (!(await ask(`Delete everything ${m.name} has saved (${fileSize(JSON.stringify(moduleData[m.id]).length)})? This cannot be undone. Your tasks and notes are not touched.`, 'Delete'))) return;
+      const wasOn = started.has(m.id);
+      if (wasOn) await stopModule(m);
+      await saveModule(m.id, null);
+      if (wasOn) await startModule(m);
+      renderSettings();
+    };
+    return el('li', {}, el('span', {}, m.name), el('small', {}, fileSize(JSON.stringify(moduleData[m.id]).length)), del);
+  });
+  return stSection('Data',
+    el('div', { className: 'st-block' }, el('h4', { className: 'st-sub' }, 'Backup'), el('div', { id: 'bk-body' })),
+    el('div', { className: 'st-block' }, el('h4', { className: 'st-sub' }, 'Sync between computers'), el('div', { id: 'sy-body' })),
+    info, el('div', { className: 'st-line' }, open),
+    ...(rows.length ? [el('h4', { className: 'st-sub' }, 'What each module has saved'), el('ul', { id: 'st-own', className: 'st-own' }, ...rows)] : []));
+}
+
+// ── About: the version and updates ──
+function aboutSection() {
+  const msg = el('span', { id: 'st-update-msg', className: 'st-fine', role: 'status' });
+  const check = el('button', { id: 'st-update-check', type: 'button', className: 'linkish', textContent: 'Check for updates now' });
+  check.onclick = () => {
+    msg.textContent = 'Checking…';
+    invoke('check_update').then((v) => { msg.textContent = v ? `Version ${v} is ready: use the button in the top bar.` : 'You have the latest version.'; if (v) checkUpdate(); }, () => { msg.textContent = 'Could not reach the update server. Are you online?'; });
+  };
+  const auto = stCheck('st-update-auto', 'Look for updates by itself', readPrefs().updateCheck, (e) => setPrefs({ updateCheck: e.target.checked }));
+  return stSection('About', el('p', { className: 'st-fine', id: 'st-version' }, `Vermil ${$('version').textContent}. Updates come from the project’s releases and are never forced.`), el('div', { className: 'st-line' }, auto), el('div', { className: 'st-line' }, check, msg));
+}
+
+const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection, shortcutsSection, dataSection, aboutSection];
 
 function renderSettings() {
   const scroll = $('settings-view').scrollTop;
   $('settings-view').replaceChildren(el('div', { className: 'st-wrap' },
     el('header', { className: 'st-head' }, el('h2', {}, 'Settings'), el('button', { type: 'button', className: 'linkish', id: 'st-back', textContent: 'Back', onclick: () => setView(lastView) })),
     ...[...SETTINGS_SECTIONS, ...settingsHooks].flatMap((f) => { try { return [f()]; } catch (e) { console.error('settings section', e); return []; } })));
+  if ($('bk-body')) { paintBackup(); paintSync(); } // the sections that need the page to exist first
   $('settings-view').scrollTop = scroll;
 }
 

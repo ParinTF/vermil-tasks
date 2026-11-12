@@ -1182,6 +1182,25 @@ fn parse_hotkey(text: &str) -> Result<Shortcut, String> {
 }
 
 #[derive(Serialize)]
+struct DataInfo {
+    dir: String,
+    bytes: u64,
+}
+
+/// Where the data file is and how big it is.
+#[tauri::command]
+fn data_info(store: State<Store>) -> DataInfo {
+    DataInfo { dir: store.file.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default(), bytes: fs::metadata(&store.file).map(|m| m.len()).unwrap_or(0) }
+}
+
+/// Shows the data folder in Explorer.
+#[tauri::command]
+fn open_data_folder(store: State<Store>) -> Result<(), String> {
+    let dir = store.file.parent().ok_or("no folder")?;
+    std::process::Command::new("explorer").arg(dir).spawn().map(|_| ()).map_err(|e| e.to_string())
+}
+
+#[derive(Serialize)]
 struct HotkeyInfo {
     name: String,
     keys: String,
@@ -1311,7 +1330,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();

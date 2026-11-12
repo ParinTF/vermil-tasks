@@ -191,11 +191,7 @@ function renderHome() {
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
     ...todayStrip(),
-    el('div', { className: 'mod-grid' }, ...MODULES.map(card)),
-    el('section', { className: 'bk', id: 'backup', ariaLabel: 'Backup' }, el('h3', {}, 'Backup'), el('div', { id: 'bk-body' })),
-    el('section', { className: 'bk', id: 'sync', ariaLabel: 'Sync' }, el('h3', {}, 'Sync between computers'), el('div', { id: 'sy-body' })));
-  paintBackup();
-  paintSync();
+    el('div', { className: 'mod-grid' }, ...MODULES.map(card)));
   if (focused) document.querySelector('#' + focused + ' button')?.focus();
 }
 

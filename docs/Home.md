@@ -1,6 +1,6 @@
 # Home, backup and sync
 
-Home is the first page every time you open Vermil. `Ctrl+0` (or `Ctrl+,`) brings you back to it.
+Home is the first page every time you open Vermil (or the last tab, if you chose that in [Settings](Settings.md)). `Ctrl+0` brings you back to it. **Backup and sync** are in Settings, under Data (`Ctrl+,`); everything below about them is unchanged.
 
 ## Modules
 
@@ -11,7 +11,7 @@ Every tool is a module with a card on Home.
 - A module that is off is not loaded at all, which is what keeps Vermil light.
 - If you already had tasks or notes before modules existed, Tasks, Notes and Calendar are on for you.
 
-When you have many modules on, the tab bar shows the tabs that fit and puts the rest in a **More** menu. `Ctrl+1` to `Ctrl+9` go to the tabs in order, even the ones in the menu.
+When you have many modules on, the tab bar shows the tabs that fit and puts the rest in a **More** menu. `Ctrl+1` to `Ctrl+9` go to the tabs in the order you set, even the ones in the menu.
 
 ## Today strip
 
