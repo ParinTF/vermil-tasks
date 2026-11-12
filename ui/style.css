@@ -376,6 +376,26 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 .cal-ghost { position: fixed; z-index: 60; top: 0; left: 0; max-width: 240px; padding: 4px 10px; overflow: hidden; border-radius: 6px; background: var(--ink); color: var(--paper); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 30%, transparent); }
 body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
 .cal-open.done { color: var(--mute); text-decoration: line-through; }
+/* day view: 24 hours, a block per task (position = start, height = length), drag to move, drag the bottom edge to resize */
+.tl-scroll { --hour: 48px; position: relative; max-height: 520px; overflow-y: auto; border-top: 1px solid var(--ink); scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+.tl { position: relative; height: calc(var(--hour) * 24); }
+.tl-hour { position: absolute; left: 0; right: 0; border-top: 1px solid var(--line); }
+.tl-hour span { position: absolute; top: 4px; left: 0; width: 44px; font-size: 11px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.tl-block { position: absolute; box-sizing: border-box; padding: 3px 8px; overflow: hidden; border: 0; border-left: 3px solid var(--accent); border-radius: 3px; background: color-mix(in srgb, var(--accent) 16%, var(--paper)); color: var(--ink); font: inherit; font-size: 12px; line-height: 16px; text-align: left; cursor: grab; user-select: none; }
+.tl-block b { display: block; overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.tl-block time { color: var(--mute); font-variant-numeric: tabular-nums; }
+.tl-block.late { border-left-color: var(--accent-text); }
+.tl-block.done { border-left-color: var(--mute); background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--mute); text-decoration: line-through; cursor: default; }
+.tl-block:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.tl-grip { position: absolute; left: 0; right: 0; bottom: 0; height: 8px; cursor: ns-resize; }
+.tl-now, .tl-drop { position: absolute; left: 52px; right: 0; height: 2px; background: var(--accent); pointer-events: none; }
+.tl-drop { display: none; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 25%, transparent); }
+.tl-scroll.drop .tl-drop { display: block; }
+#cal-nodate-box { max-height: 170px; margin-top: 14px; overflow-y: auto; }
+#cal-nodate-box h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+#cal-nodate { margin: 0; padding: 0; list-style: none; }
+#cal-nodate li { padding: 7px 0; border-bottom: 1px solid var(--line); }
+#cal-nodate .cal-open { font-size: 14px; }
 #cal-day-list time { font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; }
 #cal-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; margin-top: 18px; }
 #cal-new { grid-column: 1 / -1; }
@@ -456,6 +476,7 @@ dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
   .calendar-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .cal-main { display: flex; flex-direction: column; min-height: 0; }
   .cal-grid { flex: 1; min-height: 0; grid-template-rows: repeat(6, minmax(0, 1fr)); }
+  .tl-scroll { flex: 1; min-height: 0; max-height: none; }
   .cal-day { display: flex; flex-direction: column; min-height: 0; }
   #cal-day-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
 }

@@ -224,4 +224,35 @@ function rankItems(items, query, limit = 30) {
   return scored.sort((a, b) => a.score - b.score || a.i - b.i).slice(0, limit).map((s) => s.item);
 }
 
-if (typeof module !== 'undefined') module.exports = { rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── time blocking: a day as 24 hours of minutes, tasks as blocks (start, length) ──
+const minutesOf = (due) => Number(due.slice(11, 13)) * 60 + Number(due.slice(14, 16)); // "2026-11-12T09:30" -> 570
+const taskMinutes = (t) => Math.max(15, Number(t.minutes) || 60); // a task without a length is an hour
+const snapMinutes = (min, step = 15) => Math.max(0, Math.min(1440 - step, Math.round(min / step) * step));
+const withTime = (day, min) => `${day}T${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}`;
+
+// Overlapping blocks share the width: returns { id: { lane, lanes } } where lanes is how many columns that overlap needs.
+function layoutDay(blocks) {
+  const out = {};
+  let cluster = [];
+  let laneEnds = [];
+  let clusterEnd = -1;
+  const flush = () => {
+    const lanes = Math.max(0, ...cluster.map((c) => c.lane + 1));
+    for (const c of cluster) out[c.id] = { lane: c.lane, lanes };
+    cluster = [];
+    laneEnds = [];
+    clusterEnd = -1;
+  };
+  for (const b of [...blocks].sort((a, c) => a.start - c.start || c.end - a.end)) {
+    if (cluster.length && b.start >= clusterEnd) flush(); // nothing overlaps from here: a new cluster
+    let lane = laneEnds.findIndex((end) => end <= b.start);
+    if (lane < 0) lane = laneEnds.length;
+    laneEnds[lane] = b.end;
+    cluster.push({ id: b.id, lane });
+    clusterEnd = Math.max(clusterEnd, b.end);
+  }
+  flush();
+  return out;
+}
+
+if (typeof module !== 'undefined') module.exports = { minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

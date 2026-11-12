@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -214,4 +214,29 @@ test('rankItems needs every word, and puts label starts before label contains be
   assert.deepEqual(rankItems(items, 'zzz'), []);
   assert.equal(rankItems(items, '  ').length, 4); // no words: everything, in order
   assert.equal(rankItems(items, 'e', 2).length, 2); // the limit
+});
+
+test('time blocking helpers', () => {
+  assert.equal(minutesOf('2026-11-12T09:30'), 570);
+  assert.equal(withTime('2026-11-12', 570), '2026-11-12T09:30');
+  assert.equal(withTime('2026-11-12', 5), '2026-11-12T00:05');
+  assert.equal(taskMinutes({}), 60);
+  assert.equal(taskMinutes({ minutes: 30 }), 30);
+  assert.equal(taskMinutes({ minutes: 3 }), 15); // never shorter than a slot
+  assert.equal(snapMinutes(557), 555);
+  assert.equal(snapMinutes(-40), 0);
+  assert.equal(snapMinutes(5000), 1425); // the last slot of the day
+});
+
+test('layoutDay: overlapping blocks take lanes, separate ones keep the full width', () => {
+  const out = layoutDay([
+    { id: 'a', start: 540, end: 600 }, { id: 'b', start: 570, end: 630 }, // overlap each other
+    { id: 'c', start: 600, end: 660 },                                     // starts as a ends, overlaps b
+    { id: 'd', start: 720, end: 780 },                                     // alone
+  ]);
+  assert.deepEqual(out.a, { lane: 0, lanes: 2 });
+  assert.deepEqual(out.b, { lane: 1, lanes: 2 });
+  assert.deepEqual(out.c, { lane: 0, lanes: 2 }); // reuses the lane a freed
+  assert.deepEqual(out.d, { lane: 0, lanes: 1 });
+  assert.deepEqual(layoutDay([]), {});
 });

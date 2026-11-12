@@ -131,6 +131,7 @@
       <div class="cal-head">
         <h2 id="cal-title"></h2>
         <div class="cal-nav">
+          <button id="cal-mode" class="linkish" type="button" title="Hour by hour (D) or the month (M)">Day</button>
           <button id="cal-prev" class="linkish" type="button" aria-label="Previous month">‹</button>
           <button id="cal-today" class="linkish" type="button">Today</button>
           <button id="cal-next" class="linkish" type="button" aria-label="Next month">›</button>
@@ -138,11 +139,16 @@
       </div>
       <div class="cal-week" id="cal-week" aria-hidden="true"></div>
       <div class="cal-grid" id="cal-grid" role="grid"></div>
+      <div class="tl-scroll" id="tl-scroll" hidden><div class="tl" id="tl"></div></div>
     </section>
     <aside class="cal-day" aria-label="Selected day">
       <h3 id="cal-day-title"></h3>
       <p id="cal-day-count"></p>
       <ul id="cal-day-list"></ul>
+      <div id="cal-nodate-box" hidden>
+        <h4>Not scheduled</h4>
+        <ul id="cal-nodate"></ul>
+      </div>
       <form id="cal-add">
         <input id="cal-new" maxlength="200" placeholder="Add a task on this day" aria-label="Task for the selected day" autocomplete="off">
         <input id="cal-time" type="time" value="09:00" aria-label="Time">
