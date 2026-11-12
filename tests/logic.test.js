@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -387,4 +387,12 @@ test('countdown: yearly events return, others stay put', () => {
   assert.equal(nextEventDay({ day: '2000-02-29', yearly: true }, '2027-01-10'), '2027-02-28');
   assert.equal(nextEventDay({ day: '2000-02-29', yearly: true }, '2028-01-10'), '2028-02-29');
   assert.deepEqual([0, 1, -1, 5, -3].map(countdownLabel), ['Today', 'Tomorrow', 'Yesterday', '5 days', '3 days ago']);
+});
+
+test('journal: mood average over the days that have a mood', () => {
+  const e = { '2026-11-12': { mood: 4, text: 'x' }, '2026-11-11': { mood: 2, text: '' }, '2026-11-10': { mood: 0, text: 'no mood' }, '2026-11-01': { mood: 5, text: '' } };
+  assert.equal(moodAverage(e, '2026-11-12', 7), 3); // (4 + 2) / 2; the 0 and the old day are out
+  assert.equal(moodAverage(e, '2026-11-12', 30), 3.7); // (4 + 2 + 5) / 3
+  assert.equal(moodAverage({}, '2026-11-12', 7), null);
+  assert.equal(MOODS[3], 'Okay');
 });

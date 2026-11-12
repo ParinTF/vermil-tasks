@@ -18,6 +18,7 @@ const MODULES = [
   { id: 'habits', name: 'Habits', about: 'Daily habits with streaks and a year-at-a-glance heatmap. Tick today, fix yesterday.', script: 'mod-habits.js', style: 'mod-habits.css', view: 'Habits' },
   { id: 'subs', name: 'Subscriptions', about: 'Everything that renews, with the monthly total and a reminder a few days before each charge.', script: 'mod-subs.js', style: 'mod-subs.css', view: 'Subscriptions' },
   { id: 'countdown', name: 'Countdown', about: 'Days until what matters: a trip, an exam, a birthday that comes back every year.', script: 'mod-countdown.js', style: 'mod-countdown.css', view: 'Countdown' },
+  { id: 'journal', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
   { id: 'stocks', name: 'Stocks', about: 'Look up a stock: today’s move, pre-market and after-hours, and what your positions are worth. Needs the internet.', script: 'mod-stocks.js', style: 'mod-stocks.css', view: 'Stocks' },
 ];
 
