@@ -318,7 +318,7 @@ $('summary-on').onchange = () => { $('summary-time').disabled = !$('summary-on')
 $('summary-time').oninput = () => { clearTimeout(summaryTimer); summaryTimer = setTimeout(saveSummary, 1000); };
 
 $('export').onclick = () => invoke('export_todos').then(
-  (path) => { $('backup-msg').textContent = 'Backup saved to ' + path; },
+  (path) => { $('backup-msg').textContent = 'Saved to Downloads'; $('backup-msg').title = path; },
   (e) => tell('Export failed: ' + e));
 $('import-btn').onclick = () => $('import').click();
 $('import').onchange = async (e) => {
@@ -373,6 +373,8 @@ const SHORTCUTS = [
   'Delete: delete the selected task',
   'N: new task',
   '1 2 3 4: To do, Today, Week, History',
+  'Ctrl+Alt+T (from anywhere): quick add',
+  'Ctrl+Alt+J (in quick add): due date',
   'Ctrl+F: search',
   'Ctrl+Z: undo',
   'Esc: leave a field, cancel editing',
@@ -442,11 +444,12 @@ addEventListener('keydown', (e) => {
 });
 $('shortcuts').onclick = () => tell(SHORTCUTS);
 
-const quickHint = () => invoke('quick_shortcut').then((ok) => {
-  $('quick-hint').textContent = ok ? 'Quick add from anywhere: Ctrl+Alt+T' : 'Quick add shortcut Ctrl+Alt+T is in use by another app';
-});
-quickHint();
-setTimeout(quickHint, 5000); // the backend keeps retrying for a few seconds after launch
+// Shown only when the shortcut could not be registered (the Shortcuts list documents it otherwise), which
+// keeps the footer on one line. The backend retries for a few seconds after launch, so ask after that.
+setTimeout(() => invoke('quick_shortcut').then((ok) => {
+  $('quick-hint').hidden = ok;
+  $('quick-hint').textContent = 'Ctrl+Alt+T is taken by another app';
+}), 5000);
 
 const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
