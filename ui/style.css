@@ -241,6 +241,40 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 .quick #d:focus { box-shadow: 0 2px 0 var(--accent); }
 .quick kbd { flex: none; font: inherit; font-size: 12px; letter-spacing: .08em; text-transform: uppercase; color: #f4f1ea77; }
 
+/* ── history chart: thin columns on a hairline grid, today is the one accent ── */
+.chart { position: relative; margin-block: 20px 28px; }
+.chart-head { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.chart-head h3 { margin: 0; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.chart-head h3 span { font-weight: 400; letter-spacing: .04em; text-transform: none; }
+.linkish { flex: none; padding: 0; border: 0; background: none; font-size: 13px; color: var(--mute); text-decoration: underline; text-underline-offset: 4px; }
+.linkish:hover { color: var(--ink); }
+.plot { position: relative; height: 110px; margin: 26px 0 46px 30px; }
+.gridline { position: absolute; left: 0; right: 0; height: 0; border-top: 1px solid var(--line); }
+.gridline span { position: absolute; left: -30px; top: -7px; width: 22px; text-align: right; font-size: 11px; line-height: 1; color: var(--mute); font-variant-numeric: tabular-nums; }
+.cols { position: absolute; inset: 0; display: grid; grid-template-columns: repeat(14, 1fr); }
+.col { position: relative; display: flex; flex-direction: column; justify-content: flex-end; align-items: center; padding: 0; border: 0; background: none; font: inherit; color: inherit; cursor: default; }
+.bar { width: min(24px, 56%); border-radius: 4px 4px 0 0; background: color-mix(in srgb, var(--ink) 55%, transparent); transform-origin: bottom; transition: background .2s var(--ease); }
+.bar.zero { border-radius: 0; opacity: .5; }
+.col.today .bar { background: var(--accent-text); }
+.col:hover .bar, .col:focus-visible .bar { background: var(--ink); }
+.col.today:hover .bar, .col.today:focus-visible .bar { background: var(--accent); }
+.col:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.val { margin-bottom: 4px; font-size: 12px; font-weight: 600; line-height: 1; }
+.x { position: absolute; top: calc(100% + 6px); left: 0; right: 0; display: flex; flex-direction: column; align-items: center; gap: 1px; font-size: 11px; line-height: 1.2; color: var(--mute); }
+.x b { font-weight: 400; }
+.x small { font-size: 10px; }
+.col.today .x { color: var(--ink); }
+.col.today .x b { font-weight: 700; }
+.tip { position: absolute; z-index: 3; padding: 6px 10px; border-radius: 4px; background: var(--ink); color: var(--paper); font-size: 12px; white-space: nowrap; pointer-events: none; transform: translate(-50%, calc(-100% - 8px)); }
+.tip b { margin-right: 6px; font-size: 14px; }
+.chart table { width: 100%; margin-top: 12px; border-collapse: collapse; font-size: 14px; }
+.chart th { text-align: left; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.chart th, .chart td { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.chart th:last-child, .chart td:last-child { text-align: right; font-variant-numeric: tabular-nums; }
+.enter .col .bar { animation: grow .5s var(--ease) both; animation-delay: calc(var(--i) * 25ms); }
+@keyframes grow { from { transform: scaleY(0); } }
+@media (forced-colors: active) { .bar { forced-color-adjust: none; background: CanvasText; } .col.today .bar { background: Highlight; } }
+
 /* ── in-app dialog (replaces the browser's confirm/alert boxes) ── */
 dialog {
   width: min(440px, calc(100vw - 48px)); padding: 32px; border: 1px solid var(--line); border-radius: 4px;

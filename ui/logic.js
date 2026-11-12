@@ -136,4 +136,19 @@ function inView(view, due, now) {
   return due.slice(0, 10) <= localDay(last);
 }
 
-if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence, streak, parseQuick, inView };
+// Tasks done per day for the last `n` days ending today, oldest first. `days` holds one local day per finished task.
+function dailyCounts(days, today, n) {
+  const tally = new Map();
+  for (const d of days) tally.set(d, (tally.get(d) || 0) + 1);
+  return Array.from({ length: n }, (_, i) => {
+    const day = localDay(new Date(today.getFullYear(), today.getMonth(), today.getDate() - (n - 1 - i)));
+    return { day, count: tally.get(day) || 0 };
+  });
+}
+
+// A clean, even top for a count axis, so its middle tick is a whole number too: 3 → 4, 9 → 10, 13 → 20.
+function niceMax(n) {
+  return n <= 10 ? Math.max(2, Math.ceil(n / 2) * 2) : Math.ceil(n / 10) * 10;
+}
+
+if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

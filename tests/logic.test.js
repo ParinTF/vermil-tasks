@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -116,4 +116,22 @@ test('week view across a month end', () => {
   const now = new Date(2026, 10, 28, 10, 0);
   assert.equal(inView('week', '2026-12-04T12:00', now), true);
   assert.equal(inView('week', '2026-12-05T00:00', now), false);
+});
+
+// ── dailyCounts and niceMax ──
+test('dailyCounts: last n days oldest first, gaps are zero, older days are left out', () => {
+  const days = ['2026-11-11', '2026-11-11', '2026-11-09', '2026-11-05', '2026-10-01'];
+  const counts = dailyCounts(days, at10, 7);
+  assert.deepEqual(counts.map((c) => c.day), ['2026-11-05', '2026-11-06', '2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10', '2026-11-11']);
+  assert.deepEqual(counts.map((c) => c.count), [1, 0, 0, 0, 1, 0, 2]);
+  assert.equal(dailyCounts([], at10, 3).every((c) => c.count === 0), true);
+});
+test('dailyCounts crosses a month end', () => {
+  const counts = dailyCounts(['2026-11-30', '2026-12-02'], new Date(2026, 11, 2, 9, 0), 4);
+  assert.deepEqual(counts.map((c) => c.day), ['2026-11-29', '2026-11-30', '2026-12-01', '2026-12-02']);
+  assert.deepEqual(counts.map((c) => c.count), [0, 1, 0, 1]);
+});
+test('niceMax gives an even top so the middle tick is a whole number', () => {
+  assert.deepEqual([0, 1, 2, 3, 5, 9, 10].map(niceMax), [2, 2, 2, 4, 6, 10, 10]);
+  assert.deepEqual([11, 13, 20, 21, 101].map(niceMax), [20, 20, 20, 30, 110]);
 });

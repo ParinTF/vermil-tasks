@@ -10,6 +10,7 @@ let streaks = new Map(); // open task id -> current streak, refreshed on every r
 let selectedId = null; // the row picked with the arrow keys
 let selectedIndex = -1; // its position, so a deleted row hands the pick to its neighbour
 const undoStack = []; // earlier states of `todos`, newest last
+let statsAsTable = false; // History shows its chart as a table when true
 
 const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
 const remindLabel = { 0: 'reminds at due time', 10: 'reminds 10 min before', 60: 'reminds 1 h before', 1440: 'reminds 1 day before' };
@@ -177,6 +178,79 @@ function historyItem(t) {
     el('div', { className: 'tools' }, restore, removeButton(t)));
 }
 
+// The History tab opens with a column chart of tasks done per day. One series, so no legend: the title names it.
+// Values are on the axis, on today's and the best day's bar, in the tooltip and in the table view.
+const STAT_DAYS = 14;
+
+function statsChart(done) {
+  const counts = dailyCounts(done.filter((t) => t.completedAt).map((t) => localDay(new Date(t.completedAt))), new Date(), STAT_DAYS);
+  const total = counts.reduce((sum, c) => sum + c.count, 0);
+  const best = Math.max(...counts.map((c) => c.count));
+  const bestAt = counts.findIndex((c) => c.count === best);
+  const top = niceMax(best);
+  const when = (c) => fmt(parseDay(c.day), { weekday: 'short', day: 'numeric', month: 'short' });
+  const tasks = (n) => `${n} ${n === 1 ? 'task' : 'tasks'}`;
+
+  const toggle = el('button', { type: 'button', className: 'linkish', textContent: statsAsTable ? 'Show chart' : 'Show table' });
+  toggle.onclick = () => { statsAsTable = !statsAsTable; render(); };
+  const box = el('section', { className: 'chart', ariaLabel: 'Tasks done per day' },
+    el('div', { className: 'chart-head' },
+      el('h3', {}, 'Done per day', el('span', {}, ` · last ${STAT_DAYS} days · ${total} done`)),
+      toggle));
+
+  if (statsAsTable) { // the table twin of the chart: every value without hovering
+    box.append(el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {}, 'Day'), el('th', {}, 'Done'))),
+      el('tbody', {}, ...[...counts].reverse().map((c) => el('tr', {}, el('td', {}, when(c)), el('td', {}, String(c.count)))))));
+    return box;
+  }
+
+  const plot = el('div', { className: 'plot', role: 'group', ariaLabel: `${tasks(total)} done in the last ${STAT_DAYS} days, best day ${best}` });
+  for (const at of [0, 0.5, 1]) {
+    const line = el('div', { className: 'gridline' }, el('span', {}, String(top * at)));
+    line.style.bottom = `${at * 100}%`;
+    plot.append(line);
+  }
+  const tip = el('div', { className: 'tip', hidden: true });
+  const showTip = (col, c) => {
+    tip.replaceChildren(el('b', {}, String(c.count)), `done · ${when(c)}`);
+    tip.hidden = false;
+    const at = box.getBoundingClientRect();
+    const bar = col.querySelector('.bar').getBoundingClientRect();
+    const half = tip.offsetWidth / 2;
+    tip.style.left = `${Math.max(half, Math.min(at.width - half, bar.left - at.left + bar.width / 2))}px`; // kept inside the card at both ends
+    tip.style.top = `${bar.top - at.top}px`;
+  };
+  const cols = el('div', { className: 'cols' });
+  counts.forEach((c, i) => {
+    const bar = el('span', { className: 'bar' + (c.count ? '' : ' zero') });
+    bar.style.height = c.count ? `${(c.count / top) * 100}%` : '2px';
+    bar.style.setProperty('--i', i);
+    const isToday = i === STAT_DAYS - 1;
+    const col = el('button', {
+      type: 'button', className: 'col' + (isToday ? ' today' : ''), tabIndex: isToday ? 0 : -1, ariaLabel: `${when(c)}: ${tasks(c.count)} done`,
+    }, ...(c.count && (isToday || i === bestAt) ? [el('span', { className: 'val' }, String(c.count))] : []), bar,
+    el('span', { className: 'x' }, el('b', {}, fmt(parseDay(c.day), { weekday: 'narrow' })), el('small', {}, String(parseDay(c.day).getDate()))));
+    col.onpointerenter = col.onfocus = () => showTip(col, c);
+    col.onpointerleave = col.onblur = () => { tip.hidden = true; };
+    cols.append(col);
+  });
+  // one tab stop for the whole chart; the arrow keys move along the days
+  cols.onkeydown = (e) => {
+    const all = [...cols.children];
+    const from = all.indexOf(document.activeElement);
+    const to = { ArrowLeft: from - 1, ArrowRight: from + 1, Home: 0, End: all.length - 1 }[e.key];
+    if (from < 0 || to === undefined || to < 0 || to >= all.length) return;
+    e.preventDefault();
+    all[from].tabIndex = -1;
+    all[to].tabIndex = 0;
+    all[to].focus();
+  };
+  plot.append(cols);
+  box.append(plot, tip);
+  return box;
+}
+
 function renderHero(open, done) {
   const late = open.filter(isOverdue).length;
   const best = Math.max(0, ...streaks.values());
@@ -246,6 +320,7 @@ function render(enter = false) {
   } else {
     const items = done.filter(match);
     if (!items.length) { empty(q ? 'No matches' : 'No history yet'); return applySelection(); }
+    if (!q) list.append(statsChart(done)); // hidden while searching, the results are what matters then
     let day, ul;
     for (const t of items) {
       const d = fmt(t.completedAt, { dateStyle: 'full' });
