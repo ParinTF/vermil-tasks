@@ -27,7 +27,7 @@ The identifier decides the data folder and the installed app's identity. Changin
 - The **backend owns the data**: one JSON file in the app data folder, written to a temp file and renamed so a crash cannot truncate it. An unreadable file is copied to `*.corrupt` before anything overwrites it.
 - The UI holds a copy of the state and calls `invoke` commands. When the backend changes data on its own (quick add, snooze), it emits `todos-changed` and the UI reloads.
 - Rust structs validate every command payload. Fields only the UI uses ride through `#[serde(flatten)] extra`.
-- **Pure logic is separated and tested**: date and streak rules live in `ui/logic.js` (node tests in `tests/`), reminder rules in `main.rs` (`cargo test`). `npm test` runs both. New non-trivial logic arrives with a test.
+- **Pure logic is separated and tested**: dates, repeats, streaks, the quick-add text parser, the Today/Week views and the chart maths live in `ui/logic.js` (node tests in `tests/`); reminder, snooze and morning-summary rules live in `main.rs` (`cargo test`). `npm test` runs both. New non-trivial logic arrives with a test.
 - Dates stay in `datetime-local` form (`2026-11-12T09:00`): they parse as local time and sort as text.
 
 ## Every Vermil app has
@@ -40,13 +40,15 @@ The identifier decides the data folder and the installed app's identity. Changin
 
 ## Design system
 
-- **Tokens** (`ui/style.css` `:root`): paper `#f4f1ea`, ink `#12110f`, mute `#6f6b63`, accent vermilion `#ff4a1c`. The accent is the only colour and marks one thing per view.
+- **Tokens** (`ui/style.css` `:root`): paper, ink and mute switch with `light-dark()` (light `#f4f1ea` `#12110f` `#6f6b63`, dark `#141311` `#f1ede4` `#9a958b`); accent vermilion `#ff4a1c`, plus `--accent-text` (`#c93410` on light paper) for small accent text. The accent is the only colour and marks one thing per view.
+- **Light and dark**: the app follows Windows; `data-theme="light|dark"` on `<html>` forces one (`ui/theme.js` applies the stored choice before first paint). Never hard-code an ink-with-alpha hex: tints are `color-mix(in srgb, var(--ink) N%, transparent)`. Text on the accent is `#12110f`. Body text, small accent text and chart bars must keep WCAG contrast (4.5:1 text, 3:1 graphics) in both themes. The quick bar is dark in every theme.
 - **Type**: Anuphan variable font, bundled in `ui/fonts/` so the app works offline. Oversized bold headline as the main visual; small uppercase letter-spaced labels.
 - **Editorial, quiet components**: hairline rules instead of boxes, underlined fields, one pill-shaped primary button, generous space, asymmetric two-column layout.
 - **Fixed shell**: on wide windows the window itself never scrolls; only the main list does. Sizes follow `vh` so the primary action is always on screen. Below 860px it becomes one scrolling column.
 - **Motion** is short and purposeful, uses `--ease`, and is switched off under `prefers-reduced-motion`.
 - **Dialogs** use the in-app `ask()` and `tell()` helpers in `renderer.js`; the native `confirm` and `alert` show a "tauri.localhost says" box.
-- **Keyboard first**: every flow the owner uses daily works without the mouse.
+- **Charts** are plain elements, no library: one series and no legend (the title names it), thin columns with 4px rounded tops, hairline grid, today in the accent, values on the axis and on the notable bars only, a tooltip on hover and on focus, one tab stop with arrow keys, and a table view of the same numbers. Follow the `dataviz` skill when adding one.
+- **Keyboard first**: every flow works without the mouse. Main window: Up/Down select, Space done, E edit, P pin, Delete delete, N new task, 1-4 tabs, Ctrl+F search, Ctrl+Z undo, T theme, ? lists them. Quick bar: Ctrl+Alt+T from anywhere, Ctrl+Alt+J adds a due date, or type the date as words. Shortcuts match `e.code` (the physical key) so they work on a Thai layout. A new shortcut goes in the `SHORTCUTS` list in `renderer.js`.
 - User text enters the DOM through `textContent`.
 
 ## Versions and releases
@@ -63,12 +65,15 @@ The owner's installed app and its data folder are live. Test in a separate copy:
 - Build with `npx tauri build --debug --no-bundle --config <test config>`, where the test config overrides `identifier` (`com.vermil.<product>.test`) and `productName`, giving the copy its own data folder and autostart entry. Config arrays are replaced whole, so repeat every window in the override.
 - Add `additionalBrowserArgs: "--remote-debugging-port=<port>"` to the windows to drive the UI over the DevTools protocol.
 - Have every test script abort if its data folder is not empty, and clear it when done.
+- Dark mode is tested with `Emulation.setEmulatedMedia` (`prefers-color-scheme`); a narrow window with `Emulation.setDeviceMetricsOverride`.
+- Test copies share a WebView profile between runs: reset `localStorage` and any module-level state (a `let` such as `theme` survives a reload of the test, not of the page) at the start of a script, and turn on `Emulation.setFocusEmulationEnabled`, otherwise focus and blur events stop firing whenever another window is in front.
 - Say plainly what was only simulated: toast buttons, the tray menu, file pickers, real key presses and a real reboot cannot be driven from a script.
 
 ## Gotchas
 
 - **Edit files with the Edit tool or Python (`encoding='utf-8'`).** Windows PowerShell 5.1 `Get-Content`/`Set-Content` re-encodes UTF-8 and corrupted `✳ → ·` in `renderer.js` once.
 - **CSS order**: the fixed-shell media block is last in `style.css` because it overrides base rules of equal specificity.
+- **The footer must stay one row** at 1120x800 (every wide-window state): a second row squeezes the left column and clips Add task. Keep new footer items short, and put a conditional warning on an existing control (the Shortcuts button gets a dot when Ctrl+Alt+T is taken) instead of adding text.
 - **Toasts** go through `tauri-winrt-notification` directly; the notification plugin has no action buttons on desktop. A build run from `target/` borrows PowerShell's app id, an installed build uses the identifier.
 - **Global shortcuts** are registered with retries: right after an update the outgoing process still holds them for a moment.
 - **Autostart** writes to HKLM when the process is elevated and HKCU otherwise.
@@ -78,7 +83,7 @@ The owner's installed app and its data folder are live. Test in a separate copy:
 ## Starting a new Vermil app
 
 1. Create `vermil-<product>` beside this repo and copy this file into it.
-2. Copy the shell from Vermil Tasks: `ui/style.css` tokens and fonts, the top bar, footer and dialog markup, and from `main.rs` the store, tray, single-instance, autostart and updater code. `release.mjs` is copied unchanged.
+2. Copy the shell from Vermil Tasks: `ui/style.css` tokens and fonts, `ui/theme.js`, the top bar, footer and dialog markup, the `ask()`/`tell()` and keyboard helpers from `renderer.js`, and from `main.rs` the store, tray, single-instance, autostart and updater code. `release.mjs` is copied unchanged.
 3. Set the names from the table above and generate a signing key with `npx tauri signer generate -w ~/.tauri/vermil-<product>.key`; put its public key in `tauri.conf.json`.
 4. Derive the icon from `icon.png` (ink square, paper mark, vermilion dot) with a mark of its own, then run `npx tauri icon icon.png`.
 5. Build the smallest version that does the core job, then grow it one patch version per feature.

@@ -468,6 +468,7 @@ const SHORTCUTS = [
   'Esc: leave a field, cancel editing',
   '?: show this list',
 ].join('\n');
+const shortcutText = () => (quickTaken ? 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.\n\n' : '') + SHORTCUTS;
 const isField = (n) => n.matches('textarea, select, input:not([type=checkbox]):not([type=button])');
 const rowEls = () => [...$('list').querySelectorAll('.item')];
 
@@ -529,15 +530,17 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Delete') press('.act-del');
   else if (e.code === 'KeyT') $('theme').click();
   else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
-  else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(SHORTCUTS); }
+  else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(shortcutText()); }
 });
-$('shortcuts').onclick = () => tell(SHORTCUTS);
+$('shortcuts').onclick = () => tell(shortcutText());
 
-// Shown only when the shortcut could not be registered (the Shortcuts list documents it otherwise), which
-// keeps the footer on one line. The backend retries for a few seconds after launch, so ask after that.
+// If another program owns Ctrl+Alt+T, the Shortcuts button gets an accent dot and its list says so. A message in the
+// footer would make it wrap. The backend retries for a few seconds after launch, so ask after that.
+let quickTaken = false;
 setTimeout(() => invoke('quick_shortcut').then((ok) => {
-  $('quick-hint').hidden = ok;
-  $('quick-hint').textContent = 'Ctrl+Alt+T is taken by another app';
+  quickTaken = !ok;
+  $('shortcuts').classList.toggle('warn', quickTaken);
+  $('shortcuts').title = quickTaken ? 'Ctrl+Alt+T is taken by another app' : '';
 }), 5000);
 
 const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
