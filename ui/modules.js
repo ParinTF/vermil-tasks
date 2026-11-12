@@ -5,12 +5,12 @@
 // impl: { start() runs when it is switched on or the app starts with it on, stop() when it is switched off,
 //         show() when its view opens, keys(e) for keys while its view is showing }.
 // An entry with `view` gets a tab (Ctrl+1..9 in tab order) and a <main id="<id>-view">; `requires` lists the modules it needs.
-// `static` marks a module whose <main> is already in index.html; without `script` its code is in the page itself.
+// `static` marks a module whose <main> is already in index.html.
 // Hooks it may use: rowInfo.push(t => text) adds to a task row's details, rowTools.push(t => button) to its buttons,
 // commandHooks.push(() => [palette commands]), shortcutGroups.push({ module, title, items }); take them out again in stop().
 // Its data goes through saveModule(id, value) into the same data file.
 const MODULES = [
-  { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, recommended: true },
+  { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
   { id: 'notes', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
   { id: 'calendar', name: 'Calendar', about: 'Your tasks by month or hour by hour. Drag to reschedule.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
   { id: 'pomodoro', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
