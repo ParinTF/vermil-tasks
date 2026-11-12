@@ -78,7 +78,7 @@
           <button id="tab-pending" role="tab">To do<sup id="n-pending"></sup></button>
           <button id="tab-history" role="tab">History<sup id="n-history"></sup></button>
         </nav>
-        <input id="search" type="search" placeholder="Search history" aria-label="Search history" hidden>
+        <input id="search" type="search" placeholder="Search (Ctrl+F)" aria-label="Search">
         <div id="list"></div>
       </section>
   </main>
@@ -86,6 +86,7 @@
   <footer class="foot">
     <label class="check"><input id="autostart" type="checkbox"> Start with Windows</label>
     <span id="quick-hint"></span>
+    <button id="shortcuts" type="button">Shortcuts</button>
     <button id="export" type="button">Export backup</button>
     <button id="import-btn" type="button">Import backup</button>
     <input id="import" type="file" accept=".json,application/json" hidden>

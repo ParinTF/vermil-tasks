@@ -6,6 +6,9 @@ let editingId = null;
 let marqueeKey;
 const openNotes = new Set(); // ids whose notes are expanded, so a re-render does not collapse them
 let streaks = new Map(); // open task id -> current streak, refreshed on every render
+let selectedId = null; // the row picked with the arrow keys
+let selectedIndex = -1; // its position, so a deleted row hands the pick to its neighbour
+const undoStack = []; // earlier states of `todos`, newest last
 
 const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
 const remindLabel = { 0: 'reminds at due time', 10: 'reminds 10 min before', 60: 'reminds 1 h before', 1440: 'reminds 1 day before' };
@@ -36,13 +39,18 @@ function el(tag, props = {}, ...children) {
   return node;
 }
 
-async function commit(next) {
+async function commit(next, { undo = true } = {}) {
+  const before = todos;
   try {
     await invoke('save_todos', { todos: next });
   } catch (e) {
     tell('Could not save: ' + e);
     render();
     return false;
+  }
+  if (undo) {
+    undoStack.push(before);
+    if (undoStack.length > 20) undoStack.shift();
   }
   const apply = () => { todos = next; render(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
@@ -107,7 +115,7 @@ function notesBlock(t) {
 }
 
 function removeButton(t) {
-  const btn = el('button', { type: 'button', className: 'danger', textContent: 'Delete' });
+  const btn = el('button', { type: 'button', className: 'danger act-del', textContent: 'Delete' });
   btn.onclick = async () => {
     if (!(await ask(`Delete "${t.title}" permanently?`, 'Delete'))) return;
     if (editingId === t.id) resetForm();
@@ -131,7 +139,7 @@ function pendingItem(t) {
   const lead = later
     ? el('span', { className: 'tick', ariaHidden: 'true' }, '↻')
     : el('input', { type: 'checkbox', ariaLabel: 'Mark done: ' + t.title });
-  const edit = el('button', { type: 'button', textContent: 'Edit' });
+  const edit = el('button', { type: 'button', className: 'act-edit', textContent: 'Edit' });
   const li = el('li', { className: 'item' + (later ? ' later' : ''), id: 'r-' + t.id }, lead,
     el('div', {}, el('span', { className: 'title' }, t.title), meta, notesBlock(t)),
     el('div', { className: 'tools' }, edit, removeButton(t)));
@@ -156,7 +164,7 @@ function pendingItem(t) {
 }
 
 function historyItem(t) {
-  const restore = el('button', { type: 'button', textContent: 'Restore' });
+  const restore = el('button', { type: 'button', className: 'act-restore', textContent: 'Restore' });
   restore.onclick = () => commit(todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)));
   return el('li', { className: 'item', id: 'r-' + t.id },
     el('span', { className: 'tick', ariaHidden: 'true' }, '✓'),
@@ -210,9 +218,9 @@ function render(enter = false) {
   $('tab-history').ariaSelected = String(tab === 'history');
   $('n-pending').textContent = open.length;
   $('n-history').textContent = done.length;
-  $('search').hidden = tab !== 'history';
 
   const list = $('list');
+  if (enter) { selectedId = null; selectedIndex = -1; } // a new tab starts without a pick
   list.classList.toggle('enter', enter);
   // rebuilding the rows resets the list's own scroll position: put it back unless the tab just changed
   const scrolled = list.scrollTop;
@@ -220,13 +228,16 @@ function render(enter = false) {
   list.replaceChildren();
   const empty = (text) => list.append(el('div', { className: 'empty' }, text));
 
+  const q = $('search').value.trim().toLowerCase();
+  const match = (t) => (t.title + '\n' + (t.notes || '')).toLowerCase().includes(q);
   if (tab === 'pending') {
-    if (!open.length) empty('Nothing left. Take a break.');
-    if (open.length + later.length) list.append(el('ul', {}, ...[...open, ...later].map(pendingItem)));
+    const shown = open.filter(match);
+    const shownLater = later.filter(match);
+    if (!shown.length && !(q && shownLater.length)) empty(q ? 'No matches' : 'Nothing left. Take a break.');
+    if (shown.length + shownLater.length) list.append(el('ul', {}, ...[...shown, ...shownLater].map(pendingItem)));
   } else {
-    const q = $('search').value.trim().toLowerCase();
-    const items = done.filter((t) => (t.title + '\n' + (t.notes || '')).toLowerCase().includes(q));
-    if (!items.length) return empty(q ? 'No matches' : 'No history yet');
+    const items = done.filter(match);
+    if (!items.length) { empty(q ? 'No matches' : 'No history yet'); return applySelection(); }
     let day, ul;
     for (const t of items) {
       const d = fmt(t.completedAt, { dateStyle: 'full' });
@@ -244,6 +255,7 @@ function render(enter = false) {
     node.style.setProperty('--i', Math.min(i, 12));
     if (i < 40 && node.id) node.style.viewTransitionName = node.id; // stable per task, so rows slide rather than cross-fade
   });
+  applySelection();
 }
 
 $('form').onsubmit = (e) => {
@@ -329,6 +341,80 @@ $('update').onclick = () => {
 checkUpdate();
 setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
 
+// ── keyboard ──
+const SHORTCUTS = [
+  '↑ ↓: select a task',
+  'Space: mark done (in History: restore)',
+  'E: edit the selected task',
+  'Delete: delete the selected task',
+  'N: new task',
+  'Ctrl+F: search',
+  'Ctrl+Z: undo',
+  'Esc: leave a field, cancel editing',
+  '?: show this list',
+].join('\n');
+const isField = (n) => n.matches('textarea, select, input:not([type=checkbox]):not([type=button])');
+const rowEls = () => [...$('list').querySelectorAll('.item')];
+
+function select(row, scroll) {
+  rowEls().forEach((n) => n.classList.remove('sel'));
+  row.classList.add('sel');
+  selectedId = row.id.slice(2);
+  selectedIndex = rowEls().indexOf(row);
+  if (scroll) row.scrollIntoView({ block: 'nearest' });
+}
+// runs after every render: keep the pick on the same task, or hand it to the row that took its place
+function applySelection() {
+  const rows = rowEls();
+  if (selectedId === null || !rows.length) { selectedId = null; selectedIndex = -1; return; }
+  select(rows.find((n) => n.id === 'r-' + selectedId) || rows[Math.min(selectedIndex, rows.length - 1)], false);
+}
+function moveSelection(step) {
+  const rows = rowEls();
+  if (!rows.length) return;
+  const from = selectedIndex < 0 ? (step > 0 ? -1 : rows.length) : selectedIndex;
+  select(rows[Math.max(0, Math.min(rows.length - 1, from + step))], true);
+}
+async function undo() {
+  const before = undoStack.pop();
+  if (before && !(await commit(before, { undo: false }))) undoStack.push(before);
+}
+
+addEventListener('keydown', (e) => {
+  if ($('dlg').open) return; // the dialog handles Enter and Esc itself
+  const t = e.target.matches ? e.target : document.body;
+  const field = isField(t);
+  const mod = e.ctrlKey || e.metaKey;
+
+  if (e.key === 'Escape') {
+    if (t.id === 'search' && t.value) { t.value = ''; render(); }
+    if (field) t.blur();
+    if (editingId) resetForm();
+    return;
+  }
+  // e.code is the physical key, so every shortcut also works with a Thai layout active
+  if (mod && !e.altKey && e.code === 'KeyF') { e.preventDefault(); $('search').focus(); $('search').select(); return; }
+  if (mod && !e.altKey && e.code === 'KeyZ' && !field) { e.preventDefault(); undo(); return; } // in a field Ctrl+Z undoes typing
+  if (mod || e.altKey) return;
+
+  // arrows also leave an empty title or the search box, so the list is one key away from where you start typing
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && (!field || t.id === 'search' || (t.id === 'title' && !t.value))) {
+    e.preventDefault();
+    if (field) t.blur();
+    moveSelection(e.key === 'ArrowDown' ? 1 : -1);
+    return;
+  }
+  if (field) return;
+  const row = $('list').querySelector('.item.sel');
+  const press = (selector) => { if (row) { e.preventDefault(); row.querySelector(selector)?.click(); } };
+  if (e.code === 'Space' && !t.matches('button, summary, input, a')) press('input[type=checkbox], .act-restore');
+  else if (e.code === 'KeyE') press('.act-edit');
+  else if (e.key === 'Delete') press('.act-del');
+  else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
+  else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(SHORTCUTS); }
+});
+$('shortcuts').onclick = () => tell(SHORTCUTS);
+
 const quickHint = () => invoke('quick_shortcut').then((ok) => {
   $('quick-hint').textContent = ok ? 'Quick add from anywhere: Ctrl+Alt+T' : 'Quick add shortcut Ctrl+Alt+T is in use by another app';
 });
@@ -336,5 +422,6 @@ quickHint();
 setTimeout(quickHint, 5000); // the backend keeps retrying for a few seconds after launch
 
 const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
-window.__TAURI__.event.listen('todos-changed', () => load()); // the backend changed tasks (quick add, snooze)
+// the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
+window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load(); });
 load(true);
