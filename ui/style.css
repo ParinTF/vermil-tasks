@@ -213,6 +213,10 @@ input[type=checkbox]:checked { border-color: var(--accent); background: var(--ac
   font-size: 13px; color: var(--mute);
 }
 .foot .check { font-size: 13px; gap: 10px; }
+.foot .inline { display: inline-flex; align-items: center; gap: 10px; }
+.foot input[type=time] { width: 5.4em; padding: 2px 0; border: 0; border-bottom: 1px solid #12110f55; background: none; font: inherit; color: var(--ink); }
+.foot input[type=time]:focus { outline: 0; border-color: var(--accent); }
+.foot input[type=time]:disabled { opacity: .4; }
 .foot button { padding: 0; border: 0; background: none; color: var(--mute); text-decoration: underline; text-underline-offset: 4px; }
 .foot button:hover, #backup-msg { color: var(--ink); }
 #backup-msg { overflow-wrap: anywhere; }

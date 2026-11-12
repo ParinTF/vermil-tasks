@@ -294,6 +294,22 @@ $('autostart').onchange = (e) => invoke('set_autostart', { on: e.target.checked 
   tell('Could not change the startup setting: ' + err);
 });
 
+// Morning summary: one toast a day at this time (empty = off). Saved a second after typing stops, so
+// editing the digits does not re-trigger it on every keystroke.
+invoke('get_summary_time').then((t) => {
+  $('summary-on').checked = t !== '';
+  $('summary-time').value = t || '09:00';
+  $('summary-time').disabled = t === '';
+});
+let summaryTimer;
+const saveSummary = () => {
+  clearTimeout(summaryTimer);
+  const on = $('summary-on').checked && $('summary-time').value;
+  invoke('set_summary_time', { time: on ? $('summary-time').value : '' }).catch((e) => tell('Could not save the summary time: ' + e));
+};
+$('summary-on').onchange = () => { $('summary-time').disabled = !$('summary-on').checked; saveSummary(); };
+$('summary-time').oninput = () => { clearTimeout(summaryTimer); summaryTimer = setTimeout(saveSummary, 1000); };
+
 $('export').onclick = () => invoke('export_todos').then(
   (path) => { $('backup-msg').textContent = 'Backup saved to ' + path; },
   (e) => tell('Export failed: ' + e));

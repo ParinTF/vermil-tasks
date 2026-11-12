@@ -1,6 +1,6 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use chrono::{Local, NaiveDateTime, TimeZone};
+use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex, time::Duration};
 use tauri::{
@@ -39,6 +39,12 @@ struct Data {
     // true once "start with Windows" has been switched on for the first time
     #[serde(default)]
     autostart_set: bool,
+    // local time of day (HH:MM) for the morning summary: None means the default 09:00, "" means off
+    #[serde(default)]
+    summary_time: Option<String>,
+    // the day (YYYY-MM-DD) the summary last fired, so it shows once a day
+    #[serde(default)]
+    summary_day: Option<String>,
 }
 
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
@@ -73,6 +79,45 @@ fn due_reminders(todos: &[Todo], notified: &HashMap<String, i64>, now: i64) -> V
         .filter(|(t, at)| *at <= now && notified.get(&t.id) != Some(at))
         .map(|(t, at)| (t.clone(), at))
         .collect()
+}
+
+const DEFAULT_SUMMARY_TIME: &str = "09:00";
+
+/// The morning summary shows once a day, from its set time onward, so a launch after that time still gets it.
+/// `setting` is "" when switched off; times are zero-padded "HH:MM" so they compare as text.
+fn summary_due(setting: &str, last_day: Option<&str>, today: &str, now_time: &str) -> bool {
+    !setting.is_empty() && now_time >= setting && last_day != Some(today)
+}
+
+/// (due later today, overdue, open) over the tasks that are not done. A finished repeating task's next copy
+/// stays hidden in the UI until its day (`hideUntil`), so it is left out of the counts too.
+fn summary_counts(todos: &[Todo], now: DateTime<Local>) -> (usize, usize, usize) {
+    let today = now.format("%Y-%m-%d").to_string();
+    let (mut due_today, mut overdue, mut open) = (0, 0, 0);
+    for t in todos.iter().filter(|t| !t.done) {
+        if t.extra.get("hideUntil").and_then(|v| v.as_str()).map_or(false, |day| day > today.as_str()) {
+            continue;
+        }
+        open += 1;
+        if let Some(due) = t.due.as_deref().and_then(parse_due) {
+            if due < now {
+                overdue += 1;
+            } else if due.date_naive() == now.date_naive() {
+                due_today += 1;
+            }
+        }
+    }
+    (due_today, overdue, open)
+}
+
+fn summary_text(due_today: usize, overdue: usize, open: usize) -> (String, String) {
+    let title = match (due_today, overdue) {
+        (0, 0) => "Nothing due today".to_string(),
+        (d, 0) => format!("Today: {d} due"),
+        (0, o) => format!("{o} overdue"),
+        (d, o) => format!("Today: {d} due · {o} overdue"),
+    };
+    (title, format!("{open} open {}", if open == 1 { "task" } else { "tasks" }))
 }
 
 fn load(file: &PathBuf) -> Data {
@@ -119,11 +164,29 @@ fn snooze(app: &AppHandle, id: &str, until: i64) {
     let _ = app.emit("todos-changed", ());
 }
 
+/// Toasts need a registered app id: the installer registers ours, a build run from target/ borrows PowerShell's.
+fn toast_app_id(app: &AppHandle) -> String {
+    let dev = std::env::current_exe().map(|p| p.to_string_lossy().contains(r"\target\")).unwrap_or(false);
+    if dev { Toast::POWERSHELL_APP_ID.to_string() } else { app.config().identifier.clone() }
+}
+
+/// One quiet toast a day: what is due, what is overdue, how much is open. Clicking it opens the app.
+fn notify_summary(app: &AppHandle, due_today: usize, overdue: usize, open: usize) {
+    let (title, text) = summary_text(due_today, overdue, open);
+    let handle = app.clone();
+    let _ = Toast::new(&toast_app_id(app))
+        .title(&title)
+        .text1(&text)
+        .on_activated(move |_| {
+            show(&handle);
+            Ok(())
+        })
+        .show();
+}
+
 /// Shows a reminder that stays on screen until answered, with snooze buttons.
 fn notify(app: &AppHandle, todo: &Todo) {
-    // toasts need a registered app id: the installer registers ours, a build run from target/ borrows PowerShell's
-    let dev = std::env::current_exe().map(|p| p.to_string_lossy().contains(r"\target\")).unwrap_or(false);
-    let app_id = if dev { Toast::POWERSHELL_APP_ID.to_string() } else { app.config().identifier.clone() };
+    let app_id = toast_app_id(app);
     let due = todo.due.as_deref().and_then(parse_due).map(|d| d.format("%d/%m/%Y %H:%M").to_string());
     let (handle, id) = (app.clone(), todo.id.clone());
     let _ = Toast::new(&app_id)
@@ -146,15 +209,27 @@ fn notify(app: &AppHandle, todo: &Todo) {
 fn check_reminders(app: &AppHandle) {
     let store = app.state::<Store>();
     let mut data = store.data.lock().unwrap();
-    let hits = due_reminders(&data.todos, &data.notified, Local::now().timestamp_millis());
-    if hits.is_empty() {
-        return;
-    }
-    for (todo, at) in hits {
+    let now = Local::now();
+    let mut changed = false;
+    for (todo, at) in due_reminders(&data.todos, &data.notified, now.timestamp_millis()) {
         notify(app, &todo);
         data.notified.insert(todo.id, at);
+        changed = true;
     }
-    let _ = save(&store.file, &data);
+    let today = now.format("%Y-%m-%d").to_string();
+    let setting = data.summary_time.clone().unwrap_or_else(|| DEFAULT_SUMMARY_TIME.to_string());
+    if summary_due(&setting, data.summary_day.as_deref(), &today, &now.format("%H:%M").to_string()) {
+        // the day is recorded even with nothing to show, so adding a task at 14:00 does not trigger a "morning" summary
+        data.summary_day = Some(today);
+        changed = true;
+        let (due_today, overdue, open) = summary_counts(&data.todos, now);
+        if open > 0 {
+            notify_summary(app, due_today, overdue, open);
+        }
+    }
+    if changed {
+        let _ = save(&store.file, &data);
+    }
 }
 
 #[tauri::command]
@@ -168,6 +243,30 @@ fn save_todos(app: AppHandle, store: State<Store>, todos: Vec<Todo>) -> Result<(
         let mut data = store.data.lock().unwrap();
         data.notified.retain(|id, _| todos.iter().any(|t| &t.id == id));
         data.todos = todos;
+        save(&store.file, &data)?;
+    }
+    check_reminders(&app);
+    Ok(())
+}
+
+#[tauri::command]
+fn get_summary_time(store: State<Store>) -> String {
+    store.data.lock().unwrap().summary_time.clone().unwrap_or_else(|| DEFAULT_SUMMARY_TIME.to_string())
+}
+
+/// `time` is "HH:MM", or "" to switch the summary off. A changed time applies today: it shows now if that time has passed.
+#[tauri::command]
+fn set_summary_time(app: AppHandle, store: State<Store>, time: String) -> Result<(), String> {
+    if !time.is_empty() && NaiveTime::parse_from_str(&time, "%H:%M").is_err() {
+        return Err("the time must look like 09:00".into());
+    }
+    {
+        let mut data = store.data.lock().unwrap();
+        if data.summary_time.clone().unwrap_or_else(|| DEFAULT_SUMMARY_TIME.to_string()) == time {
+            return Ok(());
+        }
+        data.summary_time = Some(time);
+        data.summary_day = None;
         save(&store.file, &data)?;
     }
     check_reminders(&app);
@@ -285,7 +384,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -407,6 +506,49 @@ mod tests {
         assert!(!fires(todo(None, Some(0), false), &[]));
         assert!(!fires(todo(Some("2026-11-11T09:00"), None, false), &[]));
     }
+    fn at(s: &str) -> DateTime<Local> {
+        parse_due(s).unwrap()
+    }
+    fn open_todo(due: Option<&str>, done: bool, hide_until: Option<&str>) -> Todo {
+        let mut t = todo(due, None, done);
+        if let Some(day) = hide_until {
+            t.extra.insert("hideUntil".into(), day.into());
+        }
+        t
+    }
+
+    #[test]
+    fn summary_shows_once_a_day_from_its_time_onward() {
+        assert!(!summary_due("09:00", None, "2026-11-11", "08:59")); // not yet
+        assert!(summary_due("09:00", None, "2026-11-11", "09:00"));
+        assert!(summary_due("09:00", None, "2026-11-11", "20:15")); // a launch late in the day still gets it
+        assert!(!summary_due("09:00", Some("2026-11-11"), "2026-11-11", "10:00")); // already shown today
+        assert!(summary_due("09:00", Some("2026-11-10"), "2026-11-11", "09:00")); // yesterday's does not count
+        assert!(!summary_due("", None, "2026-11-11", "10:00")); // switched off
+    }
+    #[test]
+    fn summary_counts_what_is_due_overdue_and_open() {
+        let now = at("2026-11-11T10:00");
+        let todos = vec![
+            open_todo(Some("2026-11-11T08:00"), false, None), // overdue
+            open_todo(Some("2026-11-10T09:00"), false, None), // overdue
+            open_todo(Some("2026-11-11T15:00"), false, None), // due later today
+            open_todo(Some("2026-11-12T09:00"), false, None), // tomorrow: open only
+            open_todo(None, false, None),                     // no date: open only
+            open_todo(Some("2026-11-11T09:00"), true, None),  // done: ignored
+            open_todo(Some("2026-11-12T09:00"), false, Some("2026-11-12")), // next copy of a finished repeating task: hidden
+        ];
+        assert_eq!(summary_counts(&todos, now), (1, 2, 5));
+        assert_eq!(summary_counts(&[], now), (0, 0, 0));
+    }
+    #[test]
+    fn summary_text_reads_naturally() {
+        assert_eq!(summary_text(2, 1, 5), ("Today: 2 due · 1 overdue".to_string(), "5 open tasks".to_string()));
+        assert_eq!(summary_text(3, 0, 3), ("Today: 3 due".to_string(), "3 open tasks".to_string()));
+        assert_eq!(summary_text(0, 2, 4), ("2 overdue".to_string(), "4 open tasks".to_string()));
+        assert_eq!(summary_text(0, 0, 1), ("Nothing due today".to_string(), "1 open task".to_string()));
+    }
+
     #[test]
     fn snooze_replaces_the_remind_time() {
         let mut t = todo(Some("2026-11-11T09:00"), Some(0), false);
