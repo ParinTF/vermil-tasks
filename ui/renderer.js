@@ -372,7 +372,7 @@ function openShortcuts() {
   }
   dlg.replaceChildren(
     el('h2', {}, 'Keyboard shortcuts'),
-    ...(quickTaken ? [el('div', { className: 'keys-warn' }, 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.')] : []),
+    ...(quickTaken ? [el('div', { className: 'keys-warn' }, `${hotkeysNow.quick} is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.`)] : []),
     el('div', { className: 'keys-grid' }, ...[...shortcutGroups].filter((g) => !g.module || started.has(g.module)).sort((a, b) => groupRank(a) - groupRank(b)).map((g) => el('section', {}, el('h3', {}, g.title),
       el('ul', {}, ...g.items.map(([keys, what]) => el('li', {},
         el('span', { className: 'sk-keys' }, ...[].concat(keys).flatMap((k, i) => [...(i ? [el('i', { className: 'sk-or' }, 'or')] : []), keyChips(k)])),
@@ -401,11 +401,13 @@ $('shortcuts').onclick = openShortcuts;
 // If another program owns Ctrl+Alt+T, the Shortcuts button gets an accent dot and its list says so. A message in the
 // footer would make it wrap. The backend retries for a few seconds after launch, so ask after that.
 let quickTaken = false;
-setTimeout(() => invoke('quick_shortcut').then((ok) => {
+const hotkeysNow = { quick: 'Ctrl+Alt+T', note: 'Ctrl+Alt+N', widget: 'Ctrl+Alt+W' }; // the global shortcuts, which Settings can change
+const refreshQuickTaken = () => invoke('quick_shortcut').then((ok) => {
   quickTaken = !ok;
   $('shortcuts').classList.toggle('warn', quickTaken);
-  $('shortcuts').title = quickTaken ? 'Ctrl+Alt+T is taken by another app' : '';
-}), 5000);
+  $('shortcuts').title = quickTaken ? `${hotkeysNow.quick} is taken by another app` : '';
+});
+setTimeout(refreshQuickTaken, 5000);
 
 const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).then(([t, n]) => {
   // typing that has not been saved yet, and a new empty note, must survive the reload

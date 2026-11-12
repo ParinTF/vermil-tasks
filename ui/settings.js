@@ -152,7 +152,57 @@ function notificationsSection() {
   return sec;
 }
 
-const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection];
+// ── Shortcuts that work from any app ──
+const HOTKEY_NAMES = { quick: ['Quick add a task', 'Quick add a task, from any app'], note: ['Quick note', 'Quick note or link, from any app'], widget: ['Today widget', 'Show or hide the Today widget (when its module is on)'] };
+// the shortcut list and the warning follow what was chosen
+function setHotkeyLabels(list) {
+  for (const h of list) {
+    hotkeysNow[h.name] = h.keys;
+    const item = shortcutGroups[0].items.find((i) => i[1] === HOTKEY_NAMES[h.name][1]);
+    if (item) item[0] = h.keys;
+  }
+}
+invoke('get_hotkeys').then(setHotkeyLabels).catch(() => {});
+
+function shortcutsSection() {
+  const box = el('div', { className: 'st-col' });
+  const msg = el('span', { id: 'st-hotkey-msg', className: 'st-fine', role: 'status' });
+  const draw = async () => {
+    const list = await invoke('get_hotkeys');
+    setHotkeyLabels(list);
+    refreshQuickTaken();
+    box.replaceChildren(
+      ...list.map((h) => {
+        const b = el('button', { type: 'button', className: 'st-opt st-key', id: 'st-hk-' + h.name, textContent: h.keys, title: h.ok ? '' : 'Another program already uses this', ariaLabel: `${HOTKEY_NAMES[h.name][0]}: ${h.keys}. Press to change.` });
+        if (!h.ok) b.classList.add('warn');
+        b.onclick = () => capture(h.name, b);
+        return stRow(HOTKEY_NAMES[h.name][0], b, ...(h.ok ? [] : [el('span', { className: 'st-fine' }, 'Taken by another program')]));
+      }),
+      el('div', { className: 'st-line' }, el('button', { id: 'st-hk-reset', type: 'button', className: 'linkish', textContent: 'Back to the usual keys', onclick: async () => { await invoke('reset_hotkeys'); msg.textContent = 'Reset.'; draw(); } }), msg),
+      stFine('Press a button, then the new keys: Ctrl, Alt or Shift with one key. Esc cancels. These work from any app while Vermil is running.'));
+  };
+  // listen for the next key combination instead of the usual shortcuts
+  function capture(name, button) {
+    button.textContent = 'Press the new keys…';
+    msg.textContent = '';
+    const done = () => removeEventListener('keydown', onKey, true);
+    const onKey = async (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (e.key === 'Escape') { done(); return draw(); }
+      const keys = hotkeyFromEvent(e);
+      if (!keys) return; // only a modifier so far, or a key that cannot be used
+      done();
+      try { await invoke('set_hotkey', { name, keys }); msg.textContent = 'Saved.'; } catch (err) { msg.textContent = String(err); }
+      draw();
+    };
+    addEventListener('keydown', onKey, true);
+  }
+  draw();
+  return stSection('Shortcuts', box);
+}
+
+const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection, shortcutsSection];
 
 function renderSettings() {
   const scroll = $('settings-view').scrollTop;

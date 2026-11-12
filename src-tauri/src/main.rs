@@ -11,7 +11,7 @@ use tauri::{
     AppHandle, Emitter, Manager, State, WindowEvent,
 };
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use tauri_winrt_notification::{Scenario, Toast};
 
@@ -63,6 +63,9 @@ struct Data {
     // notifications: quiet hours "HH:MM-HH:MM" (nothing is shown inside them; reminders wait), and the sources switched off
     #[serde(default)]
     quiet: Option<String>,
+    // shortcuts the user changed, by name (quick, note, widget)
+    #[serde(default)]
+    hotkeys: HashMap<String, String>,
     // how big everything is drawn (1.0 = 100%), from Settings
     #[serde(default)]
     zoom: Option<f64>,
@@ -98,9 +101,8 @@ struct Data {
 const YAHOO: &str = "https://query1.finance.yahoo.com";
 const BACKUP_EVERY_DAYS: i64 = 7;
 const BACKUP_KEEP: usize = 8; // the newest eight automatic backups stay
-const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
-const WIDGET_SHORTCUT: &str = "Ctrl+Alt+W"; // shows or hides the Today widget
-const NOTE_SHORTCUT: &str = "Ctrl+Alt+N"; // the same bar, in note mode
+// the three shortcuts that work from any app, and their defaults: quick add, the same bar in note mode, and the Today widget
+const HOTKEYS: [(&str, &str); 3] = [("quick", "Ctrl+Alt+T"), ("note", "Ctrl+Alt+N"), ("widget", "Ctrl+Alt+W")];
 
 // ── the Today widget: a small always-on-top window the Today module fills with tiles ──
 
@@ -1165,10 +1167,95 @@ fn quick_note(app: AppHandle, store: State<Store>, text: String) -> Result<(), S
     Ok(())
 }
 
-/// False when another program already owns the shortcut.
+/// The shortcut text for a name: what the user chose, else the default.
+fn hotkey_text(data: &Data, name: &str) -> String {
+    data.hotkeys.get(name).cloned().unwrap_or_else(|| HOTKEYS.iter().find(|(n, _)| *n == name).map(|(_, d)| d.to_string()).unwrap_or_default())
+}
+
+/// A global shortcut needs a modifier (Ctrl, Alt or Shift), or it would take a plain key away from every program.
+fn parse_hotkey(text: &str) -> Result<Shortcut, String> {
+    let sc: Shortcut = text.parse().map_err(|_| "that is not a key combination".to_string())?;
+    if sc.mods.is_empty() {
+        return Err("use Ctrl, Alt or Shift with the key".into());
+    }
+    Ok(sc)
+}
+
+#[derive(Serialize)]
+struct HotkeyInfo {
+    name: String,
+    keys: String,
+    ok: bool,
+}
+
 #[tauri::command]
-fn quick_shortcut(app: AppHandle) -> bool {
-    app.global_shortcut().is_registered(QUICK_SHORTCUT)
+fn get_hotkeys(app: AppHandle, store: State<Store>) -> Vec<HotkeyInfo> {
+    let data = store.data.lock().unwrap();
+    HOTKEYS.iter().map(|(name, _)| {
+        let keys = hotkey_text(&data, name);
+        let ok = parse_hotkey(&keys).is_ok_and(|s| app.global_shortcut().is_registered(s));
+        HotkeyInfo { name: name.to_string(), keys, ok }
+    }).collect()
+}
+
+/// Changes one shortcut. If another program owns the new one, the old one stays and the error says why.
+#[tauri::command]
+fn set_hotkey(app: AppHandle, store: State<Store>, name: String, keys: String) -> Result<(), String> {
+    if !HOTKEYS.iter().any(|(n, _)| *n == name) {
+        return Err("unknown shortcut".into());
+    }
+    let new = parse_hotkey(&keys)?;
+    let mut data = store.data.lock().unwrap();
+    for (other, _) in HOTKEYS.iter().filter(|(n, _)| *n != name) {
+        if parse_hotkey(&hotkey_text(&data, other)).is_ok_and(|s| s == new) {
+            return Err("another Vermil shortcut already uses that".into());
+        }
+    }
+    let old = parse_hotkey(&hotkey_text(&data, &name)).ok();
+    if old == Some(new) {
+        return Ok(());
+    }
+    if let Some(o) = old {
+        let _ = app.global_shortcut().unregister(o);
+    }
+    if app.global_shortcut().register(new).is_err() {
+        if let Some(o) = old {
+            let _ = app.global_shortcut().register(o);
+        }
+        return Err("another program already uses that combination".into());
+    }
+    data.hotkeys.insert(name, keys);
+    save(&store.file, &data)
+}
+
+/// Back to Ctrl+Alt+T, N and W.
+#[tauri::command]
+fn reset_hotkeys(app: AppHandle, store: State<Store>) -> Result<(), String> {
+    let mut data = store.data.lock().unwrap();
+    for (name, _) in HOTKEYS {
+        if let Ok(s) = parse_hotkey(&hotkey_text(&data, name)) {
+            let _ = app.global_shortcut().unregister(s);
+        }
+    }
+    data.hotkeys.clear();
+    save(&store.file, &data)?;
+    drop(data);
+    register_hotkeys(&app);
+    Ok(())
+}
+
+/// Registers whatever is not registered yet; true when all three are.
+fn register_hotkeys(app: &AppHandle) -> bool {
+    let store = app.state::<Store>();
+    let texts: Vec<String> = { let data = store.data.lock().unwrap(); HOTKEYS.iter().map(|(n, _)| hotkey_text(&data, n)).collect() };
+    texts.iter().all(|t| parse_hotkey(t).is_ok_and(|s| app.global_shortcut().is_registered(s) || app.global_shortcut().register(s).is_ok()))
+}
+
+/// False when another program already owns the quick-add shortcut.
+#[tauri::command]
+fn quick_shortcut(app: AppHandle, store: State<Store>) -> bool {
+    let keys = hotkey_text(&store.data.lock().unwrap(), "quick");
+    parse_hotkey(&keys).is_ok_and(|s| app.global_shortcut().is_registered(s))
 }
 
 fn show_quick(app: &AppHandle) {
@@ -1210,10 +1297,12 @@ fn main() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyW) {
+                        let data = app.state::<Store>();
+                        let is = |name: &str| parse_hotkey(&hotkey_text(&data.data.lock().unwrap(), name)).is_ok_and(|s| s == *shortcut);
+                        if is("widget") {
                             toggle_widget(app);
                         } else {
-                            show_quick_as(app, if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyN) { "note" } else { "task" });
+                            show_quick_as(app, if is("note") { "note" } else { "task" });
                         }
                     }
                 })
@@ -1222,7 +1311,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -1261,10 +1350,7 @@ fn main() {
             let shortcuts = app.handle().clone();
             std::thread::spawn(move || {
                 for _ in 0..8 {
-                    let task_ok = shortcuts.global_shortcut().is_registered(QUICK_SHORTCUT) || shortcuts.global_shortcut().register(QUICK_SHORTCUT).is_ok();
-                    let note_ok = shortcuts.global_shortcut().is_registered(NOTE_SHORTCUT) || shortcuts.global_shortcut().register(NOTE_SHORTCUT).is_ok();
-                    let widget_ok = shortcuts.global_shortcut().is_registered(WIDGET_SHORTCUT) || shortcuts.global_shortcut().register(WIDGET_SHORTCUT).is_ok();
-                    if task_ok && note_ok && widget_ok {
+                    if register_hotkeys(&shortcuts) {
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(500));
@@ -1314,6 +1400,25 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shortcuts_need_a_modifier_and_a_real_key() {
+        for ok in ["Ctrl+Alt+T", "Ctrl+Shift+F5", "Alt+Space", "ctrl+alt+9", "Shift+Alt+Left"] {
+            assert!(parse_hotkey(ok).is_ok(), "{ok}");
+        }
+        for bad in ["T", "F5", "", "Ctrl+", "Ctrl+Alt+Banana", "Ctrl+Alt"] {
+            assert!(parse_hotkey(bad).is_err(), "{bad}");
+        }
+        for key in ["Up", "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown", "Insert", "Delete", "F1", "F12", "F24", "Space", "9", "Z"] {
+            assert!(parse_hotkey(&format!("Ctrl+Alt+{key}")).is_ok(), "{key}");
+        }
+        assert_eq!(parse_hotkey("Ctrl+Alt+T"), parse_hotkey("alt+ctrl+t"));
+        let mut d = Data::default();
+        assert_eq!(hotkey_text(&d, "widget"), "Ctrl+Alt+W");
+        d.hotkeys.insert("widget".into(), "Ctrl+Shift+W".into());
+        assert_eq!(hotkey_text(&d, "widget"), "Ctrl+Shift+W");
+        assert_eq!(hotkey_text(&d, "nope"), "");
+    }
 
     #[test]
     fn only_sensible_sizes_are_accepted() {

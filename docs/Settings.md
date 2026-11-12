@@ -31,4 +31,8 @@ Week start and clock are read while drawing, so changing them reloads the window
 - **Notify me about**: switch off the notifications of one source: task reminders, the focus timer, medicine, bills, subscriptions, birthdays, countdown, budget warnings (only the modules you have on are listed). The morning summary has its own switch above.
 - **Send a test notification** shows one regardless of quiet hours.
 
+## Shortcuts
+
+The three that work from any app: **Quick add a task** (`Ctrl+Alt+T`), **Quick note** (`Ctrl+Alt+N`) and the **Today widget** (`Ctrl+Alt+W`). Press a button, then the new keys: Ctrl, Alt or Shift with one key. `Esc` cancels. If another program already uses the combination, or another Vermil shortcut does, you are told and the old one stays. **Back to the usual keys** resets all three. The shortcut list (`?`) and its warning follow your choice. The keys inside the quick bar (`Ctrl+Alt+J`, `Ctrl+Alt+N`) do not change.
+
 Other modules can add their own section to this page (the [Assistant](Assistant.md) adds its key there).

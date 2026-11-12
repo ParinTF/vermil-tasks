@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -730,4 +730,17 @@ test('settings: the week can start on Sunday', () => {
   } finally { setWeekStart(1); }
   assert.equal(weekDays('2026-11-11')[0], '2026-11-09');
   assert.equal(monthGrid(2026, 10)[0].day, '2026-10-26');
+});
+
+test('settings: a key event becomes a shortcut text, or nothing when it cannot be one', () => {
+  const ev = (code, mods = {}) => ({ code, ctrlKey: false, altKey: false, shiftKey: false, metaKey: false, ...mods });
+  assert.equal(hotkeyFromEvent(ev('KeyT', { ctrlKey: true, altKey: true })), 'Ctrl+Alt+T');
+  assert.equal(hotkeyFromEvent(ev('Digit5', { shiftKey: true, ctrlKey: true })), 'Ctrl+Shift+5');
+  assert.equal(hotkeyFromEvent(ev('F9', { altKey: true })), 'Alt+F9');
+  assert.equal(hotkeyFromEvent(ev('ArrowLeft', { altKey: true })), 'Alt+Left');
+  assert.equal(hotkeyFromEvent(ev('Space', { ctrlKey: true })), 'Ctrl+Space');
+  assert.equal(hotkeyFromEvent(ev('KeyT')), null); // no modifier
+  assert.equal(hotkeyFromEvent(ev('ControlLeft', { ctrlKey: true })), null); // only a modifier so far
+  assert.equal(hotkeyFromEvent(ev('KeyT', { ctrlKey: true, metaKey: true })), null);
+  assert.equal(hotkeyFromEvent(ev('Escape', { ctrlKey: true })), null);
 });
