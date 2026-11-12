@@ -26,6 +26,9 @@ The identifier decides the data folder and the installed app's identity. Changin
 
 - The **backend owns the data**: one JSON file in the app data folder, written to a temp file and renamed so a crash cannot truncate it. An unreadable file is copied to `*.corrupt` before anything overwrites it.
 - The UI holds a copy of the state and calls `invoke` commands. When the backend changes data on its own (quick add, snooze), it emits `todos-changed` and the UI reloads.
+- **Three views in one window**: Tasks, Notes and Calendar (`view`, `setView()`, Ctrl+1/2/3). Each is its own `<main>`, shown or hidden; the keydown handler routes to `notesKeys()` or `calendarKeys()` so Tasks shortcuts never fire in the others, and Tasks redraws when it comes back.
+- **Notes are records of their own** (`Note { id, title, body, updatedAt }`, same data file). A task points at one with `noteId`; `delete_note` unlinks its tasks and keeps them; a note can serve many tasks. The Notes editor saves itself half a second after typing stops and on every way out (switching notes or views, window blur, close).
+- **A data-format change migrates once at load and keeps the old file first** (`todos.pre-notes.json` is the example; a `notes_migrated`-style flag in the data says it ran). Old backups go through `convert_legacy_notes` on import, so nothing in an old file is lost.
 - Rust structs validate every command payload. Fields only the UI uses ride through `#[serde(flatten)] extra`.
 - **Pure logic is separated and tested**: dates, repeats, streaks, the quick-add text parser, the Today/Week views and the chart maths live in `ui/logic.js` (node tests in `tests/`); reminder, snooze and morning-summary rules live in `main.rs` (`cargo test`). `npm test` runs both. New non-trivial logic arrives with a test.
 - Dates stay in `datetime-local` form (`2026-11-12T09:00`): they parse as local time and sort as text.
@@ -44,11 +47,11 @@ The identifier decides the data folder and the installed app's identity. Changin
 - **Light and dark**: the app follows Windows; `data-theme="light|dark"` on `<html>` forces one (`ui/theme.js` applies the stored choice before first paint). Never hard-code an ink-with-alpha hex: tints are `color-mix(in srgb, var(--ink) N%, transparent)`. Text on the accent is `#12110f`. Body text, small accent text and chart bars must keep WCAG contrast (4.5:1 text, 3:1 graphics) in both themes. The quick bar is dark in every theme.
 - **Type**: Anuphan variable font, bundled in `ui/fonts/` so the app works offline. Oversized bold headline as the main visual; small uppercase letter-spaced labels.
 - **Editorial, quiet components**: hairline rules instead of boxes, underlined fields, one pill-shaped primary button, generous space, asymmetric two-column layout.
-- **Fixed shell**: on wide windows the window itself never scrolls; only the main list does. Sizes follow `vh` so the primary action is always on screen. Below 860px it becomes one scrolling column.
+- **Fixed shell**: on wide windows the window itself never scrolls; only the main list does. `fitSide()` measures the left column and shrinks the headline and spacing (`--fit`) until it fits at any window height, so the primary action is always on screen; only a window under about 620px tall falls back to scrolling the column. Below 860px it becomes one scrolling column.
 - **Motion** is short and purposeful, uses `--ease`, and is switched off under `prefers-reduced-motion`.
 - **Dialogs** use the in-app `ask()` and `tell()` helpers in `renderer.js`; the native `confirm` and `alert` show a "tauri.localhost says" box.
 - **Charts** are plain elements, no library: one series and no legend (the title names it), thin columns with 4px rounded tops, hairline grid, today in the accent, values on the axis and on the notable bars only, a tooltip on hover and on focus, one tab stop with arrow keys, and a table view of the same numbers. Follow the `dataviz` skill when adding one.
-- **Keyboard first**: every flow works without the mouse. Main window: Up/Down select, Space done, E edit, P pin, Delete delete, N new task, 1-4 tabs, Ctrl+F search, Ctrl+Z undo, T theme, ? lists them. Quick bar: Ctrl+Alt+T from anywhere, Ctrl+Alt+J adds a due date, or type the date as words. Shortcuts match `e.code` (the physical key) so they work on a Thai layout. A new shortcut goes in the `SHORTCUTS` list in `renderer.js`.
+- **Keyboard first**: every flow works without the mouse. Main window: Up/Down select, Space done, E edit, P pin, O open the task's note, Delete delete, N new task, 1-4 tabs, Ctrl+F search, Ctrl+Z undo, T theme, ? lists them. Ctrl+1/2/3 switch Tasks, Notes, Calendar. Notes: Ctrl+N new, Ctrl+F search, Up/Down walk the list, Delete on a row. Calendar: arrows move a day or week, PageUp/PageDown a month, T today, Enter adds a task. Quick bar: Ctrl+Alt+T from anywhere, Ctrl+Alt+J adds a due date, or type the date as words. Shortcuts match `e.code` (the physical key) so they work on a Thai layout. A new shortcut goes in the `SHORTCUTS` list in `renderer.js`.
 - User text enters the DOM through `textContent`.
 
 ## Versions and releases
@@ -67,6 +70,7 @@ The owner's installed app and its data folder are live. Test in a separate copy:
 - Have every test script abort if its data folder is not empty, and clear it when done.
 - Dark mode is tested with `Emulation.setEmulatedMedia` (`prefers-color-scheme`); a narrow window with `Emulation.setDeviceMetricsOverride`.
 - Test copies share a WebView profile between runs: reset `localStorage` and any module-level state (a `let` such as `theme` survives a reload of the test, not of the page) at the start of a script, and turn on `Emulation.setFocusEmulationEnabled`, otherwise focus and blur events stop firing whenever another window is in front.
+- Give every test script a timeout (a loop in the page freezes it, and the script waits forever), and have it refuse to run when the test data is not empty.
 - Say plainly what was only simulated: toast buttons, the tray menu, file pickers, real key presses and a real reboot cannot be driven from a script.
 
 ## Gotchas
@@ -74,6 +78,8 @@ The owner's installed app and its data folder are live. Test in a separate copy:
 - **Edit files with the Edit tool or Python (`encoding='utf-8'`).** Windows PowerShell 5.1 `Get-Content`/`Set-Content` re-encodes UTF-8 and corrupted `✳ → ·` in `renderer.js` once.
 - **CSS order**: the fixed-shell media block is last in `style.css` because it overrides base rules of equal specificity.
 - **The footer must stay one row** at 1120x800 (every wide-window state): a second row squeezes the left column and clips Add task. Keep new footer items short, and put a conditional warning on an existing control (the Shortcuts button gets a dot when Ctrl+Alt+T is taken) instead of adding text.
+- **Class names are global.** `.notes` styles the note under a task row, so the Notes page is `.notes-page`; `.line`, `.more`, `.col`, `.bar` are taken too (the calendar uses `cal-` prefixes). Grep the stylesheet before naming a class. `[hidden]` is `display: none !important` because grid and flex rules would otherwise beat the attribute.
+- **Line endings**: files in `ui/` are LF. After a `git stash` or checkout they can come back CRLF (`core.autocrlf`), which breaks multi-line search-and-replace edits; normalise with `sed -i 's/$//'` first.
 - **Toasts** go through `tauri-winrt-notification` directly; the notification plugin has no action buttons on desktop. A build run from `target/` borrows PowerShell's app id, an installed build uses the identifier.
 - **Global shortcuts** are registered with retries: right after an update the outgoing process still holds them for a moment.
 - **Autostart** writes to HKLM when the process is elevated and HKCU otherwise.
