@@ -11,6 +11,8 @@ let selectedId = null; // the row picked with the arrow keys
 let selectedIndex = -1; // its position, so a deleted row hands the pick to its neighbour
 const undoStack = []; // earlier states of `todos`, newest last
 let statsAsTable = false; // History shows its chart as a table when true
+let notes = []; // notes, kept apart from tasks; a task points at one with its noteId
+const noteOf = (t) => (t.noteId ? notes.find((n) => n.id === t.noteId) : undefined);
 
 const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
 const remindLabel = { 0: 'reminds at due time', 10: 'reminds 10 min before', 60: 'reminds 1 h before', 1440: 'reminds 1 day before' };
@@ -106,12 +108,13 @@ function resetForm() {
 }
 
 function notesBlock(t) {
-  if (!t.notes) return '';
+  const note = noteOf(t);
+  if (!note || !note.body) return '';
   const copy = el('button', { type: 'button', textContent: 'Copy' });
-  copy.onclick = () => navigator.clipboard.writeText(t.notes).then(
+  copy.onclick = () => navigator.clipboard.writeText(note.body).then(
     () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); },
     () => { copy.textContent = 'Copy failed'; });
-  const box = el('details', { className: 'notes', open: openNotes.has(t.id) }, el('summary', {}, 'Notes'), el('pre', {}, t.notes), copy);
+  const box = el('details', { className: 'notes', open: openNotes.has(t.id) }, el('summary', {}, 'Notes'), el('pre', {}, note.body), copy);
   box.ontoggle = () => (box.open ? openNotes.add(t.id) : openNotes.delete(t.id));
   return box;
 }
@@ -160,7 +163,6 @@ function pendingItem(t) {
     $('due').value = t.due || '';
     $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('repeat').value = t.repeat || '';
-    $('notes').value = t.notes || '';
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
     $('title').focus();
@@ -311,7 +313,7 @@ function render(enter = false) {
   const empty = (text) => list.append(el('div', { className: 'empty' }, text));
 
   const q = $('search').value.trim().toLowerCase();
-  const match = (t) => (t.title + '\n' + (t.notes || '')).toLowerCase().includes(q);
+  const match = (t) => (t.title + '\n' + (noteOf(t)?.body || '')).toLowerCase().includes(q);
   if (tab !== 'history') {
     const shown = (tab === 'pending' ? open : open.filter((t) => inView(tab, t.due, now))).filter(match);
     const shownLater = tab === 'pending' ? later.filter(match) : []; // waiting copies of finished repeating tasks live only in To do
@@ -352,7 +354,6 @@ $('form').onsubmit = (e) => {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
     repeat: $('repeat').value || null,
-    notes: $('notes').value.trim() || null,
   };
   const next = editingId
     // a new due date cancels a pending snooze, so the reminder follows the new time
@@ -402,17 +403,34 @@ $('import').onchange = async (e) => {
   e.target.value = ''; // so picking the same file again fires change
   if (!file) return;
   let incoming;
+  let incomingNotes = [];
   try {
     const data = JSON.parse(await file.text());
     incoming = Array.isArray(data) ? data : data.todos;
     if (!Array.isArray(incoming)) throw new Error('no task list');
+    if (Array.isArray(data.notes)) incomingNotes = data.notes;
   } catch {
     return tell('That file is not a Vermil Tasks backup.');
   }
-  // merge by id so an import never deletes anything; the backup wins for tasks both sides have
+  // an older backup keeps a task's notes as text on the task: turn that text into notes first
+  try {
+    const converted = await invoke('convert_legacy_notes', { todos: incoming });
+    incoming = converted.todos;
+    incomingNotes = [...incomingNotes, ...converted.notes];
+  } catch (err) {
+    return tell('That backup could not be read: ' + err);
+  }
+  // merge by id so an import never deletes anything; the backup wins for tasks and notes both sides have
   const ids = new Set(incoming.map((t) => t && t.id));
   const replacing = todos.filter((t) => ids.has(t.id)).length;
-  if (!(await ask(`Import ${incoming.length} tasks from this backup?\nNew: ${incoming.length - replacing}\nReplacing tasks you already have: ${replacing}`, 'Import'))) return;
+  const what = `${incoming.length} tasks` + (incomingNotes.length ? ` and ${incomingNotes.length} notes` : '');
+  if (!(await ask(`Import ${what} from this backup?\nNew: ${incoming.length - replacing}\nReplacing tasks you already have: ${replacing}`, 'Import'))) return;
+  try {
+    if (incomingNotes.length) await invoke('save_notes', { notes: incomingNotes });
+    notes = await invoke('get_notes');
+  } catch (err) {
+    return tell('Could not save the notes: ' + err);
+  }
   if (await commit([...todos.filter((t) => !ids.has(t.id)), ...incoming])) $('backup-msg').textContent = `Imported ${incoming.length} tasks`;
 };
 
@@ -565,7 +583,7 @@ const fitSide = () => {
 new ResizeObserver(fitSide).observe(document.querySelector('.side')); // the window or the footer changed size
 addEventListener('resize', fitSide);
 
-const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
+const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).then(([t, n]) => { todos = t; notes = n; render(enter); });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
 window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load(); });
 load(true);

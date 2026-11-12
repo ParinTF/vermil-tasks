@@ -30,6 +30,19 @@ struct Todo {
     extra: serde_json::Map<String, serde_json::Value>, // fields only the UI uses (createdAt, completedAt)
 }
 
+/// A note: free text kept in its own right, linked from tasks through the task's `noteId`.
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+struct Note {
+    id: String,
+    #[serde(default)]
+    title: String,
+    #[serde(default)]
+    body: String,
+    #[serde(flatten)]
+    extra: serde_json::Map<String, serde_json::Value>, // updatedAt
+}
+
 #[derive(Serialize, Deserialize, Default)]
 struct Data {
     todos: Vec<Todo>,
@@ -45,6 +58,11 @@ struct Data {
     // the day (YYYY-MM-DD) the summary last fired, so it shows once a day
     #[serde(default)]
     summary_day: Option<String>,
+    #[serde(default)]
+    notes: Vec<Note>,
+    // true once the notes that tasks used to carry as text were turned into notes of their own
+    #[serde(default)]
+    notes_migrated: bool,
 }
 
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
@@ -120,15 +138,65 @@ fn summary_text(due_today: usize, overdue: usize, open: usize) -> (String, Strin
     (title, format!("{open} open {}", if open == 1 { "task" } else { "tasks" }))
 }
 
+/// Task notes became standalone notes in 1.4.1: each distinct note text becomes a Note titled like its task, and the
+/// task keeps a `noteId` link. The copies of a repeating task share one note while their text is the same.
+fn migrate_notes(data: &mut Data) {
+    let mut made: HashMap<(String, String), String> = HashMap::new(); // (series or task id, text) -> note id
+    let stamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+    for todo in data.todos.iter_mut() {
+        let Some(text) = todo.extra.remove("notes").and_then(|v| v.as_str().map(str::to_string)) else {
+            continue; // no notes, or a null left behind: the key is gone either way
+        };
+        if text.trim().is_empty() {
+            continue;
+        }
+        let group = todo.extra.get("series").and_then(|v| v.as_str()).unwrap_or(todo.id.as_str()).to_string();
+        let id = match made.get(&(group.clone(), text.clone())) {
+            Some(id) => id.clone(),
+            None => {
+                let id = format!("n{}-{}", chrono::Utc::now().timestamp_micros(), data.notes.len());
+                let mut extra = serde_json::Map::new();
+                extra.insert("updatedAt".into(), stamp.clone().into());
+                data.notes.push(Note { id: id.clone(), title: todo.title.clone(), body: text.clone(), extra });
+                made.insert((group, text), id.clone());
+                id
+            }
+        };
+        todo.extra.insert("noteId".into(), id.into());
+    }
+}
+
+/// Removes the link from every task that points at this note; returns how many there were.
+fn unlink_note(todos: &mut [Todo], id: &str) -> usize {
+    let mut n = 0;
+    for todo in todos.iter_mut() {
+        if todo.extra.get("noteId").and_then(|v| v.as_str()) == Some(id) {
+            todo.extra.remove("noteId");
+            n += 1;
+        }
+    }
+    n
+}
+
 fn load(file: &PathBuf) -> Data {
-    let Ok(text) = fs::read_to_string(file) else {
-        return Data::default();
+    let existed = file.exists();
+    let mut data = match fs::read_to_string(file) {
+        Ok(text) => serde_json::from_str(&text).unwrap_or_else(|_| {
+            // unreadable file: keep a copy so the next save does not destroy it
+            let _ = fs::copy(file, file.with_extension("json.corrupt"));
+            Data::default()
+        }),
+        Err(_) => Data::default(),
     };
-    serde_json::from_str(&text).unwrap_or_else(|_| {
-        // unreadable file: keep a copy so the next save does not destroy it
-        let _ = fs::copy(file, file.with_extension("json.corrupt"));
-        Data::default()
-    })
+    if !data.notes_migrated {
+        if existed {
+            let _ = fs::copy(file, file.with_file_name("todos.pre-notes.json")); // the file as it was, once
+        }
+        migrate_notes(&mut data);
+        data.notes_migrated = true;
+        let _ = save(file, &data);
+    }
+    data
 }
 
 fn save(file: &PathBuf, data: &Data) -> Result<(), String> {
@@ -273,6 +341,55 @@ fn set_summary_time(app: AppHandle, store: State<Store>, time: String) -> Result
     Ok(())
 }
 
+#[tauri::command]
+fn get_notes(store: State<Store>) -> Vec<Note> {
+    store.data.lock().unwrap().notes.clone()
+}
+
+/// Adds or replaces notes by id (one at a time from the editor, many at once from an import).
+#[tauri::command]
+fn save_notes(store: State<Store>, notes: Vec<Note>) -> Result<(), String> {
+    if notes.iter().any(|n| n.id.is_empty()) {
+        return Err("every note needs an id".into());
+    }
+    let mut data = store.data.lock().unwrap();
+    for note in notes {
+        match data.notes.iter_mut().find(|n| n.id == note.id) {
+            Some(existing) => *existing = note,
+            None => data.notes.push(note),
+        }
+    }
+    save(&store.file, &data)
+}
+
+/// Deletes a note and unlinks the tasks that pointed at it; the tasks stay.
+#[tauri::command]
+fn delete_note(app: AppHandle, store: State<Store>, id: String) -> Result<(), String> {
+    {
+        let mut data = store.data.lock().unwrap();
+        data.notes.retain(|n| n.id != id);
+        unlink_note(&mut data.todos, &id);
+        save(&store.file, &data)?;
+    }
+    let _ = app.emit("todos-changed", ());
+    Ok(())
+}
+
+#[derive(Serialize)]
+struct Converted {
+    todos: Vec<Todo>,
+    notes: Vec<Note>,
+}
+
+/// Backups from before notes existed keep a task's notes as text on the task: this turns them into notes the same
+/// way the first-run migration does, so an old backup imports without losing them.
+#[tauri::command]
+fn convert_legacy_notes(todos: Vec<Todo>) -> Converted {
+    let mut data = Data { todos, ..Data::default() };
+    migrate_notes(&mut data);
+    Converted { todos: data.todos, notes: data.notes }
+}
+
 /// Returns the newer version number when the release feed has one.
 #[tauri::command]
 async fn check_update(app: AppHandle) -> Result<Option<String>, String> {
@@ -296,10 +413,12 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
 fn export_todos(app: AppHandle, store: State<Store>) -> Result<String, String> {
     let dir = app.path().download_dir().map_err(|e| e.to_string())?;
     let file = dir.join(format!("vermil-tasks-backup-{}.json", Local::now().format("%Y-%m-%d-%H%M%S")));
+    let data = store.data.lock().unwrap();
     let backup = serde_json::json!({
         "app": "vermil-tasks",
         "version": app.package_info().version.to_string(),
-        "todos": store.data.lock().unwrap().todos,
+        "todos": data.todos,
+        "notes": data.notes,
     });
     let text = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
     fs::write(&file, text).map_err(|e| e.to_string())?;
@@ -384,7 +503,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -547,6 +666,83 @@ mod tests {
         assert_eq!(summary_text(3, 0, 3), ("Today: 3 due".to_string(), "3 open tasks".to_string()));
         assert_eq!(summary_text(0, 2, 4), ("2 overdue".to_string(), "4 open tasks".to_string()));
         assert_eq!(summary_text(0, 0, 1), ("Nothing due today".to_string(), "1 open task".to_string()));
+    }
+
+    fn task(id: &str, title: &str, fields: &[(&str, &str)]) -> Todo {
+        let mut t = todo(None, None, false);
+        t.id = id.into();
+        t.title = title.into();
+        for (k, v) in fields {
+            t.extra.insert((*k).into(), (*v).into());
+        }
+        t
+    }
+    fn migrated(todos: Vec<Todo>) -> Data {
+        let mut data = Data { todos, ..Data::default() };
+        migrate_notes(&mut data);
+        data
+    }
+    fn link(t: &Todo) -> Option<&str> {
+        t.extra.get("noteId").and_then(|v| v.as_str())
+    }
+
+    #[test]
+    fn migration_turns_task_notes_into_linked_notes() {
+        let data = migrated(vec![task("a", "Send the report", &[("notes", "SELECT 1;")]), task("b", "No notes here", &[])]);
+        assert_eq!(data.notes.len(), 1);
+        let note = &data.notes[0];
+        assert_eq!((note.title.as_str(), note.body.as_str()), ("Send the report", "SELECT 1;"));
+        assert!(note.extra.get("updatedAt").is_some());
+        assert_eq!(link(&data.todos[0]), Some(note.id.as_str()));
+        assert!(!data.todos[0].extra.contains_key("notes"), "the old text field is gone");
+        assert_eq!(link(&data.todos[1]), None);
+    }
+    #[test]
+    fn migration_shares_one_note_across_a_repeating_series_with_the_same_text() {
+        let data = migrated(vec![
+            task("a", "Stretch", &[("series", "S"), ("notes", "10 minutes")]),
+            task("b", "Stretch", &[("series", "S"), ("notes", "10 minutes")]), // a later copy
+            task("c", "Stretch", &[("series", "S"), ("notes", "15 minutes")]), // the text changed
+            task("d", "Other", &[("notes", "10 minutes")]),                    // same text, another task
+            task("e", "Other too", &[("notes", "10 minutes")]),                // and without a series, tasks stay apart
+        ]);
+        assert_eq!(data.notes.len(), 4);
+        assert_eq!(link(&data.todos[0]), link(&data.todos[1]));
+        assert_ne!(link(&data.todos[0]), link(&data.todos[2]));
+        assert_ne!(link(&data.todos[0]), link(&data.todos[3]));
+        assert_ne!(link(&data.todos[3]), link(&data.todos[4]));
+        let ids: std::collections::HashSet<_> = data.notes.iter().map(|n| n.id.clone()).collect();
+        assert_eq!(ids.len(), 4, "note ids are unique");
+    }
+    #[test]
+    fn migration_ignores_blank_and_null_notes_and_can_run_twice() {
+        let mut blank = task("a", "t", &[("notes", "   \n ")]);
+        blank.extra.insert("noteId".into(), "stale".into()); // not touched by a blank note
+        let mut null = task("b", "t", &[]);
+        null.extra.insert("notes".into(), serde_json::Value::Null);
+        let mut data = migrated(vec![blank, null, task("c", "t", &[("notes", "x")])]);
+        assert_eq!(data.notes.len(), 1);
+        assert!(!data.todos[0].extra.contains_key("notes") && !data.todos[1].extra.contains_key("notes"));
+        let before = data.notes[0].id.clone();
+        migrate_notes(&mut data); // nothing left to convert
+        assert_eq!(data.notes.len(), 1);
+        assert_eq!(data.notes[0].id, before);
+    }
+    #[test]
+    fn unlinking_a_note_leaves_the_tasks() {
+        let mut todos = vec![task("a", "x", &[("noteId", "n1")]), task("b", "y", &[("noteId", "n2")]), task("c", "z", &[("noteId", "n1")])];
+        assert_eq!(unlink_note(&mut todos, "n1"), 2);
+        assert_eq!(todos.iter().map(|t| link(t).map(str::to_string)).collect::<Vec<_>>(), vec![None, Some("n2".to_string()), None]);
+        assert_eq!(todos.len(), 3);
+    }
+    #[test]
+    fn notes_round_trip_through_json_with_their_timestamp() {
+        let note: Note = serde_json::from_str(r#"{"id":"n1","title":"T","body":"B","updatedAt":"2026-11-12T10:00:00.000Z"}"#).unwrap();
+        let back = serde_json::to_value(&note).unwrap();
+        assert_eq!(back["updatedAt"], "2026-11-12T10:00:00.000Z");
+        assert_eq!((back["title"].as_str(), back["body"].as_str()), (Some("T"), Some("B")));
+        let sparse: Note = serde_json::from_str(r#"{"id":"n2"}"#).unwrap(); // title and body are optional
+        assert_eq!((sparse.title.as_str(), sparse.body.as_str()), ("", ""));
     }
 
     #[test]
