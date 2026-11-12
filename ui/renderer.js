@@ -67,6 +67,31 @@ async function commit(next, { undo = true } = {}) {
   return true;
 }
 
+// One thing done on the user's behalf, for Automations and the Assistant. Throws when the module it needs is off.
+// a: { type: 'task', title, due } | { type: 'shop', name } | { type: 'expense', amount, cat, note } | { type: 'note', title, body } | { type: 'toast', title } | { type: 'open', view }
+async function doAction(a) {
+  const need = (id, name) => { if (!started.has(id)) throw new Error(name + ' is off'); };
+  if (a.type === 'task') {
+    need('tasks', 'Tasks');
+    await commit([...todos, { id: crypto.randomUUID(), title: a.title.slice(0, 200), due: a.due || null, remindBefore: a.due ? 0 : null, repeat: null, noteId: null, done: false, createdAt: new Date().toISOString(), completedAt: null }], { undo: false });
+  } else if (a.type === 'shop') {
+    need('shopping', 'Shopping');
+    registry.shopping.add(a.name);
+  } else if (a.type === 'expense') {
+    need('money', 'Expenses');
+    registry.money.addEntry({ day: localDay(new Date()), kind: 'out', amount: a.amount, cat: a.cat || 'Other', note: a.note || '' });
+  } else if (a.type === 'note') {
+    need('notes', 'Notes');
+    await invoke('save_notes', { notes: [{ id: newNoteId(), title: a.title, body: a.body || '', updatedAt: new Date().toISOString() }] });
+    await load();
+  } else if (a.type === 'toast') {
+    await invoke('toast', { title: a.title, text: 'Vermil' });
+  } else if (a.type === 'open') {
+    need(a.view, 'That tab');
+    await setView(a.view);
+  } else throw new Error('unknown action');
+}
+
 // hooks for optional modules (see modules.js): extra row details, extra row buttons, extra palette commands
 const rowInfo = [];
 const rowTools = [];

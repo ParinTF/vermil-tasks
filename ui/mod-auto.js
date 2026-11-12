@@ -118,22 +118,7 @@
     busy = true;
     r.err = '';
     try {
-      if (d.type === 'task') {
-        if (!started.has('tasks')) throw new Error('Tasks is off');
-        const due = autoDue(d.due, d.time, new Date());
-        await commit([...todos, { id: crypto.randomUUID(), title: text.slice(0, 200), due, remindBefore: due ? 0 : null, repeat: null, noteId: null, done: false, createdAt: new Date().toISOString(), completedAt: null }], { undo: false });
-      } else if (d.type === 'shop') {
-        if (!started.has('shopping')) throw new Error('Shopping is off');
-        registry.shopping.add(text);
-      } else if (d.type === 'expense') {
-        if (!started.has('money')) throw new Error('Expenses is off');
-        registry.money.addEntry({ day: today(), kind: 'out', amount: d.amount, cat: d.cat || 'Other', note: text });
-      } else if (d.type === 'toast') {
-        await invoke('toast', { title: text, text: 'Vermil automation' });
-      } else if (d.type === 'open') {
-        if (!started.has(d.view)) throw new Error('That tab is off');
-        await setView(d.view);
-      }
+      await doAction({ task: { type: 'task', title: text, due: autoDue(d.due, d.time, new Date()) }, shop: { type: 'shop', name: text }, expense: { type: 'expense', amount: d.amount, cat: d.cat, note: text }, toast: { type: 'toast', title: text }, open: { type: 'open', view: d.view } }[d.type] || { type: '?' });
       r.runs = (r.runs || 0) + 1;
       r.at = new Date().toISOString();
     } catch (e) {

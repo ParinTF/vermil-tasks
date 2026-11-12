@@ -30,6 +30,7 @@ The app opens on **Home**: a strip of today's numbers and one card per module. A
 | [Goals](docs/Goals.md) | Targets that watch numbers from your other modules |
 | [Stocks](docs/Stocks.md) | Look up a stock, pre-market moves, portfolio profit and loss (needs the internet) |
 | [Automations](docs/Automations.md) | Rules: when something happens, add a task, record an expense or notify you |
+| [Assistant](docs/Assistant.md) | Ask about your week or say what to add; Gemini with your own key, sees only what you tick, acts only when you confirm |
 | [Weekly Review](docs/Weekly-Review.md) | One page summing up your week from every module |
 
 Everything else is in [Home, backup and sync](docs/Home.md), the [command palette](docs/Command-palette.md), the [quick bar](docs/Quick-bar.md) and the [keyboard shortcuts](docs/Shortcuts.md).
@@ -48,7 +49,7 @@ Needs Windows 10 or 11 with WebView2 (already part of Windows 11).
 - **From anywhere in Windows:** `Ctrl+Alt+T` adds a task, `Ctrl+Alt+N` jots a note or a link, `Ctrl+Alt+W` shows the Today widget.
 - **Make it yours:** [Settings](docs/Settings.md) (`Ctrl+,`) changes the theme, the accent colour and the font. Light and dark follow Windows unless you force one.
 - **Your data** is one JSON file in `%APPDATA%\com.vermil.tasks`, written safely (a crash cannot half-write it). A weekly backup goes to `Documents\Vermil Backups` (or a folder you choose), and Home can keep two computers in step through a shared folder such as OneDrive.
-- **Privacy:** nothing leaves your computer except the update check and, only when you use the Stocks module or a currency conversion, a price lookup. There is no account and no analytics.
+- **Privacy:** nothing leaves your computer except the update check, a price lookup when you use the Stocks module or a currency conversion, and, only if you add the Assistant and a key of your own, the question and the parts you tick. There is no account and no analytics.
 
 ## Build and test
 

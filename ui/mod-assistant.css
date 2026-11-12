@@ -1,0 +1,39 @@
+/* Assistant module: loaded only while it is switched on */
+.assistant-page { display: grid; gap: 32px; padding-top: 24px; }
+.as-main, .as-side { min-width: 0; }
+.as-head { margin-bottom: 14px; }
+.as-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.as-log { display: grid; align-content: start; gap: 14px; min-height: 160px; padding: 14px 0; border-top: 1px solid var(--ink); }
+.as-msg { display: grid; gap: 4px; max-width: 46em; }
+.as-msg small { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.as-msg p { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.as-msg.me p { font-weight: 600; }
+.as-msg.bad p { color: var(--accent-text); }
+.as-note { font-size: 14px; color: var(--mute); }
+.as-actions { display: grid; gap: 10px; margin-top: 6px; padding: 12px 0 4px; border-top: 1px solid var(--line); }
+.as-actions ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.as-actions li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; font-size: 14px; }
+.as-actions li.skipped { color: var(--mute); text-decoration: line-through; }
+.as-state { font-size: 12px; color: var(--mute); }
+.as-actions li.error .as-state { color: var(--accent-text); }
+.as-act-row { display: flex; align-items: center; gap: 18px; }
+.as-form { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
+.as-form textarea { width: 100%; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 16px; color: var(--ink); resize: none; }
+.as-form textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.as-form .primary { justify-self: start; }
+.as-form .primary:disabled { opacity: .45; cursor: default; }
+.as-side { display: grid; gap: 14px; align-content: start; }
+.as-side h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+.as-fine { margin: 0; font-size: 12.5px; color: var(--mute); }
+.as-share { display: grid; gap: 8px; }
+.as-opt { font-size: 14px; }
+.as-details summary { cursor: pointer; font-size: 13px; color: var(--mute); text-decoration: underline; text-underline-offset: 4px; }
+.as-details pre { max-height: 40vh; margin: 10px 0 0; padding: 10px; overflow: auto; border: 1px solid var(--line); font: 12px/1.5 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
+#as-clear { justify-self: start; }
+
+@media (min-width: 860px) {
+  .assistant-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 28vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .as-main { display: flex; flex-direction: column; min-height: 0; }
+  .as-log { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .as-side { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+}

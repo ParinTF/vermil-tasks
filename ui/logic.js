@@ -668,4 +668,90 @@ function autoSummary(rule) {
   return `When ${when}, ${what}`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary };
+// ── Assistant: what is sent to the model, and what is accepted back. Pure. ──
+// The model is asked for JSON { reply, actions }. An action is only ever a suggestion the user confirms, and only
+// these shapes are accepted, so whatever the model writes cannot do anything else.
+const ASSIST_ACTION_HELP = {
+  task: '{"type":"task","title":"...","due":"YYYY-MM-DDTHH:MM" or null}',
+  shop: '{"type":"shop","name":"..."}',
+  expense: '{"type":"expense","amount":12.5,"cat":"Food","note":"..."}',
+  note: '{"type":"note","title":"...","body":"..."}',
+  open: '{"type":"open","view":"..."}',
+};
+// can: the action types whose modules are on; sections: [{ title, lines }] the user chose to share; views: ids of open-able tabs
+function assistantPrompt({ now, sections, can, views }) {
+  const day = localDay(now), time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+  const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' });
+  const data = sections.length
+    ? sections.map((s) => `## ${s.title}\n${s.lines.map((l) => '- ' + l).join('\n')}`).join('\n\n')
+    : 'Nothing is shared with you. You can chat and suggest actions, but you cannot see the user\'s data.';
+  return [
+    'You are the assistant inside Vermil, a personal organiser on the user\'s Windows PC. Answer in the language the user writes in, briefly and plainly.',
+    `Today is ${weekday} ${day}, local time ${time}.`,
+    'Use only the data below for questions about the user\'s own life. If it is not there, say you cannot see it. Never invent entries.',
+    'To add or open something, put it in "actions". The user sees each action and decides, so never say it is already done.',
+    'Reply with JSON only, in this form: {"reply": "text for the user", "actions": []}',
+    can.length ? 'An action is one of:\n' + can.map((k) => ASSIST_ACTION_HELP[k].replace('"view":"..."', `"view":"one of: ${views.join(', ')}"`)).join('\n') : 'You cannot suggest actions: no module that could carry them out is on.',
+    '', 'Data you may use:', data,
+  ].join('\n');
+}
+
+const ASSIST_DUE = /^\d{4}-\d\d-\d\dT\d\d:\d\d$/;
+const clip = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
+// text from the model -> { reply, actions } with only valid, allowed actions (at most five); text that is not JSON is simply the reply
+function parseAssistantReply(text, { can = [], views = [] } = {}) {
+  let raw = String(text || '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+  let data = null;
+  for (const candidate of [raw, raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)]) {
+    try { const v = JSON.parse(candidate); if (v && typeof v === 'object' && !Array.isArray(v)) { data = v; break; } } catch {}
+  }
+  if (!data) return { reply: raw.slice(0, 4000), actions: [] };
+  const actions = [];
+  for (const a of Array.isArray(data.actions) ? data.actions : []) {
+    if (!a || !can.includes(a.type) || actions.length >= 5) continue;
+    if (a.type === 'task') {
+      const title = clip(a.title, 200);
+      const due = typeof a.due === 'string' && ASSIST_DUE.test(a.due) && !Number.isNaN(parseDay(a.due.slice(0, 10)).getTime()) ? a.due : null;
+      if (title) actions.push({ type: 'task', title, due });
+    } else if (a.type === 'shop') {
+      const name = clip(a.name, 80);
+      if (name) actions.push({ type: 'shop', name });
+    } else if (a.type === 'expense') {
+      const amount = Math.round(Number(a.amount) * 100) / 100;
+      if (Number.isFinite(amount) && amount > 0 && amount < 1e9) actions.push({ type: 'expense', amount, cat: clip(a.cat, 30) || 'Other', note: clip(a.note, 120) });
+    } else if (a.type === 'note') {
+      const title = clip(a.title, 120);
+      if (title) actions.push({ type: 'note', title, body: clip(a.body, 4000) });
+    } else if (a.type === 'open' && views.includes(a.view)) {
+      actions.push({ type: 'open', view: a.view });
+    }
+  }
+  const reply = clip(data.reply, 4000);
+  return { reply: reply || (actions.length ? '' : '(no answer)'), actions };
+}
+
+// one line for the confirmation list
+function describeAction(a) {
+  if (a.type === 'task') return `Add the task "${a.title}"${a.due ? ` due ${a.due.replace('T', ' ')}` : ''}`;
+  if (a.type === 'shop') return `Add "${a.name}" to the shopping list`;
+  if (a.type === 'expense') return `Record an expense of ${a.amount} in ${a.cat}${a.note ? ` (${a.note})` : ''}`;
+  if (a.type === 'note') return `Create the note "${a.title}"`;
+  return `Open ${a.view}`;
+}
+
+// the turns to send for a chat log: no errors or empty replies, same speakers merged, starting and ending with the user, the last `max` messages
+function assistantTurns(log, max = 12) {
+  const turns = [];
+  for (const m of log.slice(-max)) {
+    const text = String(m.text || '').trim();
+    if (!text || m.error) continue;
+    const role = m.role === 'user' ? 'user' : 'model';
+    if (turns.length && turns[turns.length - 1].role === role) turns[turns.length - 1].text += '\n' + text;
+    else turns.push({ role, text });
+  }
+  while (turns.length && turns[0].role !== 'user') turns.shift();
+  while (turns.length && turns[turns.length - 1].role !== 'user') turns.pop();
+  return turns;
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns };
