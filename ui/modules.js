@@ -9,6 +9,7 @@
 // Its data goes through saveModule(id, value) into the same data file; a module with `view` gets a tab and a <main id="<id>-view">.
 const MODULES = [
   { id: 'pomodoro', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css' },
+  { id: 'money', name: 'Expenses', about: 'Record what you spend and earn, by category, month by month. Adds a Money view.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
 ];
 
 const moduleData = {}; // id -> saved value; "_on" lists the ids that are switched on

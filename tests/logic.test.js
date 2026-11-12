@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -265,4 +265,30 @@ test('focusSummary adds up today, the last 7 days and each task', () => {
   assert.deepEqual(s.total, { a: 50, b: 109 });
   assert.deepEqual(s.byTask.map((x) => [x.title, x.min]), [['Report', 50], ['Email', 10], ['', 5]]);
   assert.equal(focusSummary([], '2026-11-12').weekMin, 0);
+});
+
+test('money helpers', () => {
+  assert.equal(parseAmount('1,250.50'), 1250.5);
+  assert.equal(parseAmount('฿ 120'), 120);
+  assert.equal(parseAmount('12.345'), 12.35);
+  assert.equal(parseAmount(''), null);
+  assert.equal(parseAmount('0'), null);
+  assert.equal(parseAmount('abc'), null);
+  assert.equal(moneyLabel(1250.5, '฿'), '฿1,250.50');
+  assert.equal(moneyLabel(120, '฿'), '฿120');
+});
+
+test('moneyMonth totals one month, in cents, with spending by category', () => {
+  const e = (id, day, kind, amount, cat) => ({ id, day, kind, amount, cat });
+  const s = moneyMonth([
+    e('1', '2026-11-03', 'out', 0.1, 'Food'), e('2', '2026-11-03', 'out', 0.2, 'Food'),
+    e('3', '2026-11-05', 'out', 50, 'Bills'), e('4', '2026-11-01', 'in', 1000, 'Salary'),
+    e('5', '2026-10-31', 'out', 999, 'Food'), // another month
+  ], '2026-11');
+  assert.equal(s.out, 50.3); // not 50.300000000000004
+  assert.equal(s.in, 1000);
+  assert.equal(s.balance, 949.7);
+  assert.deepEqual(s.byCat, [{ cat: 'Bills', amount: 50 }, { cat: 'Food', amount: 0.3 }]);
+  assert.deepEqual(s.list.map((x) => x.id), ['3', '2', '1', '4']); // newest day first
+  assert.equal(moneyMonth([], '2026-11').balance, 0);
 });
