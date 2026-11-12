@@ -1,0 +1,57 @@
+/* Travel module: loaded only while it is switched on */
+.travel-page { display: grid; gap: 32px; padding-top: 24px; }
+.tv-main, .tv-side { min-width: 0; }
+.tv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; margin-bottom: 10px; }
+.tv-main h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.tv-state { font-size: 14px; color: var(--mute); }
+.tv-sec { padding: 14px 0 22px; border-top: 1px solid var(--ink); }
+.tv-sec h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.tv-templates { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.tv-templates button { padding: 4px 11px; border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 999px; background: none; font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.tv-templates button:hover { border-color: var(--ink); }
+.tv-inline { display: flex; align-items: baseline; gap: 14px; }
+.tv-inline input, .tv-field input { min-width: 0; flex: 1; padding: 7px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); }
+.tv-inline input:focus, .tv-field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+#tv-cost-amt { max-width: 8em; flex: none; }
+.tv-msg { display: block; min-height: 1.2em; margin: 4px 0; font-size: 13px; color: var(--mute); }
+.tv-checks { margin: 4px 0 0; padding: 0; list-style: none; columns: 2 240px; column-gap: 32px; }
+#tv-costs { columns: 1; }
+.tv-checks li { display: grid; grid-template-columns: 24px minmax(0, 1fr) 18px; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); break-inside: avoid; font-size: 14.5px; }
+#tv-costs li { grid-template-columns: minmax(0, 1fr) auto 18px; }
+.tv-checks input[type=checkbox] { margin: 0; }
+.tv-checks li.done span { color: var(--mute); text-decoration: line-through; }
+.tv-checks time { color: var(--mute); font-variant-numeric: tabular-nums; }
+.tv-x { padding: 0; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; opacity: 0; }
+.tv-checks li:hover .tv-x, .tv-x:focus-visible { opacity: 1; }
+.tv-x:hover { color: var(--accent-text); }
+.tv-plan { display: grid; gap: 2px 32px; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); }
+.tv-day { display: grid; gap: 1px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.tv-day small { font-size: 11px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.tv-day input { padding: 3px 0; border: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); }
+.tv-day input:focus { outline: 0; box-shadow: 0 1px 0 var(--accent); }
+.tv-cost-sum { display: flex; align-items: baseline; gap: 16px; font-size: 14px; color: var(--mute); }
+.tv-cost-sum b { font-size: 26px; color: var(--ink); font-variant-numeric: tabular-nums; }
+.tv-cost-sum .over { color: var(--accent-text); font-weight: 600; }
+.tv-track { display: block; height: 6px; margin: 8px 0 12px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.tv-track i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
+.tv-track.over i { background: var(--accent); }
+.tv-foot { padding-top: 6px; }
+.tv-foot .linkish { font-size: 13px; }
+.tv-list { margin: 0 0 24px; padding: 0; list-style: none; border-top: 1px solid var(--ink); }
+.tv-list button { display: grid; gap: 2px; width: 100%; padding: 10px 0; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; text-align: left; color: var(--ink); cursor: pointer; }
+.tv-list button:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.tv-list button.sel { box-shadow: inset 2px 0 var(--accent); padding-left: 10px; }
+.tv-list button b { font-size: 16px; }
+.tv-list button small { color: var(--mute); font-size: 12.5px; }
+.tv-list li.after b { color: var(--mute); }
+.tv-side form { display: grid; gap: 14px; }
+.tv-form-title { font-size: 16px; font-weight: 700; }
+.tv-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; }
+.tv-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.tv-field input { font-size: 15px; letter-spacing: 0; text-transform: none; }
+
+@media (min-width: 860px) {
+  .travel-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(260px, 24vw, 340px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .tv-main { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-right: 8px; }
+  .tv-side { min-height: 0; overflow-y: auto; }
+}

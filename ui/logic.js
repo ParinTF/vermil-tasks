@@ -558,4 +558,28 @@ function paidTotals(bills, year) {
 // how a bill stands: overdue by n days, due today, or due in n days
 const billState = (b, today) => { const n = daysUntil(b.next, today); return n < 0 ? { kind: 'overdue', days: -n } : n === 0 ? { kind: 'today', days: 0 } : { kind: 'later', days: n }; };
 
-if (typeof module !== 'undefined') module.exports = { paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── travel: a trip is { name, from, to, budget, packing: [{ text, done }], plan: { day: text }, costs: [{ label, amount }] } ──
+const PACKING_TEMPLATES = {
+  Essentials: ['Passport or ID', 'Phone and charger', 'Wallet and cards', 'Medicine', 'Toiletries', 'Underwear and socks'],
+  Beach: ['Swimwear', 'Sunscreen', 'Sunglasses', 'Flip-flops', 'Beach towel'],
+  Cold: ['Warm jacket', 'Gloves and hat', 'Thermal layer', 'Lip balm'],
+  Business: ['Laptop and charger', 'Business cards', 'Formal clothes', 'Notebook and pen'],
+};
+
+// every day of the trip, from the first to the last, at most 60
+function tripDays(from, to) {
+  const days = [];
+  for (let d = from; d <= to && days.length < 60; d = shiftDay(d, 1)) days.push(d);
+  return days;
+}
+
+// before (days until it starts), during (which day of how many) or after (days since it ended)
+function tripState(trip, today) {
+  if (today < trip.from) return { kind: 'before', days: daysUntil(trip.from, today) };
+  if (today > trip.to) return { kind: 'after', days: daysUntil(today, trip.to) };
+  return { kind: 'during', day: daysUntil(today, trip.from) + 1, of: daysUntil(trip.to, trip.from) + 1 };
+}
+
+const packingProgress = (items) => ({ done: items.filter((i) => i.done).length, total: items.length });
+
+if (typeof module !== 'undefined') module.exports = { PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
