@@ -518,4 +518,19 @@ function dosesDue(meds, day, hhmm, taken, announced) {
   return meds.filter((m) => medDue(m, day)).flatMap((m) => m.times.filter((t) => t <= hhmm).map((t) => ({ med: m, time: t, key: `${m.id}@${t}` }))).filter((d) => !taken[d.key] && !announced[d.key]);
 }
 
-if (typeof module !== 'undefined') module.exports = { weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── library: an item is { id, title, kind, status: 'want' | 'now' | 'done', note, rating (0-5), finished: "YYYY-MM-DD" } ──
+function filterLibrary(items, status, kind, query) {
+  const q = String(query || '').trim().toLowerCase();
+  return items.filter((i) => i.status === status && (!kind || i.kind === kind) && (!q || (i.title + ' ' + (i.note || '')).toLowerCase().includes(q)));
+}
+
+// how many of each kind were finished in a year, and the average rating of the rated ones
+function libraryYear(items, year) {
+  const done = items.filter((i) => i.status === 'done' && i.finished && i.finished.startsWith(String(year)));
+  const byKind = {};
+  for (const i of done) byKind[i.kind] = (byKind[i.kind] || 0) + 1;
+  const rated = done.filter((i) => i.rating > 0);
+  return { total: done.length, byKind, average: rated.length ? Math.round(rated.reduce((n, i) => n + i.rating, 0) / rated.length * 10) / 10 : null };
+}
+
+if (typeof module !== 'undefined') module.exports = { filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

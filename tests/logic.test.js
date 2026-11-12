@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -469,4 +469,21 @@ test('health: weight trend and medicine doses', () => {
   assert.deepEqual(dosesDue([med], '2026-11-12', '21:00', { 'm@08:00': true }, {}).map((d) => d.key), ['m@20:00']); // the morning one was taken
   assert.deepEqual(dosesDue([med], '2026-11-12', '21:00', {}, { 'm@08:00': true, 'm@20:00': true }), []); // both already announced
   assert.deepEqual(dosesDue([med], '2026-11-14', '21:00', {}, {}), []);
+});
+
+test('library: filtering and the year in numbers', () => {
+  const items = [
+    { id: '1', title: 'Dune', kind: 'Book', status: 'done', note: 'Frank Herbert', rating: 5, finished: '2026-03-02' },
+    { id: '2', title: 'Arrival', kind: 'Movie', status: 'done', note: '', rating: 4, finished: '2026-05-10' },
+    { id: '3', title: 'Emma', kind: 'Book', status: 'done', note: '', rating: 0, finished: '2025-12-30' },
+    { id: '4', title: 'Severance', kind: 'Series', status: 'now', note: '', rating: 0 },
+    { id: '5', title: 'Foundation', kind: 'Book', status: 'want', note: 'Isaac Asimov', rating: 0 },
+  ];
+  assert.deepEqual(filterLibrary(items, 'done', '', '').map((i) => i.id), ['1', '2', '3']);
+  assert.deepEqual(filterLibrary(items, 'done', 'Book', '').map((i) => i.id), ['1', '3']);
+  assert.deepEqual(filterLibrary(items, 'want', '', 'asimov').map((i) => i.id), ['5']); // the note is searched too
+  assert.deepEqual(filterLibrary(items, 'now', '', 'zzz'), []);
+  assert.deepEqual(libraryYear(items, 2026), { total: 2, byKind: { Book: 1, Movie: 1 }, average: 4.5 });
+  assert.deepEqual(libraryYear(items, 2025), { total: 1, byKind: { Book: 1 }, average: null }); // unrated: no average
+  assert.deepEqual(libraryYear([], 2026), { total: 0, byKind: {}, average: null });
 });
