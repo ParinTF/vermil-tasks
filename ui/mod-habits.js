@@ -127,6 +127,13 @@
   const commandFn = () => [{ label: 'Add a habit', hint: 'Habits', kind: 'Command', run: async () => { await setView('habits'); $('hb-name').focus(); } }];
 
   defineModule('habits', {
+    weekly(since, until) {
+      if (!data.habits.length) return null;
+      let done = 0, total = 0;
+      for (let d = since; d <= until; d = shiftDay(d, 1)) { const r = habitDay(data.habits, data.log, d); done += r.done; total += r.total; }
+      const best = data.habits.map((h) => ({ h, s: habitStreak(h, data.log, until) })).sort((a, b) => b.s - a.s)[0];
+      return { title: 'Habits', lines: [total ? `${Math.round(done / total * 100)}% kept (${done} of ${total})` : 'Nothing was due', ...(best && best.s > 1 ? [`Longest streak: ${best.h.name}, ${best.s} days`] : [])] };
+    },
     summary() {
       if (!data.habits.length) return null;
       const t = today();

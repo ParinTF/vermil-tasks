@@ -182,6 +182,15 @@
   const commandFn = () => [{ label: 'Add expense', hint: 'Money', kind: 'Command', run: async () => { await setView('money'); $('mo-amount').focus(); } }];
 
   defineModule('money', {
+    weekly(since, until) {
+      const list = data.entries.filter((e) => e.day >= since && e.day <= until);
+      if (!list.length) return { title: 'Money', lines: ['Nothing recorded'] };
+      const sum = (k) => list.filter((e) => e.kind === k).reduce((n, e) => n + Math.round(e.amount * 100), 0) / 100;
+      const cats = {};
+      for (const e of list.filter((x) => x.kind === 'out')) cats[e.cat] = (cats[e.cat] || 0) + Math.round(e.amount * 100) / 100;
+      const top = Object.entries(cats).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([c, v]) => `${c} ${money(v)}`);
+      return { title: 'Money', lines: [`Spent ${money(sum('out'))}, earned ${money(sum('in'))}`, ...(top.length ? ['Most spent on: ' + top.join(', ')] : [])] };
+    },
     summary() {
       const today = localDay(new Date());
       const spent = data.entries.filter((e) => e.day === today && e.kind === 'out').reduce((n, e) => n + Math.round(e.amount * 100), 0) / 100;

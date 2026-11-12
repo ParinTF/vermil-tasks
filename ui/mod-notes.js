@@ -344,6 +344,10 @@ addEventListener('blur', flushNote); // the window lost focus: do not leave typi
 
 
 defineModule('notes', {
+  weekly(since, until) {
+    const n = notes.filter((x) => x.updatedAt && localDay(new Date(x.updatedAt)) >= since && localDay(new Date(x.updatedAt)) <= until).length;
+    return { title: 'Notes', lines: [`${n} note${n === 1 ? '' : 's'} written or edited`] };
+  },
   summary() {
     if (!notes.length) return null;
     const last = [...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))[0];

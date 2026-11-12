@@ -87,6 +87,10 @@
   const commandFn = () => [{ label: 'Add a goal', hint: 'Goals', kind: 'Command', run: async () => { await setView('goals'); $('gl-title').focus(); } }];
 
   defineModule('goals', {
+    weekly() {
+      if (!data.goals.length) return null;
+      return { title: 'Goals', lines: data.goals.map((g) => { const v = valueOf(g); if (v === null) return `${g.title}: its module is off`; const p = goalProgress(g.direction, v, g.target); return `${g.title}: ${p.state === 'done' ? 'reached' : p.state === 'over' ? 'over the limit' : p.pct + '%'}`; }) };
+    },
     summary() {
       if (!data.goals.length) return null;
       const states = data.goals.map((g) => { const v = valueOf(g); return v === null ? null : { g, ...goalProgress(g.direction, v, g.target) }; }).filter(Boolean);

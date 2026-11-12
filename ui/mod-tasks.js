@@ -451,6 +451,13 @@ const tasksMetrics = () => [
 ];
 
 defineModule('tasks', {
+  weekly(since, until) {
+    const inRange = (t) => t.done && t.completedAt && localDay(new Date(t.completedAt)) >= since && localDay(new Date(t.completedAt)) <= until;
+    const done = todos.filter(inRange);
+    const overdue = todos.filter((t) => !t.done && !isLater(t) && t.due && new Date(t.due) < new Date()).length;
+    const made = todos.filter((t) => t.createdAt && localDay(new Date(t.createdAt)) >= since && localDay(new Date(t.createdAt)) <= until).length;
+    return { title: 'Tasks', lines: [`${done.length} done, ${made} added`, ...(overdue ? [`${overdue} overdue right now`] : ['Nothing overdue']), ...(done.length ? ['Finished: ' + done.slice(0, 5).map((t) => t.title).join(', ') + (done.length > 5 ? ` and ${done.length - 5} more` : '')] : [])] };
+  },
   summary() {
     const now = new Date();
     const today = localDay(now);

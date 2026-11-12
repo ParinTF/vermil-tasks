@@ -104,6 +104,12 @@
   const commandFn = () => [{ label: 'Add a subscription', hint: 'Subscriptions', kind: 'Command', run: async () => { await setView('subs'); $('sb-name').focus(); } }];
 
   defineModule('subs', {
+    weekly() {
+      if (!data.subs.length) return null;
+      const soon = sorted().filter((s) => daysUntil(s.next, today()) <= 7);
+      const monthly = Math.round(data.subs.reduce((n, s) => n + monthlyCost(s.amount, s.cycle) * 100, 0)) / 100;
+      return { title: 'Subscriptions', lines: [`${money(monthly)} a month in total`, soon.length ? 'Renewing in the next 7 days: ' + soon.map((s) => `${s.name} ${money(s.amount)}`).join(', ') : 'Nothing renews in the next 7 days'] };
+    },
     summary() {
       if (!data.subs.length) return null;
       const next = sorted()[0];

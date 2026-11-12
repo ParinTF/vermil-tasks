@@ -138,6 +138,14 @@
   const commandFn = () => [{ label: 'Focus timer…', hint: 'F on a task', kind: 'Command', run: () => openFocus(selectedId || '') }];
 
   defineModule('pomodoro', {
+    weekly(since, until) {
+      const list = data.sessions.filter((s) => s.day >= since && s.day <= until);
+      if (!list.length) return { title: 'Focus', lines: ['No focus sessions'] };
+      const by = {};
+      for (const s of list) by[s.title || 'No task'] = (by[s.title || 'No task'] || 0) + s.min;
+      const top = Object.entries(by).sort((a, b) => b[1] - a[1])[0];
+      return { title: 'Focus', lines: [`${minutesLabel(list.reduce((n, s) => n + s.min, 0))} in ${list.length} session${list.length === 1 ? '' : 's'}`, `Most on: ${top[0]} (${minutesLabel(top[1])})`] };
+    },
     summary() {
       const s = focusSummary(data.sessions, localDay(new Date()));
       return { label: 'Focus', value: minutesLabel(s.todayMin), unit: 'today', sub: `${s.todayCount} ${s.todayCount === 1 ? 'session' : 'sessions'} · ${minutesLabel(s.weekMin)} in 7 days` };

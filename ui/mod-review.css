@@ -1,0 +1,21 @@
+/* Weekly Review module: loaded only while it is switched on */
+.review-page { display: block; padding-top: 24px; }
+.rv-main { max-width: 860px; }
+.rv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
+.rv-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.rv-pick { display: flex; gap: 22px; }
+.rv-pick button { padding: 0 0 4px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); cursor: pointer; }
+.rv-pick button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.rv-range { margin: 8px 0 20px; font-size: 14px; color: var(--mute); }
+.rv-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 44px; }
+.rv-body section { padding: 14px 0 22px; border-top: 1px solid var(--ink); }
+.rv-body h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.rv-body ul { margin: 0; padding: 0; list-style: none; }
+.rv-body li { padding: 5px 0; font-size: 15px; line-height: 1.45; }
+.rv-foot { display: flex; align-items: baseline; gap: 18px; margin-top: 6px; }
+.rv-foot .linkish { font-size: 14px; }
+.rv-msg { font-size: 13px; color: var(--mute); }
+
+@media (min-width: 860px) {
+  .review-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-top: clamp(12px, 2.5vh, 32px); }
+}

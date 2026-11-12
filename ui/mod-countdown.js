@@ -78,6 +78,10 @@
   const commandFn = () => [{ label: 'Add a countdown', hint: 'Countdown', kind: 'Command', run: async () => { await setView('countdown'); $('cd-title').focus(); } }];
 
   defineModule('countdown', {
+    weekly() {
+      const soon = sorted().filter((ev) => left(ev) >= 0 && left(ev) <= 14);
+      return soon.length ? { title: 'Coming up', lines: soon.map((ev) => `${ev.title}: ${countdownLabel(left(ev)).toLowerCase()}`) } : null;
+    },
     summary() {
       const next = sorted().find((ev) => left(ev) >= 0);
       if (!next) return null;

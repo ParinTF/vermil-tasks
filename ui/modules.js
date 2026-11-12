@@ -7,7 +7,7 @@
 // An entry with `view` gets a tab (Ctrl+1..9 in tab order) and a <main id="<id>-view">; `requires` lists the modules it needs.
 // `static` marks a module whose <main> is already in index.html.
 // Hooks it may use: rowInfo.push(t => text) adds to a task row's details, rowTools.push(t => button) to its buttons,
-// commandHooks.push(() => [palette commands]), shortcutGroups.push({ module, title, items }), metricHooks.push(() => [{ id, label, unit, get() }]) for Goals; take them out again in stop().
+// commandHooks.push(() => [palette commands]), shortcutGroups.push({ module, title, items }), metricHooks.push(() => [{ id, label, unit, get() }]) for Goals; weekly(since, until) returns { title, lines } (or null) for the Weekly Review, with days as "YYYY-MM-DD", both included; take them out again in stop().
 // Its data goes through saveModule(id, value) into the same data file. summary() returns { label, value, unit, sub, warn } for the Today strip on Home (or null).
 const MODULES = [
   { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
@@ -21,6 +21,7 @@ const MODULES = [
   { id: 'journal', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
   { id: 'goals', name: 'Goals', about: 'Targets that watch your other modules: tasks done, focus time, money saved, habits kept. Or track anything by hand.', script: 'mod-goals.js', style: 'mod-goals.css', view: 'Goals' },
   { id: 'stocks', name: 'Stocks', about: 'Look up a stock: today’s move, pre-market and after-hours, and what your positions are worth. Needs the internet.', script: 'mod-stocks.js', style: 'mod-stocks.css', view: 'Stocks' },
+  { id: 'review', name: 'Weekly Review', about: 'One page that sums up your week from every module you use, ready to copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
 ];
 
 const moduleData = {}; // id -> saved value; "_on" lists the ids that are switched on

@@ -187,6 +187,11 @@ const stocksApi = { // one place for the network calls, so a test can replace th
   const goOffline = () => { online = false; paint(); };
 
   defineModule('stocks', {
+    weekly() {
+      if (!data.items.length) return null;
+      const t = portfolio(data.items, data.quotes).totals[0];
+      return { title: 'Stocks', lines: t ? [`Portfolio ${priceLabel(t.value, t.currency)}, ${signedLabel(t.day, t.currency)} on the last day with a saved price`, ...(t.hasPl ? [`Profit or loss ${signedLabel(t.pl, t.currency)} (${pctLabel(t.plPct)})`] : [])] : [`${data.items.length} watched, no prices saved yet`] };
+    },
     summary() {
       if (!data.items.length) return null;
       const t = portfolio(data.items, data.quotes).totals[0];

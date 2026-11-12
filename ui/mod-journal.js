@@ -105,6 +105,12 @@
   const commandFn = () => [{ label: 'Write in the journal', hint: 'Journal', kind: 'Command', run: async () => { await setView('journal'); open(today()); $('jr-text').focus(); } }];
 
   defineModule('journal', {
+    weekly(since, until) {
+      const days = Object.keys(data.entries).filter((d) => d >= since && d <= until);
+      const written = days.filter((d) => data.entries[d].text.trim()).length;
+      const moods = days.map((d) => data.entries[d].mood).filter(Boolean);
+      return { title: 'Journal', lines: [`${written} day${written === 1 ? '' : 's'} written`, moods.length ? `Mood ${Math.round(moods.reduce((a, b) => a + b, 0) / moods.length * 10) / 10} on average (${MOODS[Math.round(moods.reduce((a, b) => a + b, 0) / moods.length)]})` : 'No mood noted'] };
+    },
     summary() {
       const e = data.entries[today()];
       const avg = moodAverage(data.entries, today(), 7);
