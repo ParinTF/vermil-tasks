@@ -1268,6 +1268,8 @@ const SHORTCUTS = [
   '1 2 3 4: To do, Today, Week, History',
   'Ctrl+Alt+T (from anywhere): quick add',
   'Ctrl+Alt+J (in quick add): due date',
+  'Ctrl+Alt+N (from anywhere): quick note or link, saved to Notes',
+  'Ctrl+Alt+N (in quick add): switch between task and note',
   'Ctrl+F: search',
   'Ctrl+Z: undo',
   'Esc: leave a field, cancel editing',

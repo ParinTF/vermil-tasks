@@ -9,7 +9,7 @@ use tauri::{
     AppHandle, Emitter, Manager, State, WindowEvent,
 };
 use tauri_plugin_autostart::ManagerExt as _;
-use tauri_plugin_global_shortcut::{GlobalShortcutExt, ShortcutState};
+use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, ShortcutState};
 use tauri_plugin_updater::UpdaterExt;
 use tauri_winrt_notification::{Scenario, Toast};
 
@@ -69,6 +69,7 @@ struct Data {
 }
 
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
+const NOTE_SHORTCUT: &str = "Ctrl+Alt+N"; // the same bar, in note mode
 
 struct Store {
     file: PathBuf,
@@ -499,6 +500,40 @@ fn quick_add(app: AppHandle, store: State<Store>, title: String, due: Option<Str
     Ok(())
 }
 
+/// A quick note from one line of text: the first line is the title (a link is titled by its site), and the body is
+/// the whole text unless the title already is all of it.
+fn note_from_text(text: &str) -> Option<(String, String)> {
+    let text = text.trim();
+    let first = text.lines().map(str::trim).find(|l| !l.is_empty())?;
+    let is_link = (first.starts_with("http://") || first.starts_with("https://")) && !first.contains(char::is_whitespace);
+    let title: String = if is_link {
+        let host = first.split("://").nth(1).unwrap_or("").split(['/', '?', '#']).next().unwrap_or("");
+        let host = host.strip_prefix("www.").unwrap_or(host);
+        if host.is_empty() { first.to_string() } else { host.to_string() }
+    } else {
+        first.to_string()
+    };
+    let title: String = title.chars().take(80).collect();
+    let body = if title == text { String::new() } else { text.to_string() };
+    Some((title, body))
+}
+
+#[tauri::command]
+fn quick_note(app: AppHandle, store: State<Store>, text: String) -> Result<(), String> {
+    let text: String = text.chars().take(5000).collect();
+    let Some((title, body)) = note_from_text(&text) else { return Ok(()) };
+    let now = chrono::Utc::now();
+    let mut extra = serde_json::Map::new();
+    extra.insert("updatedAt".into(), now.to_rfc3339_opts(chrono::SecondsFormat::Millis, true).into());
+    {
+        let mut data = store.data.lock().unwrap();
+        data.notes.push(Note { id: format!("q{}", now.timestamp_micros()), title, body, extra });
+        save(&store.file, &data)?;
+    }
+    let _ = app.emit("todos-changed", ()); // the window reloads tasks and notes
+    Ok(())
+}
+
 /// False when another program already owns the shortcut.
 #[tauri::command]
 fn quick_shortcut(app: AppHandle) -> bool {
@@ -506,7 +541,13 @@ fn quick_shortcut(app: AppHandle) -> bool {
 }
 
 fn show_quick(app: &AppHandle) {
+    show_quick_as(app, "task")
+}
+
+/// Opens the quick bar in "task" or "note" mode.
+fn show_quick_as(app: &AppHandle, mode: &str) {
     if let Some(win) = app.get_webview_window("quick") {
+        let _ = app.emit_to("quick", "quick-mode", mode);
         let _ = win.center();
         let _ = win.show();
         let _ = win.set_focus();
@@ -528,15 +569,17 @@ fn main() {
             // `vermil-tasks.exe --quick` opens the quick-add bar of the running app
             if args.iter().any(|a| a == "--quick") {
                 show_quick(app)
+            } else if args.iter().any(|a| a == "--note") {
+                show_quick_as(app, "note")
             } else {
                 show(app)
             }
         }))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
+                .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        show_quick(app);
+                        show_quick_as(app, if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyN) { "note" } else { "task" });
                     }
                 })
                 .build(),
@@ -544,7 +587,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -578,7 +621,9 @@ fn main() {
             let shortcuts = app.handle().clone();
             std::thread::spawn(move || {
                 for _ in 0..8 {
-                    if shortcuts.global_shortcut().register(QUICK_SHORTCUT).is_ok() {
+                    let task_ok = shortcuts.global_shortcut().is_registered(QUICK_SHORTCUT) || shortcuts.global_shortcut().register(QUICK_SHORTCUT).is_ok();
+                    let note_ok = shortcuts.global_shortcut().is_registered(NOTE_SHORTCUT) || shortcuts.global_shortcut().register(NOTE_SHORTCUT).is_ok();
+                    if task_ok && note_ok {
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(500));
@@ -590,15 +635,17 @@ fn main() {
 
             let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "quick", "Quick add", true, None::<&str>)?;
+            let quick_note = MenuItem::with_id(app, "quick-note", "Quick note", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Vermil Tasks")
-                .menu(&Menu::with_items(app, &[&open, &quick, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &quick, &quick_note, &quit])?)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
                     "quick" => show_quick(app),
+                    "quick-note" => show_quick_as(app, "note"),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -636,6 +683,19 @@ mod tests {
     fn data_without_modules_still_loads() {
         let d: Data = serde_json::from_str(r#"{"todos":[]}"#).unwrap();
         assert!(d.modules.is_empty());
+    }
+
+    #[test]
+    fn quick_note_titles() {
+        assert_eq!(note_from_text("  buy stamps  "), Some(("buy stamps".into(), String::new()))); // the title is all of it
+        assert_eq!(note_from_text("   "), None);
+        let (t, b) = note_from_text("https://www.example.com/a/b?x=1#top").unwrap();
+        assert_eq!((t.as_str(), b.as_str()), ("example.com", "https://www.example.com/a/b?x=1#top")); // a link is titled by its site
+        let (t, b) = note_from_text("read this https://example.com").unwrap();
+        assert_eq!((t.as_str(), b.as_str()), ("read this https://example.com", "")); // not a bare link
+        let (t, b) = note_from_text("first line\nsecond").unwrap();
+        assert_eq!((t.as_str(), b.as_str()), ("first line", "first line\nsecond"));
+        assert_eq!(note_from_text(&"x".repeat(200)).unwrap().0.chars().count(), 80);
     }
 
     const NOW: &str = "2026-11-11T10:00";
