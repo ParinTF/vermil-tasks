@@ -4,7 +4,9 @@
   let data = { cur: '฿', entries: [] };
   let month = localDay(new Date()).slice(0, 7);
   let kind = 'out';
-  const DEFAULT_CATS = ['Food', 'Transport', 'Bills', 'Shopping', 'Health', 'Fun', 'Salary', 'Other'];
+  // one tap fills the category; what you used before joins these, most used first
+  const QUICK = { out: ['Food', 'Transport', 'Bills', 'Shopping', 'Health', 'Fun', 'Invest', 'Savings', 'Other'], in: ['Salary', 'Dividends', 'Gift', 'Refund', 'Other'] };
+  const DEFAULT_CATS = [...new Set([...QUICK.out, ...QUICK.in])];
   const save = () => saveModule('money', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('money-view');
   const money = (n) => moneyLabel(n, data.cur);
@@ -29,6 +31,7 @@
             el('button', { id: 'mo-in', type: 'button', ariaPressed: 'false', textContent: 'Income', onclick: () => setKind('in') })),
           num('mo-amount', 'Amount', { inputMode: 'decimal', autocomplete: 'off', placeholder: '0', ariaLabel: 'Amount' }),
           num('mo-cat', 'Category', { autocomplete: 'off', maxLength: 30, placeholder: 'Food' }),
+          el('div', { id: 'mo-chips', className: 'mo-chips', role: 'group', ariaLabel: 'Quick categories' }),
           el('datalist', { id: 'mo-cats' }),
           num('mo-day', 'Date', { type: 'date' }),
           num('mo-note', 'Note', { maxLength: 120, autocomplete: 'off', placeholder: 'Optional' }),
@@ -36,6 +39,8 @@
           el('div', { id: 'mo-msg', className: 'mo-msg', role: 'status' })),
         num('mo-cur', 'Currency symbol', { maxLength: 4, autocomplete: 'off' })));
     $('mo-cat').setAttribute('list', 'mo-cats');
+    $('mo-cat').oninput = paintChips;
+    paintChips();
     $('mo-cur').value = data.cur;
     $('mo-cur').oninput = () => { data.cur = $('mo-cur').value.trim() || '฿'; save(); paint(); };
     $('mo-day').value = localDay(new Date());
@@ -46,11 +51,23 @@
     paint();
   }
 
+  function paintChips() {
+    const mine = {};
+    for (const e of data.entries) if (e.kind === kind) mine[e.cat] = (mine[e.cat] || 0) + 1;
+    const extra = Object.keys(mine).filter((c) => !QUICK[kind].includes(c)).sort((a, b) => mine[b] - mine[a]).slice(0, 4);
+    $('mo-chips').replaceChildren(...[...QUICK[kind], ...extra].map((c) => {
+      const b = el('button', { type: 'button', textContent: c, ariaPressed: String($('mo-cat').value.trim().toLowerCase() === c.toLowerCase()) });
+      b.onclick = () => { $('mo-cat').value = c; paintChips(); $('mo-amount').focus(); };
+      return b;
+    }));
+  }
+
   function setKind(k) {
     kind = k;
     $('mo-out').ariaPressed = String(k === 'out');
     $('mo-in').ariaPressed = String(k === 'in');
     $('mo-cat').placeholder = k === 'out' ? 'Food' : 'Salary';
+    paintChips();
   }
 
   function add(e) {
@@ -66,7 +83,9 @@
     month = entry.day.slice(0, 7); // show where it went
     $('mo-amount').value = '';
     $('mo-note').value = '';
+    $('mo-cat').value = '';
     $('mo-msg').textContent = `Added ${money(amount)} to ${entry.cat}.`;
+    paintChips();
     paint();
     $('mo-amount').focus();
   }
