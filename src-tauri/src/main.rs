@@ -63,6 +63,9 @@ struct Data {
     // notifications: quiet hours "HH:MM-HH:MM" (nothing is shown inside them; reminders wait), and the sources switched off
     #[serde(default)]
     quiet: Option<String>,
+    // how big everything is drawn (1.0 = 100%), from Settings
+    #[serde(default)]
+    zoom: Option<f64>,
     #[serde(default)]
     mute: Vec<String>,
     #[serde(default)]
@@ -444,6 +447,30 @@ fn in_quiet(spec: &str, now: &str) -> bool {
         return false;
     }
     if from < to { from <= now && now < to } else { now >= from || now < to }
+}
+
+/// The sizes Settings offers, kept within what the layout is built for.
+fn valid_zoom(z: f64) -> bool {
+    z.is_finite() && (0.8..=1.3).contains(&z)
+}
+
+#[tauri::command]
+fn get_zoom(store: State<Store>) -> f64 {
+    store.data.lock().unwrap().zoom.unwrap_or(1.0)
+}
+
+#[tauri::command]
+fn set_zoom(app: AppHandle, store: State<Store>, factor: f64) -> Result<(), String> {
+    if !valid_zoom(factor) {
+        return Err("that size is not available".into());
+    }
+    let mut data = store.data.lock().unwrap();
+    data.zoom = Some(factor);
+    save(&store.file, &data)?;
+    if let Some(win) = app.get_webview_window("main") {
+        win.set_zoom(factor).map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 #[derive(Serialize)]
@@ -1195,7 +1222,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -1212,6 +1239,9 @@ fn main() {
                 fs::copy(&old, &file)?;
             }
             app.manage(Store { data: Mutex::new(load(&file)), file });
+            if let (Some(z), Some(win)) = (app.state::<Store>().data.lock().unwrap().zoom.filter(|z| valid_zoom(*z)), app.get_webview_window("main")) {
+                let _ = win.set_zoom(z);
+            }
             app.manage(Widget::default());
             app.manage(SyncState::default());
 
@@ -1284,6 +1314,12 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_sensible_sizes_are_accepted() {
+        assert!(valid_zoom(1.0) && valid_zoom(0.9) && valid_zoom(1.25));
+        assert!(!valid_zoom(0.5) && !valid_zoom(3.0) && !valid_zoom(f64::NAN) && !valid_zoom(f64::INFINITY));
+    }
 
     #[test]
     fn quiet_hours_run_over_midnight_too() {

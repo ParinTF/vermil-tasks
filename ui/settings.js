@@ -3,6 +3,8 @@
 // before first paint), other preferences in "prefs" (also theme.js); startup, quiet hours and the like live in the backend.
 const ACCENTS = [['Vermilion', '#ff4a1c'], ['Orange', '#e8590c'], ['Amber', '#b97f00'], ['Green', '#1f9d55'], ['Teal', '#0e8f9c'], ['Blue', '#3b82f6'], ['Indigo', '#6366f1'], ['Violet', '#8b5cf6'], ['Pink', '#e5489b'], ['Graphite', '#6b7280']];
 let lastView = 'home'; // where Esc and Back return to
+let sizeNow = 1; // the window's zoom, kept by the backend
+invoke('get_zoom').then((z) => { sizeNow = z; });
 
 function setLook(change) {
   const look = normalLook({ ...storedLook(), ...change });
@@ -74,6 +76,7 @@ function appearanceSection() {
     stRow('Font', ...fontOpts),
     fontName,
     el('p', { className: 'st-preview' }, el('b', {}, 'Your day, in one place'), ' The quick brown fox jumps over the lazy dog. ', el('span', {}, 'ตัวอย่างข้อความภาษาไทย 0123456789')),
+    stRow('Size', stPicker('Size', [['0.9', '90%'], ['1', '100%'], ['1.1', '110%'], ['1.25', '125%']], String(sizeNow), (v) => { sizeNow = Number(v); invoke('set_zoom', { factor: sizeNow }).then(renderSettings, (e) => tell('Could not change the size: ' + e)); })),
     stRow('Motion', stPicker('Motion', [['', 'Follow Windows'], ['off', 'Off']], p.motion, (v) => { setPrefs({ motion: v }); renderSettings(); })),
     stRow('Top ticker', stPicker('Top ticker', [['on', 'Show'], ['off', 'Hide']], p.ticker ? 'on' : 'off', (v) => { setPrefs({ ticker: v === 'on' }); renderSettings(); })),
     reset);

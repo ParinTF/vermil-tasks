@@ -7,6 +7,7 @@ How Vermil looks. Open it with **Settings** in the top bar or `Ctrl+,` (press ag
 - **Theme**: Auto (follows Windows), Light or Dark. The button in the top bar does the same.
 - **Accent colour**: ten ready colours or your own. The accent marks the one thing that matters in a view, so Vermil keeps it readable: a colour that is too pale or too dark on light or dark paper is moved to the nearest one that is, and it says so. Text on the accent and small accent text are recomputed to stay legible in both themes.
 - **Font**: Anuphan (bundled, the default), Windows (Segoe UI), Serif, Mono, or **Other**: type the name of any font installed on your computer. Thai text always falls back to Anuphan, so it never turns into boxes. If the name is not installed, Vermil keeps Anuphan.
+- **Size**: 90%, 100%, 110% or 125% for everything (like the browser zoom, kept by Vermil and applied at start). Wide sizes keep the fixed layout; 125% on a small screen may switch to the one-column layout.
 - **Motion**: follow Windows, or switch animations off.
 - **Top ticker**: show or hide the line of words under the top bar.
 - **Reset the look** puts the colour and font back.
