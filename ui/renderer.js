@@ -140,9 +140,12 @@ function pendingItem(t) {
     ? el('span', { className: 'tick', ariaHidden: 'true' }, '↻')
     : el('input', { type: 'checkbox', ariaLabel: 'Mark done: ' + t.title });
   const edit = el('button', { type: 'button', className: 'act-edit', textContent: 'Edit' });
+  const pin = el('button', { type: 'button', className: 'act-pin', textContent: t.pinned ? 'Unpin' : 'Pin' });
+  pin.onclick = () => commit(todos.map((x) => (x.id === t.id ? { ...x, pinned: !t.pinned } : x)));
+  const title = el('span', { className: 'title' }, ...(t.pinned ? [el('i', { className: 'pin-dot', title: 'Pinned' })] : []), t.title);
   const li = el('li', { className: 'item' + (later ? ' later' : ''), id: 'r-' + t.id }, lead,
-    el('div', {}, el('span', { className: 'title' }, t.title), meta, notesBlock(t)),
-    el('div', { className: 'tools' }, edit, removeButton(t)));
+    el('div', {}, title, meta, notesBlock(t)),
+    el('div', { className: 'tools' }, pin, edit, removeButton(t)));
   lead.onchange = () => {
     lead.disabled = true;
     li.classList.add('done'); // let the strike-through land before the row leaves
@@ -206,7 +209,8 @@ function renderMarquee(done) {
 
 function render(enter = false) {
   const byDue = (a, b) => (a.due || '9').localeCompare(b.due || '9'); // dated first, soonest on top
-  const open = todos.filter((t) => !t.done && !isLater(t)).sort(byDue);
+  const byPin = (a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || byDue(a, b); // pinned first, then soonest due
+  const open = todos.filter((t) => !t.done && !isLater(t)).sort(byPin);
   const later = todos.filter((t) => !t.done && isLater(t)).sort(byDue);
   // imported data may lack completedAt
   const done = todos.filter((t) => t.done).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
@@ -362,6 +366,7 @@ const SHORTCUTS = [
   '↑ ↓: select a task',
   'Space: mark done (in History: restore)',
   'E: edit the selected task',
+  'P: pin or unpin the selected task',
   'Delete: delete the selected task',
   'N: new task',
   'Ctrl+F: search',
@@ -425,6 +430,7 @@ addEventListener('keydown', (e) => {
   const press = (selector) => { if (row) { e.preventDefault(); row.querySelector(selector)?.click(); } };
   if (e.code === 'Space' && !t.matches('button, summary, input, a')) press('input[type=checkbox], .act-restore');
   else if (e.code === 'KeyE') press('.act-edit');
+  else if (e.code === 'KeyP') press('.act-pin');
   else if (e.key === 'Delete') press('.act-del');
   else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
   else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(SHORTCUTS); }

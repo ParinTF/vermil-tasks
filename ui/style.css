@@ -181,6 +181,7 @@ input[type=checkbox]:checked { border-color: var(--accent); background: var(--ac
 /* the row picked with the arrow keys: an accent bar in the gutter, its buttons shown */
 .item.sel::before { content: ""; position: absolute; left: -12px; top: 16px; bottom: 16px; width: 3px; background: var(--accent); }
 .item.sel .tools { opacity: 1; }
+.pin-dot { display: inline-block; width: 8px; height: 8px; margin-right: 10px; border-radius: 50%; background: var(--accent); vertical-align: .12em; }
 @media (max-width: 859.98px) { .item { scroll-margin-top: 72px; } } /* clear of the sticky top bar */
 .item.later .tick { color: var(--ink); }
 .check { display: flex; align-items: center; gap: 12px; font-size: 15px; font-weight: 500; cursor: pointer; }
