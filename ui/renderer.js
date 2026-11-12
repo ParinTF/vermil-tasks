@@ -1188,7 +1188,7 @@ function paletteResults(q) {
     go('Modules…', 'Ctrl+,', openModules),
     ...commandHooks.flatMap((f) => f()),
     go('Switch theme', 'T', () => $('theme').click()),
-    go('Keyboard shortcuts', '?', () => tell(shortcutText())),
+    go('Keyboard shortcuts', '?', openShortcuts),
   ];
   if (!q.trim()) return commands;
   const found = [
@@ -1247,35 +1247,60 @@ $('pal-q').onkeydown = (e) => {
 $('pal').onclick = (e) => { if (e.target === $('pal')) $('pal').close(); }; // the backdrop
 
 // ── keyboard ──
-const SHORTCUTS = [
-  '↑ ↓: select a task',
-  'Space: mark done (in History: restore)',
-  'E: edit the selected task',
-  'P: pin or unpin the selected task',
-  'F: focus timer on the selected task (module)',
-  "O: open the selected task's note",
-  'Delete: delete the selected task',
-  'N: new task',
-  'T: switch theme (auto, light, dark)',
-  'Ctrl+K: command palette (search everything, run a command)',
-  'Ctrl+1, 2, 3: Tasks, Notes, Calendar (Ctrl+4 and up: views of switched-on modules)',
-  'Ctrl+, : switch optional modules on or off',
-  'Ctrl+N (in Notes): new note',
-  'In a note: Ctrl+B bold, Ctrl+Shift+L checklist, Ctrl+Enter tick an item',
-  'In Calendar: arrows move a day, PageUp and PageDown a month, T today, Enter adds a task',
-  'In Calendar: drag a task to another day, or Alt+arrows on it',
-  'In Calendar: D hour-by-hour day view, M month; drag a block to move it, its bottom edge to resize, Alt+Up/Down (Shift to resize)',
-  '1 2 3 4: To do, Today, Week, History',
-  'Ctrl+Alt+T (from anywhere): quick add',
-  'Ctrl+Alt+J (in quick add): due date',
-  'Ctrl+Alt+N (from anywhere): quick note or link, saved to Notes',
-  'Ctrl+Alt+N (in quick add): switch between task and note',
-  'Ctrl+F: search',
-  'Ctrl+Z: undo',
-  'Esc: leave a field, cancel editing',
-  '?: show this list',
-].join('\n');
-const shortcutText = () => (quickTaken ? 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.\n\n' : '') + SHORTCUTS;
+// The shortcut list: groups of [keys, what]. keys is one combo ("Ctrl+K") or alternatives (["↑", "↓"]).
+// A module adds its own group in start() and takes it out in stop().
+const shortcutGroups = [
+  { title: 'Everywhere', items: [
+    ['Ctrl+1', 'Tasks'], ['Ctrl+2', 'Notes'], ['Ctrl+3', 'Calendar'],
+    ['Ctrl+K', 'Command palette: search, run a command'],
+    ['Ctrl+,', 'Modules: switch features on or off'],
+    ['Ctrl+Alt+T', 'Quick add a task, from any app'],
+    ['Ctrl+Alt+N', 'Quick note or link, from any app'],
+    ['?', 'This list'],
+  ] },
+  { title: 'Tasks', items: [
+    [['↑', '↓'], 'Select a task'], ['Space', 'Mark done (in History: restore)'], ['E', 'Edit'], ['P', 'Pin or unpin'],
+    ['O', "Open the task's note"], ['Delete', 'Delete'], ['N', 'New task'], ['1–4', 'To do, Today, Week, History'],
+    ['Ctrl+F', 'Search'], ['Ctrl+Z', 'Undo'], ['T', 'Theme: auto, light, dark'], ['Esc', 'Leave a field, cancel editing'],
+  ] },
+  { title: 'Notes', items: [
+    ['Ctrl+N', 'New note'], ['Ctrl+F', 'Search notes'], [['↑', '↓'], 'Walk the list'], ['Delete', 'Delete the note'],
+    ['Ctrl+B', 'Bold'], ['Ctrl+Shift+L', 'Checklist'], ['Ctrl+Enter', 'Tick a checklist item'],
+  ] },
+  { title: 'Calendar', items: [
+    [['←', '→'], 'Previous or next day'], [['↑', '↓'], 'Previous or next week'], [['PageUp', 'PageDown'], 'Previous or next month'],
+    ['T', 'Today'], [['Enter', 'N'], 'Add a task on this day'], ['D', 'Hour-by-hour day view'], ['M', 'Month view'],
+    ['Alt+←/→/↑/↓', 'Move the focused task a day or a week'], ['Alt+↑/↓', 'In day view: move a block 15 min (with Shift: resize)'],
+  ] },
+  { title: 'Quick bar', items: [
+    ['Ctrl+Alt+J', 'Add a due date (or type it: "tomorrow 9am")'], ['Ctrl+Alt+N', 'Switch between task and note'],
+    ['Enter', 'Save'], ['Esc', 'Close'],
+  ] },
+];
+
+const keyChips = (combo) => el('span', { className: 'sk' }, ...combo.split('+').flatMap((k, i) => [...(i ? [el('i', { className: 'sk-plus' }, '+')] : []), el('kbd', { className: 'k' }, k)]));
+
+function openShortcuts() {
+  if (document.querySelector('dialog[open]')) return;
+  let dlg = $('keys');
+  if (!dlg) {
+    dlg = el('dialog', { id: 'keys', className: 'keys', ariaLabel: 'Keyboard shortcuts' });
+    dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+    document.body.append(dlg);
+  }
+  dlg.replaceChildren(
+    el('h2', {}, 'Keyboard shortcuts'),
+    ...(quickTaken ? [el('div', { className: 'keys-warn' }, 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.')] : []),
+    el('div', { className: 'keys-grid' }, ...shortcutGroups.map((g) => el('section', {}, el('h3', {}, g.title),
+      el('ul', {}, ...g.items.map(([keys, what]) => el('li', {},
+        el('span', { className: 'sk-keys' }, ...[].concat(keys).flatMap((k, i) => [...(i ? [el('i', { className: 'sk-or' }, 'or')] : []), keyChips(k)])),
+        el('span', {}, what))))))),
+    el('div', { className: 'actions' }, el('button', { type: 'button', className: 'ghost', onclick: () => dlg.close() }, 'Close')));
+  dlg.tabIndex = -1;
+  dlg.showModal();
+  dlg.focus(); // the focus would otherwise jump to Close at the bottom and scroll there
+  dlg.scrollTop = 0;
+}
 const isField = (n) => n.isContentEditable || n.matches('textarea, select, input:not([type=checkbox]):not([type=button])');
 const rowEls = () => [...$('list').querySelectorAll('.item')];
 
@@ -1343,9 +1368,9 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Delete') press('.act-del');
   else if (e.code === 'KeyT') $('theme').click();
   else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
-  else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(shortcutText()); }
+  else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); openShortcuts(); }
 });
-$('shortcuts').onclick = () => tell(shortcutText());
+$('shortcuts').onclick = openShortcuts;
 
 // If another program owns Ctrl+Alt+T, the Shortcuts button gets an accent dot and its list says so. A message in the
 // footer would make it wrap. The backend retries for a few seconds after launch, so ask after that.

@@ -431,6 +431,22 @@ dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
 .mod-about { grid-column: 2; color: var(--mute); font-size: 13px; line-height: 1.4; }
 .mods .actions { margin-top: 22px; }
 
+/* ── keyboard shortcuts list ── */
+dialog.keys { width: min(880px, calc(100vw - 48px)); max-height: calc(100vh - 48px); padding: 26px 32px 22px; overflow-y: auto; }
+dialog.keys:focus { outline: 0; }
+dialog.keys h2 { margin: 0; font-size: 26px; font-weight: 700; }
+.keys-warn { margin-top: 10px; font-size: 13px; color: var(--accent-text); }
+.keys-grid { columns: 2 330px; column-gap: 56px; margin-top: 14px; }
+.keys-grid section { break-inside: avoid; margin-bottom: 18px; }
+.keys-grid h3 { margin: 0 0 4px; padding-bottom: 8px; border-bottom: 1px solid var(--ink); font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.keys-grid ul { margin: 0; padding: 0; list-style: none; }
+.keys-grid li { display: grid; grid-template-columns: minmax(130px, 42%) minmax(0, 1fr); gap: 14px; align-items: baseline; padding: 4px 0; border-bottom: 1px solid var(--line); font-size: 13px; line-height: 1.35; }
+kbd.k { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); border-bottom-width: 2px; border-radius: 4px; background: color-mix(in srgb, var(--ink) 5%, transparent); font: inherit; font-size: 12px; font-weight: 600; text-align: center; color: var(--ink); }
+.sk-plus { margin: 0 3px; font-style: normal; color: var(--mute); }
+.sk-or { margin: 0 7px; font-size: 12px; font-style: normal; color: var(--mute); }
+.sk-keys { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0; }
+.sk { white-space: nowrap; }
+
 /* ── motion ── */
 @keyframes rise { from { transform: translateY(105%); } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(18px); } }
