@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -274,6 +274,7 @@ test('money helpers', () => {
   assert.equal(parseAmount(''), null);
   assert.equal(parseAmount('0'), null);
   assert.equal(parseAmount('abc'), null);
+  assert.equal(parseAmount('-5'), null); // never quietly turned positive
   assert.equal(moneyLabel(1250.5, '฿'), '฿1,250.50');
   assert.equal(moneyLabel(120, '฿'), '฿120');
 });
@@ -526,4 +527,31 @@ test('travel: days, state and packing', () => {
   assert.deepEqual(tripState(trip, '2026-12-08'), { kind: 'after', days: 3 });
   assert.deepEqual(packingProgress([{ done: true }, { done: false }, { done: true }]), { done: 2, total: 3 });
   assert.ok(PACKING_TEMPLATES.Essentials.includes('Passport or ID'));
+});
+
+test('time tracker: durations, ranges and the report', () => {
+  assert.equal(secondsBetween('2026-11-12T09:00:00', '2026-11-12T10:02:05'), 3725);
+  assert.equal(secondsBetween('2026-11-12T10:00:00', '2026-11-12T09:00:00'), 0); // never negative
+  assert.equal(clockHMS(3725), '1:02:05');
+  assert.equal(clockHMS(59), '0:00:59');
+  assert.equal(hoursLabel(3725), '1 h 02 min');
+  assert.equal(hoursLabel(90), '2 min');
+  assert.equal(hoursLabel(20), '1 min'); // real time is never "0 min"
+  assert.equal(hoursLabel(0), '0 min');
+  assert.deepEqual(timeRange('week', '2026-11-12'), { since: '2026-11-09', until: '2026-11-15' });
+  assert.deepEqual(timeRange('month', '2026-11-12'), { since: '2026-11-01', until: '2026-11-30' });
+  assert.deepEqual(timeRange('lastmonth', '2026-11-12'), { since: '2026-10-01', until: '2026-10-31' });
+  assert.deepEqual(timeRange('lastmonth', '2026-01-05'), { since: '2025-12-01', until: '2025-12-31' });
+  const projects = [{ id: 'a', name: 'Site', client: 'Acme', rate: 600 }, { id: 'b', name: 'Admin', client: '', rate: 0 }];
+  const entries = [
+    { project: 'a', start: '2026-11-10T09:00:00', end: '2026-11-10T11:30:00' }, // 2.5 h
+    { project: 'a', start: '2026-11-11T13:00:00', end: '2026-11-11T14:00:00' }, // 1 h
+    { project: 'b', start: '2026-11-11T08:00:00', end: '2026-11-11T08:30:00' },
+    { project: 'a', start: '2026-10-30T09:00:00', end: '2026-10-30T10:00:00' }, // outside
+    { project: 'gone', start: '2026-11-12T09:00:00', end: '2026-11-12T09:10:00' },
+  ];
+  const r = timeReport(entries, projects, '2026-11-09', '2026-11-15');
+  assert.deepEqual(r.rows.map((x) => [x.name, x.seconds, x.amount]), [['Site', 12600, 2100], ['Admin', 1800, 0], ['Deleted project', 600, 0]]);
+  assert.deepEqual([r.seconds, r.amount], [15000, 2100]);
+  assert.deepEqual(timeReport([], projects, '2026-11-09', '2026-11-15'), { rows: [], seconds: 0, amount: 0 });
 });

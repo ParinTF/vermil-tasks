@@ -282,7 +282,8 @@ function focusSummary(sessions, today) {
 }
 
 // ── money (the expenses module): amounts are summed in whole cents so 0.1 + 0.2 stays 0.3 ──
-function parseAmount(text) { // "1,250.50", "฿120" -> a number above 0 with at most 2 decimals, else null
+function parseAmount(text) { // "1,250.50", "฿120" -> a number above 0 with at most 2 decimals, else null (a minus sign is not an amount)
+  if (String(text).includes('-')) return null;
   const n = Number(String(text).replace(/[^\d.]/g, ''));
   return Number.isFinite(n) && n > 0 && n < 1e9 ? Math.round(n * 100) / 100 : null;
 }
@@ -582,4 +583,37 @@ function tripState(trip, today) {
 
 const packingProgress = (items) => ({ done: items.filter((i) => i.done).length, total: items.length });
 
-if (typeof module !== 'undefined') module.exports = { PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── time tracker: an entry is { project, desc, start, end } (ISO times); a project is { id, name, client, rate (per hour) } ──
+const secondsBetween = (start, end) => Math.max(0, Math.round((new Date(end) - new Date(start)) / 1000));
+
+// 3725 -> "1:02:05"
+const clockHMS = (sec) => `${Math.floor(sec / 3600)}:${String(Math.floor(sec % 3600 / 60)).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+
+// 3725 -> "1 h 02 min", 90 -> "2 min" (rounded to the minute, never "0 min" for real time)
+function hoursLabel(sec) {
+  const m = Math.max(sec > 0 ? 1 : 0, Math.round(sec / 60));
+  return m >= 60 ? `${Math.floor(m / 60)} h ${String(m % 60).padStart(2, '0')} min` : `${m} min`;
+}
+
+// the first and last day of a week (Monday first), this month or last month around `today`
+function timeRange(kind, today) {
+  if (kind === 'week') { const w = weekDays(today); return { since: w[0], until: w[6] }; }
+  const [y, m] = today.split('-').map(Number);
+  const first = (yy, mm) => localDay(new Date(yy, mm, 1));
+  const last = (yy, mm) => localDay(new Date(yy, mm + 1, 0));
+  return kind === 'lastmonth' ? { since: first(y, m - 2), until: last(y, m - 2) } : { since: first(y, m - 1), until: last(y, m - 1) };
+}
+
+// per project: seconds and what it earns at its hourly rate, for entries that started within [since, until]
+function timeReport(entries, projects, since, until) {
+  const by = new Map();
+  for (const e of entries) {
+    const day = localDay(new Date(e.start));
+    if (day < since || day > until) continue;
+    by.set(e.project, (by.get(e.project) || 0) + secondsBetween(e.start, e.end));
+  }
+  const rows = [...by].map(([id, seconds]) => { const p = projects.find((x) => x.id === id); return { id, name: p ? p.name : 'Deleted project', client: p ? p.client : '', seconds, amount: p && p.rate ? Math.round(seconds / 3600 * p.rate * 100) / 100 : 0 }; }).sort((a, b) => b.seconds - a.seconds);
+  return { rows, seconds: rows.reduce((n, r) => n + r.seconds, 0), amount: Math.round(rows.reduce((n, r) => n + r.amount * 100, 0)) / 100 };
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
