@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -498,4 +498,19 @@ test('people: birthdays and staying in touch', () => {
   assert.deepEqual(touchState({ every: 30, last: '2026-10-13' }, '2026-11-12'), { due: true, since: 30 }); // exactly the interval
   assert.deepEqual(touchState({ every: 14 }, '2026-11-12'), { due: true, since: null }); // never contacted
   assert.deepEqual(touchState({ every: 0, last: '2026-01-01' }, '2026-11-12'), { due: false, since: 315 }); // no interval: never due
+});
+
+test('bills: quarters, totals and state', () => {
+  assert.equal(addCycle('2026-11-30', 'quarter', 30), '2027-02-28');
+  assert.equal(addCycle('2026-01-15', 'quarter', 15), '2026-04-15');
+  const bills = [
+    { name: 'Electricity', paid: [{ day: '2026-01-10', amount: 800.5 }, { day: '2026-02-10', amount: 900 }, { day: '2025-12-10', amount: 700 }] },
+    { name: 'Water', paid: [{ day: '2026-03-01', amount: 150 }] },
+    { name: 'Internet', paid: [] },
+  ];
+  assert.deepEqual(paidTotals(bills, 2026), { per: [{ name: 'Electricity', total: 1700.5 }, { name: 'Water', total: 150 }], total: 1850.5 });
+  assert.deepEqual(paidTotals([], 2026), { per: [], total: 0 });
+  assert.deepEqual(billState({ next: '2026-11-10' }, '2026-11-12'), { kind: 'overdue', days: 2 });
+  assert.deepEqual(billState({ next: '2026-11-12' }, '2026-11-12'), { kind: 'today', days: 0 });
+  assert.deepEqual(billState({ next: '2026-11-15' }, '2026-11-12'), { kind: 'later', days: 3 });
 });

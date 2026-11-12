@@ -387,7 +387,7 @@ function budgetStatus(spent, limit) {
 function addCycle(day, cycle, anchor) {
   const d = parseDay(day);
   if (cycle === 'week') return shiftDay(day, 7);
-  const months = cycle === 'year' ? 12 : 1;
+  const months = cycle === 'year' ? 12 : cycle === 'quarter' ? 3 : 1;
   const y = d.getFullYear() + Math.floor((d.getMonth() + months) / 12);
   const m = (d.getMonth() + months) % 12;
   const last = new Date(y, m + 1, 0).getDate();
@@ -548,4 +548,14 @@ function touchState(p, today) {
   return { due: since === null || since >= p.every, since };
 }
 
-if (typeof module !== 'undefined') module.exports = { birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── bills: a bill is { name, cycle: 'month' | 'quarter' | 'year' | 'once', next, amount, paid: [{ day, amount }] } ──
+// what was paid in a year, per bill and in all
+function paidTotals(bills, year) {
+  const per = bills.map((b) => ({ name: b.name, total: Math.round(b.paid.filter((p) => p.day.startsWith(String(year))).reduce((n, p) => n + p.amount * 100, 0)) / 100 })).filter((x) => x.total > 0).sort((a, b) => b.total - a.total);
+  return { per, total: Math.round(per.reduce((n, x) => n + x.total * 100, 0)) / 100 };
+}
+
+// how a bill stands: overdue by n days, due today, or due in n days
+const billState = (b, today) => { const n = daysUntil(b.next, today); return n < 0 ? { kind: 'overdue', days: -n } : n === 0 ? { kind: 'today', days: 0 } : { kind: 'later', days: n }; };
+
+if (typeof module !== 'undefined') module.exports = { paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
