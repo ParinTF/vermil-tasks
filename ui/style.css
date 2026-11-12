@@ -63,7 +63,14 @@ button { cursor: pointer; }
 .brand span { font-weight: 400; }
 .brand small { margin-left: 12px; font-size: 12px; font-weight: 400; letter-spacing: .04em; text-transform: none; color: var(--mute); }
 .eyebrow, .field, #list h2 { text-transform: uppercase; }
-.views { display: flex; align-self: stretch; gap: 22px; margin-right: auto; }
+.views { display: flex; flex: 1 1 0; min-width: 0; align-self: stretch; gap: 22px; margin-right: 12px; }
+.views button { flex: none; white-space: nowrap; }
+.views .views-more-btn { margin-left: auto; font-size: 13px; }
+#today, .theme { flex: none; white-space: nowrap; }
+.views-menu { position: fixed; z-index: 30; min-width: 190px; max-height: calc(100vh - 80px); padding: 6px 0; overflow-y: auto; border: 1px solid var(--ink); background: var(--paper); box-shadow: 0 12px 40px color-mix(in srgb, var(--ink) 25%, transparent); }
+.views-menu button { display: flex; justify-content: space-between; gap: 24px; width: 100%; padding: 9px 16px; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; text-align: left; color: var(--ink); cursor: pointer; }
+.views-menu button small { font-size: 11px; font-weight: 500; letter-spacing: .04em; text-transform: none; color: var(--mute); }
+.views-menu button:hover, .views-menu button:focus-visible { background: color-mix(in srgb, var(--ink) 8%, transparent); outline: 0; }
 .views button { position: relative; padding: 0; border: 0; background: none; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
 .views button:hover, .views button[aria-selected="true"] { color: var(--ink); }
 .views button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); }
@@ -222,6 +229,8 @@ input[type=checkbox]:checked { border-color: var(--accent); background: var(--ac
 
 #list h2 { margin: 40px 0 0; padding-bottom: 10px; border-bottom: 1px solid var(--ink); font-size: 13px; font-weight: 600; letter-spacing: .1em; color: var(--mute); }
 .empty { padding: 56px 0; font-size: clamp(30px, 4.4vw, 60px); font-weight: 700; line-height: 1.2; color: color-mix(in srgb, var(--ink) 18%, transparent); }
+/* the big empty-state headline is for the Tasks list; a module's hint is a sentence, so it reads as one (and stays readable in both themes) */
+main[id$="-view"]:not(#tasks-view) .empty { padding: 28px 0; font-size: clamp(17px, 1.7vw, 22px); font-weight: 600; line-height: 1.4; color: var(--mute); }
 
 .foot {
   display: flex; flex-wrap: wrap; align-items: center; gap: 12px 28px;
@@ -327,8 +336,8 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 #note-body h4 { margin: 0; font-size: 12.5px; font-weight: 400; line-height: 1.6; }
 #note-body b { font-weight: 700; }
 #note-body ul.check { margin: 0; padding: 0; list-style: none; }
-#note-body ul.check li { position: relative; min-height: 1.7em; padding-left: 34px; }
-#note-body ul.check li::before { content: ""; position: absolute; left: 4px; top: .42em; box-sizing: border-box; width: 18px; height: 18px; border: 2px solid var(--ink); border-radius: 50%; cursor: pointer; }
+#note-body ul.check li { position: relative; padding-left: 34px; line-height: 1.7; }
+#note-body ul.check li::before { content: ""; position: absolute; left: 4px; top: calc((1.7em - 18px) / 2); box-sizing: border-box; width: 18px; height: 18px; border: 2px solid var(--ink); border-radius: 50%; cursor: pointer; }
 #note-body ul.check li[data-done="1"]::before { border-color: var(--accent); background: var(--accent); box-shadow: inset 0 0 0 3px var(--paper); }
 #note-body ul.check li[data-done="1"] { color: var(--mute); text-decoration: line-through; }
 #note-body[data-empty="1"]::before { content: attr(data-placeholder); position: absolute; top: 8px; left: 0; color: color-mix(in srgb, var(--ink) 25%, transparent); pointer-events: none; }
@@ -396,6 +405,9 @@ body.dragging, body.dragging * { cursor: grabbing !important; user-select: none;
 #cal-nodate { margin: 0; padding: 0; list-style: none; }
 #cal-nodate li { padding: 7px 0; border-bottom: 1px solid var(--line); }
 #cal-nodate .cal-open { font-size: 14px; }
+.cal-nodate-hint { margin: 8px 0 0 !important; font-size: 12px !important; color: var(--mute); }
+.cal-day.unschedule #cal-nodate-box { outline: 2px dashed var(--accent); outline-offset: 4px; background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tl-block.lifting { opacity: .55; }
 #cal-day-list time { font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; }
 #cal-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; margin-top: 18px; }
 #cal-new { grid-column: 1 / -1; }

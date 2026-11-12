@@ -217,7 +217,8 @@ async function setView(next) {
   await registry.notes?.leave?.(); // typing in a note is saved before the view changes
   view = next;
   for (const n of document.querySelectorAll('main[id$="-view"]')) n.hidden = n.id !== view + '-view';
-  for (const b of document.querySelectorAll('.views button')) b.ariaSelected = String(b.id === 'view-' + view);
+  for (const b of document.querySelectorAll('.views button[role=tab]')) b.ariaSelected = String(b.id === 'view-' + view);
+  if (typeof layoutTabs === 'function') layoutTabs(); // the tab you are on is always in the bar
   if (view === 'home') return renderHome();
   return registry[view]?.show?.(); // any other view belongs to its module
 }

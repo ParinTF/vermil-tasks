@@ -63,7 +63,7 @@ function renderTimeline(list) {
       const late = !t.done && new Date(t.due) < now;
       const box = el('button', {
         type: 'button', className: 'tl-block' + (t.done ? ' done' : late ? ' late' : ''),
-        style: `top:${start / 60 * HOUR_PX}px;height:${Math.max(22, (end - start) / 60 * HOUR_PX - 2)}px;left:calc(52px + (100% - 52px) * ${lane / n});width:calc((100% - 52px) / ${n} - 3px)`,
+        style: `top:${start / 60 * HOUR_PX}px;height:${Math.max(22, (end - start) / 60 * HOUR_PX - 1)}px;left:calc(52px + (100% - 52px) * ${lane / n});width:calc((100% - 52px) / ${n} - 3px)`,
       }, el('b', {}, t.title), el('time', {}, `${withTime('', start).slice(1)} – ${withTime('', end % 1440 || 1440 - 1).slice(1)}`));
       box.ariaLabel = `${t.title}, ${t.due.slice(11, 16)}, ${end - start} minutes`;
       box.onclick = () => showTask(t.id);
@@ -84,7 +84,7 @@ function renderTimeline(list) {
 
 function renderNoDate() {
   const open = todos.filter((t) => !t.done && !t.due);
-  $('cal-nodate-box').hidden = calMode !== 'day' || !open.length;
+  $('cal-nodate-box').hidden = calMode !== 'day';
   $('cal-nodate').replaceChildren(...open.map((t) => {
     const b = el('button', { type: 'button', className: 'cal-open' }, t.title);
     b.dataset.id = t.id; // drag it onto the timeline to give it a time
@@ -165,7 +165,7 @@ $('calendar-view').addEventListener('pointerdown', (e) => {
   const blk = e.button === 0 && e.target.closest('.tl-block[data-id]');
   if (blk) {
     const t = todos.find((x) => x.id === blk.dataset.id);
-    if (t) bdrag = { id: t.id, el: blk, resize: !!e.target.closest('.tl-grip'), y: e.clientY, start: minutesOf(t.due), len: taskMinutes(t), moved: false };
+    if (t) bdrag = { id: t.id, el: blk, resize: !!e.target.closest('.tl-grip'), x: e.clientX, y: e.clientY, start: minutesOf(t.due), len: taskMinutes(t), moved: false };
     return;
   }
   const src = e.button === 0 && e.target.closest('.cal-line[data-id], .cal-open[data-id]');
@@ -174,13 +174,16 @@ $('calendar-view').addEventListener('pointerdown', (e) => {
 addEventListener('pointermove', (e) => {
   if (bdrag) {
     const dy = e.clientY - bdrag.y;
-    if (!bdrag.moved && Math.abs(dy) < 5) return;
+    if (!bdrag.moved && Math.hypot(dy, e.clientX - bdrag.x) < 5) return; // a click is not a drag, in any direction
     bdrag.moved = true;
     document.body.classList.add('dragging');
+    bdrag.off = !bdrag.resize && !!document.elementFromPoint(e.clientX, e.clientY)?.closest('.cal-day'); // over the right column: let go to unschedule
+    document.querySelector('.cal-day').classList.toggle('unschedule', bdrag.off);
+    bdrag.el.classList.toggle('lifting', bdrag.off);
     const d = Math.round(dy / HOUR_PX * 4) * 15; // quarter hours
     if (bdrag.resize) {
       bdrag.newLen = Math.max(15, Math.min(1440 - bdrag.start, bdrag.len + d));
-      bdrag.el.style.height = Math.max(22, bdrag.newLen / 60 * HOUR_PX - 2) + 'px';
+      bdrag.el.style.height = Math.max(22, bdrag.newLen / 60 * HOUR_PX - 1) + 'px';
     } else {
       bdrag.newStart = Math.max(0, Math.min(1440 - bdrag.len, bdrag.start + d));
       bdrag.el.style.top = bdrag.newStart / 60 * HOUR_PX + 'px';
@@ -204,14 +207,16 @@ addEventListener('pointermove', (e) => {
 });
 addEventListener('pointerup', (e) => {
   if (bdrag) {
-    const { id, moved, newStart, newLen } = bdrag;
+    const { id, moved, newStart, newLen, off } = bdrag;
     bdrag = null;
     document.body.classList.remove('dragging');
+    document.querySelector('.cal-day')?.classList.remove('unschedule');
     if (!moved) return;
     dragged = true;
     setTimeout(() => { dragged = false; });
     const t = todos.find((x) => x.id === id);
-    if (newStart !== undefined && t) setSlot(id, { due: withTime(t.due.slice(0, 10), newStart) });
+    if (off) setSlot(id, { due: null }); // dropped on the list at the right: no day, no time
+    else if (newStart !== undefined && t) setSlot(id, { due: withTime(t.due.slice(0, 10), newStart) });
     else if (newLen !== undefined) setSlot(id, { minutes: newLen });
     else renderCalendar();
     return;
@@ -227,11 +232,11 @@ addEventListener('pointerup', (e) => {
   if (slot !== null) setSlot(id, { due: withTime(calDay, slot) });
   else if (cell) moveTask(id, cell.dataset.day);
 });
-addEventListener('pointercancel', () => { endDrag(); if (bdrag) { bdrag = null; document.body.classList.remove('dragging'); renderCalendar(); } });
+addEventListener('pointercancel', () => { endDrag(); if (bdrag) { bdrag = null; document.body.classList.remove('dragging'); document.querySelector('.cal-day')?.classList.remove('unschedule'); renderCalendar(); } });
 addEventListener('keydown', (e) => {
   if (e.key !== 'Escape') return;
   if (drag?.ghost) { e.stopPropagation(); endDrag(); }
-  else if (bdrag?.moved) { e.stopPropagation(); bdrag = null; document.body.classList.remove('dragging'); renderCalendar(); }
+  else if (bdrag?.moved) { e.stopPropagation(); bdrag = null; document.body.classList.remove('dragging'); document.querySelector('.cal-day')?.classList.remove('unschedule'); renderCalendar(); }
 }, true);
 $('calendar-view').addEventListener('click', (e) => { if (dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
 

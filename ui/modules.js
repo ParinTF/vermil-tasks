@@ -58,12 +58,73 @@ function loadFile(tag, props) {
 function syncViews() {
   const want = ['home', ...MODULES.filter((m) => m.view && started.has(m.id)).map((m) => m.id)];
   VIEWS.splice(0, VIEWS.length, ...want);
+  const more = el('button', { className: 'views-more-btn', type: 'button', hidden: true, ariaHaspopup: 'menu', ariaExpanded: 'false' });
+  more.onclick = toggleTabMenu;
   document.querySelector('.views').replaceChildren(...want.map((id) => {
     const tab = el('button', { id: 'view-' + id, role: 'tab', type: 'button', ariaSelected: String(view === id) }, id === 'home' ? 'Home' : byId(id).view);
     tab.onclick = () => setView(id);
     return tab;
-  }));
+  }), more);
+  layoutTabs();
 }
+
+// With many modules on, the tab bar shows the tabs that fit (always Home and the one you are on) and puts the rest in a
+// More menu, so the bar never overflows however many are installed.
+function layoutTabs() {
+  const bar = document.querySelector('.views');
+  const more = bar?.querySelector('.views-more-btn');
+  if (!more) return;
+  closeTabMenu();
+  const tabs = [...bar.querySelectorAll('button[role=tab]')];
+  for (const t of tabs) t.hidden = false;
+  more.hidden = true;
+  const gap = parseFloat(getComputedStyle(bar).columnGap) || 22;
+  const widths = tabs.map((t) => t.offsetWidth);
+  const all = widths.reduce((n, w) => n + w + gap, -gap);
+  if (all <= bar.clientWidth) return;
+  more.textContent = `More ${tabs.length} ▾`; // measured at its widest, so the final count never pushes the bar over
+  more.hidden = false;
+  const room = bar.clientWidth - more.offsetWidth - gap;
+  const active = tabs.findIndex((t) => t.ariaSelected === 'true');
+  const keep = new Set(active >= 0 ? [active] : []);
+  let used = active >= 0 ? widths[active] : -gap;
+  for (let i = 0; i < tabs.length; i++) {
+    if (keep.has(i)) continue;
+    if (used + gap + widths[i] > room) break; // the tabs keep their order: stop at the first that does not fit
+    keep.add(i);
+    used += gap + widths[i];
+  }
+  tabs.forEach((t, i) => { t.hidden = !keep.has(i); });
+  const hidden = tabs.filter((t) => t.hidden).length;
+  more.textContent = `More ${hidden} ▾`;
+}
+
+let tabMenu = null;
+function closeTabMenu() {
+  tabMenu?.remove();
+  tabMenu = null;
+  document.querySelector('.views-more-btn')?.setAttribute('aria-expanded', 'false');
+}
+function toggleTabMenu() {
+  if (tabMenu) return closeTabMenu();
+  const btn = document.querySelector('.views-more-btn');
+  const items = [...document.querySelectorAll('.views button[role=tab]')].filter((t) => t.hidden);
+  tabMenu = el('div', { className: 'views-menu', role: 'menu' }, ...items.map((t) => {
+    const id = t.id.slice(5);
+    const b = el('button', { type: 'button', role: 'menuitem' }, t.textContent, el('small', {}, 'Ctrl+' + VIEWS.indexOf(id)));
+    b.onclick = () => { closeTabMenu(); setView(id); };
+    return b;
+  }));
+  const r = btn.getBoundingClientRect();
+  tabMenu.style.top = r.bottom + 'px';
+  tabMenu.style.left = Math.max(8, Math.min(r.left, innerWidth - 220)) + 'px';
+  document.body.append(tabMenu);
+  btn.setAttribute('aria-expanded', 'true');
+  tabMenu.querySelector('button')?.focus();
+}
+addEventListener('pointerdown', (e) => { if (tabMenu && !e.target.closest?.('.views-menu, .views-more-btn')) closeTabMenu(); });
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && tabMenu) { e.stopPropagation(); closeTabMenu(); document.querySelector('.views-more-btn')?.focus(); } }, true);
+new ResizeObserver(() => layoutTabs()).observe(document.querySelector('.views'));
 
 async function startModule(m) {
   if (started.has(m.id)) return;

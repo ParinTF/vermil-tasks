@@ -204,15 +204,50 @@ function toggleChecklist() {
     let list = null;
     for (const b of blocks) {
       if (b.matches('ul.check')) { list = null; continue; }
-      if (!list) { list = document.createElement('ul'); list.className = 'check'; b.before(list); }
+      if (!list) {
+        const before = b.previousElementSibling;
+        if (before && before.matches('ul.check')) list = before; // right after a checklist: join it
+        else { list = document.createElement('ul'); list.className = 'check'; b.before(list); }
+      }
       list.append(convert(b, 'li'));
       b.remove();
+      const next = list.nextElementSibling;
+      if (next && next.matches('ul.check')) { list.append(...next.children); next.remove(); } // and one right after joins too
     }
   }
   if (editor().contains(keep[0]) && editor().contains(keep[2])) sel.setBaseAndExtent(...keep); else caretToEnd(editor());
   touchNote();
   syncFormat();
 }
+// Enter in a checklist item: whatever follows the caret and the lines below become plain text under the list
+function leaveChecklist(li) {
+  const sel = getSelection();
+  const ul = li.parentElement;
+  const p = document.createElement('p');
+  const tail = document.createRange();
+  if (sel.rangeCount && li.contains(sel.anchorNode)) tail.setStart(sel.anchorNode, sel.anchorOffset); else tail.setStart(li, li.childNodes.length);
+  tail.setEnd(li, li.childNodes.length);
+  p.append(tail.extractContents());
+  if (!p.textContent) p.replaceChildren(document.createElement('br')); // an empty paragraph needs a break to exist
+  if (!li.textContent && !li.querySelector('br')) li.append(document.createElement('br'));
+  const after = [...ul.children].slice([...ul.children].indexOf(li) + 1);
+  if (after.length) {
+    const rest = document.createElement('ul');
+    rest.className = 'check';
+    rest.append(...after);
+    ul.after(p, rest);
+  } else {
+    ul.after(p);
+  }
+  const caret = document.createRange();
+  caret.setStart(p, 0);
+  caret.collapse(true);
+  sel.removeAllRanges();
+  sel.addRange(caret);
+  touchNote();
+  syncFormat();
+}
+
 function toggleItem(li) {
   if (li.getAttribute('data-done') === '1') li.removeAttribute('data-done'); else li.setAttribute('data-done', '1');
   touchNote();
@@ -225,6 +260,10 @@ editor().addEventListener('input', (e) => { // a new line after a ticked item st
 });
 editor().addEventListener('keydown', (e) => {
   const mod = e.ctrlKey || e.metaKey;
+  if (e.key === 'Enter' && !mod && !e.shiftKey) { // Enter in a checklist ends the list and goes on in plain text
+    const li = caretElement()?.closest('ul.check > li');
+    if (li) { e.preventDefault(); leaveChecklist(li); return; }
+  }
   if (mod && ['KeyI', 'KeyU'].includes(e.code)) e.preventDefault(); // italic and underline are not kept
   if (mod && e.key === 'Enter') { const li = caretElement()?.closest('ul.check > li'); if (li) { e.preventDefault(); toggleItem(li); } }
   if (mod && e.shiftKey && e.code === 'KeyL') { e.preventDefault(); toggleChecklist(); }

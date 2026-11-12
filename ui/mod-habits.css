@@ -17,7 +17,7 @@
 .hb-streak { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--accent-text); }
 .hb-heat-box { margin-top: 26px; }
 .hb-heat-box h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
-.hb-heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 14px); grid-auto-columns: 14px; gap: 3px; width: max-content; max-width: 100%; overflow-x: auto; }
+.hb-heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 14px); grid-auto-columns: 14px; gap: 3px; width: max-content; max-width: calc(100% + 6px); padding: 3px; margin: -3px; overflow-x: auto; } /* room for the outline of today, which would be cut off at the edge */
 .hb-cell { display: block; width: 14px; height: 14px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .hb-cell[data-level="1"] { background: color-mix(in srgb, var(--ink) 28%, transparent); }
 .hb-cell[data-level="2"] { background: color-mix(in srgb, var(--ink) 48%, transparent); }
