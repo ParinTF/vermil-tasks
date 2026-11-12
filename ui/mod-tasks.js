@@ -444,6 +444,15 @@ addEventListener('resize', fitSide);
 
 
 defineModule('tasks', {
+  summary() {
+    const now = new Date();
+    const today = localDay(now);
+    const open = todos.filter((t) => !t.done && !isLater(t));
+    const overdue = open.filter((t) => t.due && new Date(t.due) < now).length;
+    const dueToday = open.filter((t) => t.due && t.due.slice(0, 10) === today && new Date(t.due) >= now).length;
+    return { label: 'Tasks', value: String(open.length), unit: open.length === 1 ? 'open task' : 'open tasks', warn: overdue > 0,
+      sub: [dueToday && `${dueToday} due today`, overdue && `${overdue} overdue`].filter(Boolean).join(' · ') || 'Nothing due today' };
+  },
   start() {
     shortcutGroups.push(tasksGroup);
     document.querySelector('.marquee').hidden = false;

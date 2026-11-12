@@ -133,6 +133,10 @@
   const commandFn = () => [{ label: 'Focus timer…', hint: 'F on a task', kind: 'Command', run: () => openFocus(selectedId || '') }];
 
   defineModule('pomodoro', {
+    summary() {
+      const s = focusSummary(data.sessions, localDay(new Date()));
+      return { label: 'Focus', value: minutesLabel(s.todayMin), unit: 'today', sub: `${s.todayCount} ${s.todayCount === 1 ? 'session' : 'sessions'} · ${minutesLabel(s.weekMin)} in 7 days` };
+    },
     async start() {
       data = { ...data, ...(moduleData.pomodoro || {}) };
       build();

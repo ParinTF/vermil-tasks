@@ -447,6 +447,17 @@ dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
 .mod-actions .primary { min-height: 0; padding: 11px 22px; font-size: 14px; }
 .mod-actions .linkish { font-size: 14px; }
 
+.dash { margin-bottom: 34px; }
+.dash h3 { margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.dash-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 0 28px; }
+.dash-tile { display: flex; flex-direction: column; gap: 4px; padding: 14px 0 16px; border: 0; border-top: 1px solid var(--ink); background: none; font: inherit; text-align: left; color: var(--ink); }
+button.dash-tile { cursor: pointer; }
+button.dash-tile:hover b { text-decoration: underline; text-underline-offset: 5px; }
+.dash-tile small { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.dash-tile b { font-size: clamp(22px, 2.3vw, 32px); font-weight: 700; letter-spacing: -.01em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.dash-tile b span { font-size: 13px; font-weight: 500; letter-spacing: 0; color: var(--mute); }
+.dash-tile em { font-size: 12.5px; font-style: normal; line-height: 1.4; color: var(--mute); }
+.dash-tile.warn em { color: var(--accent-text); }
 .bk { max-width: 760px; margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--ink); }
 .bk h3 { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
 .bk .check { font-size: 14px; gap: 10px; }

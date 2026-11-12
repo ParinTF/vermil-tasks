@@ -8,7 +8,7 @@
 // `static` marks a module whose <main> is already in index.html.
 // Hooks it may use: rowInfo.push(t => text) adds to a task row's details, rowTools.push(t => button) to its buttons,
 // commandHooks.push(() => [palette commands]), shortcutGroups.push({ module, title, items }); take them out again in stop().
-// Its data goes through saveModule(id, value) into the same data file.
+// Its data goes through saveModule(id, value) into the same data file. summary() returns { label, value, unit, sub, warn } for the Today strip on Home (or null).
 const MODULES = [
   { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
   { id: 'notes', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
@@ -111,10 +111,29 @@ function renderHome() {
       el('p', { className: 'home-sub' }, started.size
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
+    ...todayStrip(),
     el('div', { className: 'mod-grid' }, ...MODULES.map(card)),
     el('section', { className: 'bk', id: 'backup', ariaLabel: 'Backup' }, el('h3', {}, 'Backup'), el('div', { id: 'bk-body' })));
   paintBackup();
   if (focused) document.querySelector('#' + focused + ' button')?.focus();
+}
+
+// the Today strip: one tile per module that has something to say (a module that fails to summarise is skipped, not fatal)
+function todayStrip() {
+  const tiles = MODULES.filter((m) => started.has(m.id)).flatMap((m) => {
+    try {
+      const s = registry[m.id]?.summary?.();
+      if (!s) return [];
+      const tile = el(m.view ? 'button' : 'div', { type: 'button', className: 'dash-tile' + (s.warn ? ' warn' : ''), id: 'tile-' + m.id },
+        el('small', {}, s.label), el('b', {}, s.value, ...(s.unit ? [el('span', {}, ' ' + s.unit)] : [])), el('em', {}, s.sub || ''));
+      if (m.view) tile.onclick = () => setView(m.id);
+      return [tile];
+    } catch (e) {
+      console.error(m.id, 'summary', e);
+      return [];
+    }
+  });
+  return tiles.length ? [el('section', { className: 'dash', ariaLabel: 'Today' }, el('h3', {}, 'Today'), el('div', { className: 'dash-grid' }, ...tiles))] : [];
 }
 
 // Backup: one copy of all your data a week, in a folder you can point at OneDrive or a USB drive. Lives on Home because it covers every module.

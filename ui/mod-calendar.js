@@ -284,6 +284,13 @@ new ResizeObserver(() => { if (view === 'calendar') renderCalendar(); }).observe
 
 
 defineModule('calendar', {
+  summary() {
+    const now = new Date();
+    const next = todos.filter((t) => !t.done && t.due && new Date(t.due) >= now).sort((a, b) => a.due.localeCompare(b.due))[0];
+    if (!next) return null;
+    const day = next.due.slice(0, 10) === localDay(now) ? 'Today' : fmt(parseDay(next.due.slice(0, 10)), { weekday: 'short', day: 'numeric', month: 'short' });
+    return { label: 'Next up', value: next.title.length > 28 ? next.title.slice(0, 27) + '…' : next.title, unit: '', sub: `${day}, ${next.due.slice(11, 16)}` };
+  },
   start() { shortcutGroups.push(calGroup); },
   stop() { shortcutGroups.splice(shortcutGroups.indexOf(calGroup), 1); },
   show: renderCalendar,

@@ -344,6 +344,11 @@ addEventListener('blur', flushNote); // the window lost focus: do not leave typi
 
 
 defineModule('notes', {
+  summary() {
+    if (!notes.length) return null;
+    const last = [...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))[0];
+    return { label: 'Notes', value: String(notes.length), unit: notes.length === 1 ? 'note' : 'notes', sub: 'Latest: ' + (last.title || noteLine(last)).slice(0, 36) };
+  },
   start() { shortcutGroups.push(notesGroup); fillNoteLinks(); render(); }, // tasks gain the Linked note menu and Open buttons
   stop() { shortcutGroups.splice(shortcutGroups.indexOf(notesGroup), 1); fillNoteLinks(); render(); },
   show() { if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList(); },

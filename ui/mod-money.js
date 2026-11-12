@@ -126,6 +126,12 @@
   const commandFn = () => [{ label: 'Add expense', hint: 'Money', kind: 'Command', run: async () => { await setView('money'); $('mo-amount').focus(); } }];
 
   defineModule('money', {
+    summary() {
+      const today = localDay(new Date());
+      const spent = data.entries.filter((e) => e.day === today && e.kind === 'out').reduce((n, e) => n + Math.round(e.amount * 100), 0) / 100;
+      const month = moneyMonth(data.entries, today.slice(0, 7));
+      return { label: 'Spent today', value: money(spent), unit: '', sub: `${money(month.out)} this month` };
+    },
     start() {
       data = { ...data, ...(moduleData.money || {}) };
       build();
