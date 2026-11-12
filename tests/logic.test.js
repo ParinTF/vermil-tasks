@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -348,4 +348,13 @@ test('habits: day totals, heat levels and rates', () => {
   assert.equal(habitRate(a, log, '2026-11-14', 7), 29); // 2 of 7 days
   assert.equal(habitRate(b, log, '2026-11-14', 7), 100); // its one due day
   assert.equal(habitRate({ ...b, created: '2026-11-13' }, log, '2026-11-12', 7), null);
+});
+
+test('budgetStatus: ok under 80%, near from 80%, over from 100%', () => {
+  assert.deepEqual(budgetStatus(50, 100), { pct: 50, level: 'ok', left: 50 });
+  assert.deepEqual(budgetStatus(79.4, 100), { pct: 79, level: 'ok', left: 20.6 });
+  assert.deepEqual(budgetStatus(80, 100), { pct: 80, level: 'near', left: 20 });
+  assert.deepEqual(budgetStatus(100, 100), { pct: 100, level: 'over', left: 0 });
+  assert.deepEqual(budgetStatus(105, 100), { pct: 105, level: 'over', left: -5 });
+  assert.deepEqual(budgetStatus(10, 0), { pct: 0, level: 'ok', left: -10 }); // no limit set: never a warning
 });

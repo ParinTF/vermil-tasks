@@ -1,7 +1,7 @@
 // Expenses module: a month of spending and income by category, in its own view. Loaded only while the module is on.
 // Data: { cur: '฿', entries: [{ id, day, kind: 'out' | 'in', amount, cat, note }] }.
 (() => {
-  let data = { cur: '฿', entries: [] };
+  let data = { cur: '฿', entries: [], budgets: {}, alerted: {} }; // budgets: { category: monthly limit }, alerted: { month: { category: 80 or 100 } }
   let month = localDay(new Date()).slice(0, 7);
   let kind = 'out';
   // one tap fills the category; what you used before joins these, most used first
@@ -21,6 +21,7 @@
             el('button', { id: 'mo-now', className: 'linkish', type: 'button', textContent: 'This month', onclick: () => { month = localDay(new Date()).slice(0, 7); paint(); } }),
             el('button', { id: 'mo-next', className: 'linkish', type: 'button', ariaLabel: 'Next month', textContent: '›', onclick: () => shiftMonthBy(1) }))),
         el('div', { id: 'mo-sum', className: 'mo-sum' }),
+        el('ul', { id: 'mo-budget', className: 'mo-budget', ariaLabel: 'Budgets this month' }),
         el('ul', { id: 'mo-bars', className: 'mo-bars', ariaLabel: 'Spending by category' }),
         el('ul', { id: 'mo-list', className: 'mo-list', ariaLabel: 'Entries' }),
         el('div', { id: 'mo-none', className: 'empty', hidden: true }, 'Nothing recorded this month. Press N to add something.')),
@@ -37,8 +38,14 @@
           num('mo-note', 'Note', { maxLength: 120, autocomplete: 'off', placeholder: 'Optional' }),
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'mo-msg', className: 'mo-msg', role: 'status' })),
-        num('mo-cur', 'Currency symbol', { maxLength: 4, autocomplete: 'off' })));
+        num('mo-cur', 'Currency symbol', { maxLength: 4, autocomplete: 'off' }),
+        el('form', { id: 'mo-bform', className: 'mo-bform', onsubmit: setBudget },
+          el('div', { className: 'mo-bhead' }, 'Monthly budget'),
+          el('div', { className: 'mo-brow' }, el('input', { id: 'mo-bcat', maxLength: 30, autocomplete: 'off', placeholder: 'Category', ariaLabel: 'Budget category' }), el('input', { id: 'mo-blimit', inputMode: 'decimal', autocomplete: 'off', placeholder: 'Limit', ariaLabel: 'Monthly limit' }), el('button', { className: 'linkish', type: 'submit', textContent: 'Set' })),
+          el('div', { id: 'mo-bmsg', className: 'mo-msg', role: 'status' }),
+          el('ul', { id: 'mo-bedit', className: 'mo-bedit' }))));
     $('mo-cat').setAttribute('list', 'mo-cats');
+    $('mo-bcat').setAttribute('list', 'mo-cats');
     $('mo-cat').oninput = paintChips;
     paintChips();
     $('mo-cur').value = data.cur;
@@ -79,6 +86,7 @@
       cat: $('mo-cat').value.trim() || (kind === 'out' ? 'Other' : 'Income'), note: $('mo-note').value.trim(),
     };
     data.entries.push(entry);
+    checkBudget(entry);
     save();
     month = entry.day.slice(0, 7); // show where it went
     $('mo-amount').value = '';
@@ -88,6 +96,33 @@
     paintChips();
     paint();
     $('mo-amount').focus();
+  }
+
+  function setBudget(e) {
+    e.preventDefault();
+    const cat = $('mo-bcat').value.trim();
+    const limit = parseAmount($('mo-blimit').value);
+    if (!cat || limit === null) { $('mo-bmsg').textContent = 'Type a category and a limit above 0.'; return; }
+    data.budgets[cat] = limit;
+    save();
+    $('mo-bcat').value = '';
+    $('mo-blimit').value = '';
+    $('mo-bmsg').textContent = `${cat}: ${money(limit)} a month.`;
+    paint();
+  }
+
+  // a toast the first time a category reaches 80% and again at 100% of its budget in a month
+  function checkBudget(entry) {
+    const limit = data.budgets[entry.cat];
+    if (entry.kind !== 'out' || !limit) return;
+    const month = entry.day.slice(0, 7);
+    const spent = moneyMonth(data.entries, month).byCat.find((c) => c.cat === entry.cat)?.amount || 0;
+    const st = budgetStatus(spent, limit);
+    const level = st.level === 'over' ? 100 : st.level === 'near' ? 80 : 0;
+    const seen = (data.alerted[month] ||= {});
+    if (level <= (seen[entry.cat] || 0)) return;
+    seen[entry.cat] = level;
+    invoke('toast', { title: level === 100 ? `${entry.cat}: over budget` : `${entry.cat}: ${st.pct}% of budget`, text: `${money(spent)} of ${money(limit)} this month` }).catch(() => {});
   }
 
   async function remove(entry) {
@@ -117,6 +152,20 @@
         el('span', { className: 'mo-what' }, el('b', {}, en.cat), en.note ? ' · ' + en.note : ''),
         el('span', { className: 'mo-amt' + (en.kind === 'in' ? ' in' : '') }, (en.kind === 'in' ? '+' : '−') + money(en.amount)), del);
     }));
+    const spentBy = Object.fromEntries(s.byCat.map((c) => [c.cat, c.amount]));
+    $('mo-budget').replaceChildren(...Object.entries(data.budgets).map(([cat, limit]) => {
+      const st = budgetStatus(spentBy[cat] || 0, limit);
+      const fill = el('i', {});
+      fill.style.width = Math.min(100, st.pct) + '%';
+      const track = el('span', { className: 'mo-track' + (st.level === 'ok' ? '' : ' ' + st.level), ariaHidden: 'true' }, fill);
+      return el('li', { className: st.level }, el('span', { className: 'mo-cat' }, cat), track,
+        el('span', { className: 'mo-val' }, st.level === 'over' ? `over by ${money(-st.left)}` : `${money(spentBy[cat] || 0)} of ${money(limit)}${st.level === 'near' ? ' · almost' : ''}`));
+    }));
+    $('mo-bedit').replaceChildren(...Object.entries(data.budgets).map(([cat, limit]) => {
+      const del = el('button', { type: 'button', ariaLabel: 'Remove budget ' + cat, textContent: '✕' });
+      del.onclick = () => { delete data.budgets[cat]; save(); paint(); };
+      return el('li', {}, el('span', {}, cat), el('time', {}, money(limit)), del);
+    }));
     $('mo-none').hidden = s.list.length > 0;
     const used = [...new Set([...data.entries.map((e) => e.cat), ...DEFAULT_CATS])];
     $('mo-cats').replaceChildren(...used.map((c) => el('option', { value: c })));
@@ -130,10 +179,13 @@
       const today = localDay(new Date());
       const spent = data.entries.filter((e) => e.day === today && e.kind === 'out').reduce((n, e) => n + Math.round(e.amount * 100), 0) / 100;
       const month = moneyMonth(data.entries, today.slice(0, 7));
-      return { label: 'Spent today', value: money(spent), unit: '', sub: `${money(month.out)} this month` };
+      const over = Object.entries(data.budgets).filter(([cat, limit]) => budgetStatus(month.byCat.find((c) => c.cat === cat)?.amount || 0, limit).level === 'over').map(([cat]) => cat);
+      return { label: 'Spent today', value: money(spent), unit: '', warn: over.length > 0, sub: over.length ? `Over budget: ${over.join(', ')}` : `${money(month.out)} this month` };
     },
     start() {
       data = { ...data, ...(moduleData.money || {}) };
+      data.budgets = data.budgets || {};
+      data.alerted = data.alerted || {};
       build();
       paint();
       commandHooks.push(commandFn);

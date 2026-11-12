@@ -10,7 +10,22 @@
 .mo-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
 .mo-sum b { font-size: clamp(22px, 2.4vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .mo-sum .neg b { color: var(--accent-text); }
-.mo-bars, .mo-list { margin: 0; padding: 0; list-style: none; }
+.mo-bars, .mo-list, .mo-budget, .mo-bedit { margin: 0; padding: 0; list-style: none; }
+.mo-budget { margin-bottom: 18px; }
+.mo-budget:empty { display: none; }
+.mo-budget li { display: grid; grid-template-columns: minmax(70px, 130px) minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 4px 0; font-size: 13px; }
+.mo-budget li.over .mo-val, .mo-budget li.over .mo-cat { color: var(--accent-text); }
+.mo-track.near i { background: var(--accent-text); opacity: .7; }
+.mo-track.over i { background: var(--accent); }
+.mo-bform { display: grid; gap: 8px; margin-top: 30px; }
+.mo-bhead { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.mo-brow { display: grid; grid-template-columns: minmax(0, 1fr) 84px auto; gap: 12px; align-items: baseline; }
+.mo-brow input { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); }
+.mo-brow input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.mo-bedit li { display: grid; grid-template-columns: minmax(0, 1fr) auto 20px; gap: 12px; padding: 5px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.mo-bedit time { color: var(--mute); }
+.mo-bedit button { padding: 0; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; }
+.mo-bedit button:hover { color: var(--accent-text); }
 .mo-bars { margin-bottom: 22px; }
 .mo-bars li { display: grid; grid-template-columns: minmax(70px, 130px) minmax(0, 1fr) auto; align-items: center; gap: 14px; padding: 4px 0; font-size: 13px; }
 .mo-cat { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
