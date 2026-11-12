@@ -1,5 +1,15 @@
 const $ = (id) => document.getElementById(id);
-const { invoke } = window.__TAURI__.core;
+// The window can start a moment before the backend has loaded its data ("state not managed"): ask again for a few seconds.
+const invoke = async (cmd, args) => {
+  for (let i = 0; ; i++) {
+    try {
+      return await window.__TAURI__.core.invoke(cmd, args);
+    } catch (e) {
+      if (i >= 50 || !String(e).includes('not managed')) throw e;
+      await new Promise((r) => setTimeout(r, 100));
+    }
+  }
+};
 let todos = [];
 const TABS = ['pending', 'today', 'week', 'history'];
 let tab = 'pending';
@@ -56,7 +66,7 @@ async function commit(next, { undo = true } = {}) {
     undoStack.push(before);
     if (undoStack.length > 20) undoStack.shift();
   }
-  const apply = () => { todos = next; render(); if (view === 'calendar') renderCalendar(); };
+  const apply = () => { todos = next; render(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
   if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
   return true;
@@ -115,9 +125,9 @@ function notesBlock(t) {
     () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); },
     () => { copy.textContent = 'Copy failed'; });
   const open = el('button', { type: 'button', className: 'act-open', textContent: 'Open' });
-  open.onclick = async () => { await setView('notes'); await openNote(note.id, 'body'); };
+  open.onclick = async () => { await setView('notes'); await registry.notes.open(note.id, 'body'); };
   const box = el('details', { className: 'notes', open: openNotes.has(t.id) },
-    el('summary', {}, note.title ? `Note: ${note.title}` : 'Note'), el('pre', {}, note.body || 'Nothing written yet.'), ...(note.body ? [copy] : []), open);
+    el('summary', {}, note.title ? `Note: ${note.title}` : 'Note'), el('pre', {}, note.body || 'Nothing written yet.'), ...(note.body ? [copy] : []), ...(started.has('notes') ? [open] : [])); // Open needs the Notes module
   box.ontoggle = () => (box.open ? openNotes.add(t.id) : openNotes.delete(t.id));
   return box;
 }
@@ -376,7 +386,7 @@ $('form').onsubmit = async (e) => {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
     repeat: $('repeat').value || null,
-    noteId: created ? created.id : choice || null,
+    noteId: !started.has('notes') ? (todos.find((t) => t.id === editingId)?.noteId ?? null) : created ? created.id : choice || null, // without Notes the menu is hidden and the link stays as it was
   };
   const next = editingId
     // a new due date cancels a pending snooze, so the reminder follows the new time
@@ -386,7 +396,7 @@ $('form').onsubmit = async (e) => {
   await commit(next);
   if (created) {
     await setView('notes');
-    await openNote(created.id, 'body');
+    await registry.notes.open(created.id, 'body');
   }
 };
 $('cancel').onclick = resetForm;
@@ -480,7 +490,7 @@ $('theme').onclick = () => {
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();
 $('win-max').onclick = () => win.toggleMaximize();
-$('win-close').onclick = () => { flushNote(); win.close(); }; // the backend turns this into "hide to tray"
+$('win-close').onclick = () => { registry.notes?.flush?.(); win.close(); }; // the backend turns this into "hide to tray"
 
 // Offer new versions without interrupting: the button appears only when the release feed has one.
 let lastUpdateCheck = 0;
@@ -524,6 +534,7 @@ const NEW_NOTE = '__new'; // the form's "New note…" choice
 // the form's Linked note menu: None, a new note, then every note, newest edit first
 function fillNoteLinks() {
   const menu = $('note-link');
+  menu.closest('label').hidden = !started.has('notes'); // without the Notes module there is nothing to link to
   const keep = menu.value;
   menu.replaceChildren(el('option', { value: '' }, 'None'), el('option', { value: NEW_NOTE }, 'New note…'),
     ...[...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')).map((n) => el('option', { value: n.id }, (n.title || 'Untitled').slice(0, 48))));
@@ -543,631 +554,16 @@ async function showTask(id) {
   document.getElementById('r-' + id)?.scrollIntoView({ block: 'nearest' });
 }
 
-function renderNoteList() {
-  const items = visibleNotes();
-  const uses = new Map();
-  for (const t of todos) if (t.noteId) uses.set(t.noteId, (uses.get(t.noteId) || 0) + 1);
-  $('note-items').replaceChildren(...items.map((n) => {
-    const count = uses.get(n.id);
-    const progress = checkProgress(n.body);
-    const row = el('button', { type: 'button', className: 'note' + (n.id === selectedNoteId ? ' sel' : ''), id: 'note-' + n.id },
-      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n) + (progress.total ? ` · ${progress.done}/${progress.total} done` : '') + (count ? ` · ${count} ${count === 1 ? 'task' : 'tasks'}` : '')));
-    row.onclick = () => openNote(n.id, 'body');
-    return el('li', {}, row);
-  }));
-  $('note-none').hidden = items.length > 0 || !notes.length;
-  const cur = currentNote();
-  $('note-editor').hidden = !cur;
-  $('note-hint').hidden = !!cur;
-  $('note-hint').textContent = notes.length ? 'Pick a note.' : 'No notes yet. Press Ctrl+N to write one.';
-  if (cur) {
-    const when = cur.updatedAt ? fmt(cur.updatedAt, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
-    $('note-meta').textContent = (when ? `Edited ${when} · ` : '') + `${cur.body.length} characters`;
-  }
-  const linked = cur ? todos.filter((t) => t.noteId === cur.id) : [];
-  $('note-links').hidden = !linked.length;
-  $('note-link-list').replaceChildren(...linked.slice(0, 6).map((t) => {
-    const chip = el('button', { type: 'button', className: 'chip' + (t.done ? ' done' : '') }, t.title);
-    chip.onclick = () => showTask(t.id);
-    return chip;
-  }), ...(linked.length > 6 ? [el('span', {}, `+${linked.length - 6} more`)] : []));
-  fillNoteLinks();
-}
-
-// ── rich text: a note keeps a few formats (bold, four sizes, six colours) and nothing else ──
-const SIZE_TAG = { small: 'h4', normal: 'p', large: 'h2', title: 'h1' };
-// block elements the editor knows how to keep, and what they become: a div, a list item or a quote is a paragraph
-const NOTE_BLOCKS = { P: 'p', DIV: 'p', LI: 'p', PRE: 'p', BLOCKQUOTE: 'p', H1: 'h1', H2: 'h2', H3: 'h2', H4: 'h4', H5: 'h4', H6: 'h4' };
-const editor = () => $('note-body');
-
-// Rebuilds untrusted HTML (typed, pasted, loaded from a backup) out of the few elements and attributes the editor
-// knows. Anything else is unwrapped and keeps its text; scripts and the like go with their content.
-function cleanInto(source, target) {
-  for (const node of [...source.childNodes]) {
-    if (node.nodeType === Node.TEXT_NODE) { target.append(node.textContent); continue; }
-    if (node.nodeType !== Node.ELEMENT_NODE) continue;
-    const tag = node.tagName;
-    if (['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'NOSCRIPT'].includes(tag)) continue;
-    if (tag === 'BR') { target.append(document.createElement('br')); continue; }
-    let out = target;
-    const inBlock = /^(P|H1|H2|H4|LI)$/.test(target.tagName);
-    if (tag === 'UL' && node.classList.contains('check') && !inBlock && target.tagName !== 'UL') { // a checklist
-      out = document.createElement('ul');
-      out.className = 'check';
-      target.append(out);
-    } else if (tag === 'LI' && target.tagName === 'UL' && target.className === 'check') {
-      out = document.createElement('li');
-      if (node.getAttribute('data-done') === '1') out.setAttribute('data-done', '1');
-      target.append(out);
-    } else if (NOTE_BLOCKS[tag]) {
-      if (inBlock) { // a block inside a block cannot nest: it continues on a new line
-        if (target.lastChild) target.append(document.createElement('br'));
-      } else {
-        out = document.createElement(NOTE_BLOCKS[tag]);
-        target.append(out);
-      }
-    } else if (tag === 'B' || tag === 'STRONG') {
-      out = document.createElement('b');
-      target.append(out);
-    } else if (tag === 'FONT') {
-      const key = colorKey(node.getAttribute('color'));
-      if (NOTE_COLORS[key] && key !== DEFAULT_COLOR) { // the plain colour is no format at all
-        out = document.createElement('font');
-        out.setAttribute('color', key);
-        target.append(out);
-      }
-    }
-    cleanInto(node, out);
-  }
-}
-
-// → a detached <div> holding clean blocks only: loose text and inline runs at the top become paragraphs
-function cleaned(html) {
-  const inert = new DOMParser().parseFromString(html || '', 'text/html'); // nothing in it runs
-  const flat = document.createElement('div');
-  cleanInto(inert.body, flat);
-  const root = document.createElement('div');
-  let run = null;
-  for (const node of [...flat.childNodes]) {
-    if (node.nodeType === Node.ELEMENT_NODE && /^(P|H1|H2|H4|UL)$/.test(node.tagName)) { // UL here is a checklist, the only list cleanInto keeps
-      run = null;
-      if (node.tagName !== 'UL' || node.firstChild) root.append(node);
-      continue;
-    }
-    if (!run) { run = document.createElement('p'); root.append(run); }
-    run.append(node);
-  }
-  if (!root.firstChild) root.innerHTML = '<p><br></p>';
-  return root;
-}
-
-// The plain text of the blocks, one line per block: what search, the list and Copy use.
-function plainFromContainer(root) {
-  const blockText = (block) => {
-    let s = '';
-    (function walk(n) {
-      for (const c of n.childNodes) {
-        if (c.nodeType === Node.TEXT_NODE) s += c.textContent;
-        else if (c.tagName === 'BR') s += '\n';
-        else walk(c);
-      }
-    })(block);
-    return s.replace(/\n$/, ''); // the <br> that keeps an empty paragraph open is not a line
-  };
-  const lines = [...root.children].flatMap((block) => (block.tagName === 'UL'
-    ? [...block.children].map((li) => (li.getAttribute('data-done') === '1' ? '[x] ' : '[ ] ') + blockText(li)) // a checklist item is a line with its box
-    : [blockText(block)]));
-  return lines.join('\n').replace(/\s+$/, '');
-}
-
-function setEditor(n) {
-  editor().innerHTML = n ? cleaned(n.html ?? plainToHtml(n.body)).innerHTML : '<p><br></p>';
-  editor().dataset.empty = n && n.body.trim() ? '' : '1';
-}
-
-function caretToEnd(node) {
-  const range = document.createRange();
-  range.selectNodeContents(node);
-  range.collapse(false);
-  const sel = getSelection();
-  sel.removeAllRanges();
-  sel.addRange(range);
-}
-
-function caretElement() {
-  const anchor = getSelection().anchorNode;
-  const at = anchor && (anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor);
-  return at && editor().contains(at) ? at : null;
-}
-
-function applyFormat(command, value) {
-  if (!currentNote()) return;
-  editor().focus();
-  if (command === 'formatBlock' && caretElement()?.closest('ul.check')) return; // a list item has no size of its own
-  document.execCommand('styleWithCSS', false, false); // <b> and <font color>, not inline styles
-  document.execCommand(command, false, value);
-  touchNote();
-  syncFormat();
-}
-
-// the toolbar shows the format at the caret
-function syncFormat() {
-  if (document.activeElement !== editor()) return;
-  const anchor = getSelection().anchorNode;
-  const at = anchor && (anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor);
-  if (!at || !editor().contains(at)) return;
-  $('fmt-bold').setAttribute('aria-pressed', String(!!at.closest('b'))); // not queryCommandState: a heading is bold by its style and would light the button
-  $('fmt-check').setAttribute('aria-pressed', String(!!at.closest('ul.check')));
-  const block = (at.closest('h1, h2, h4, p') || { localName: 'p' }).localName;
-  for (const b of document.querySelectorAll('#note-fmt [data-size]')) b.setAttribute('aria-pressed', String(SIZE_TAG[b.dataset.size] === block));
-  const key = colorKey(at.closest('font[color]')?.getAttribute('color')) || DEFAULT_COLOR;
-  for (const b of document.querySelectorAll('#note-fmt [data-color]')) b.setAttribute('aria-pressed', String(b.dataset.color === key));
-}
-
-$('fmt-colors').replaceChildren(...Object.entries(NOTE_COLORS).map(([hex, name]) => {
-  const b = el('button', { type: 'button', className: 'sw', ariaLabel: 'Colour: ' + name, title: name });
-  b.dataset.color = hex;
-  b.setAttribute('aria-pressed', 'false');
-  return b;
-}));
-$('note-fmt').addEventListener('mousedown', (e) => e.preventDefault()); // clicking a button must not move the selection out of the text
-$('note-fmt').addEventListener('click', (e) => {
-  const b = e.target.closest('button');
-  if (!b) return;
-  if (b.id === 'fmt-bold') applyFormat('bold');
-  else if (b.id === 'fmt-check') toggleChecklist();
-  else if (b.dataset.size) applyFormat('formatBlock', `<${SIZE_TAG[b.dataset.size]}>`);
-  else if (b.dataset.color) applyFormat('foreColor', b.dataset.color);
-});
-document.addEventListener('selectionchange', syncFormat);
-document.execCommand('defaultParagraphSeparator', false, 'p');
-// only plain text goes in from outside, so no foreign markup ever reaches a note
-editor().addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
-editor().addEventListener('drop', (e) => { e.preventDefault(); const text = e.dataTransfer.getData('text/plain'); if (text) document.execCommand('insertText', false, text); });
-
-// checklists: a list whose items carry a circle; ticking sets data-done on the item
-function toggleChecklist() {
-  if (!currentNote()) return;
-  editor().focus();
-  const sel = getSelection();
-  if (!sel.rangeCount) return;
-  const range = sel.getRangeAt(0);
-  const keep = [sel.anchorNode, sel.anchorOffset, sel.focusNode, sel.focusOffset];
-  const blocks = [...editor().children].filter((b) => range.intersectsNode(b));
-  if (!blocks.length) return;
-  const convert = (from, tag) => { const to = document.createElement(tag); to.append(...from.childNodes); return to; }; // moves the text, so the caret survives
-  if (blocks.every((b) => b.matches('ul.check'))) {
-    for (const ul of blocks) ul.replaceWith(...[...ul.children].map((li) => convert(li, 'p')));
-  } else {
-    let list = null;
-    for (const b of blocks) {
-      if (b.matches('ul.check')) { list = null; continue; }
-      if (!list) { list = document.createElement('ul'); list.className = 'check'; b.before(list); }
-      list.append(convert(b, 'li'));
-      b.remove();
-    }
-  }
-  if (editor().contains(keep[0]) && editor().contains(keep[2])) sel.setBaseAndExtent(...keep); else caretToEnd(editor());
-  touchNote();
-  syncFormat();
-}
-function toggleItem(li) {
-  if (li.getAttribute('data-done') === '1') li.removeAttribute('data-done'); else li.setAttribute('data-done', '1');
-  touchNote();
-}
-const inGutter = (e, li) => e.clientX - li.getBoundingClientRect().left < 32; // the column the circle sits in
-editor().addEventListener('mousedown', (e) => { const li = e.target.closest?.('ul.check > li'); if (li && inGutter(e, li)) e.preventDefault(); }); // the click ticks, it does not move the caret
-editor().addEventListener('click', (e) => { const li = e.target.closest?.('ul.check > li'); if (li && inGutter(e, li)) toggleItem(li); });
-editor().addEventListener('input', (e) => { // a new line after a ticked item starts unticked
-  if (e.inputType === 'insertParagraph') caretElement()?.closest('ul.check > li')?.removeAttribute('data-done');
-});
-editor().addEventListener('keydown', (e) => {
-  const mod = e.ctrlKey || e.metaKey;
-  if (mod && ['KeyI', 'KeyU'].includes(e.code)) e.preventDefault(); // italic and underline are not kept
-  if (mod && e.key === 'Enter') { const li = caretElement()?.closest('ul.check > li'); if (li) { e.preventDefault(); toggleItem(li); } }
-  if (mod && e.shiftKey && e.code === 'KeyL') { e.preventDefault(); toggleChecklist(); }
-});
-
-function showNote(id) {
-  selectedNoteId = id;
-  const n = currentNote();
-  $('note-title').value = n ? n.title : '';
-  setEditor(n);
-  renderNoteList();
-}
-
-async function flushNote() {
-  clearTimeout(noteTimer);
-  const n = currentNote();
-  if (!noteDirty || !n) return;
-  noteDirty = false;
-  try {
-    await invoke('save_notes', { notes: [n] });
-    if (draftNote && draftNote.id === n.id) draftNote = null; // now it is a real note
-  } catch (e) {
-    noteDirty = true;
-    tell('Could not save the note: ' + e);
-  }
-}
-
-// leaving a note saves what was typed, and drops a new note that nobody wrote in
-async function leaveNote() {
-  await flushNote();
-  const n = currentNote();
-  if (n && draftNote && n.id === draftNote.id && !n.title.trim() && !n.body.trim()) {
-    notes = notes.filter((x) => x.id !== n.id);
-    draftNote = null;
-    selectedNoteId = null;
-  }
-}
-
-async function openNote(id, focus) {
-  if (id !== selectedNoteId) {
-    await leaveNote();
-    showNote(id);
-  }
-  if (focus) {
-    $('note-' + focus).focus();
-    if (focus === 'body') caretToEnd($('note-body'));
-  }
-}
-
-async function newNote() {
-  await leaveNote();
-  draftNote = { id: newNoteId(), title: '', body: '', updatedAt: new Date().toISOString() };
-  notes.push(draftNote);
-  $('note-search').value = '';
-  showNote(draftNote.id);
-  $('note-title').focus();
-}
-
-async function deleteNote(id = selectedNoteId) {
-  const n = notes.find((x) => x.id === id); // the Delete key on a list row means that row, even when it is not the open note
-  if (!n) return;
-  if (!(await ask(`Delete "${n.title || 'Untitled'}"?\nTasks that link to it keep going without it.`, 'Delete'))) return;
-  clearTimeout(noteTimer);
-  noteDirty = false;
-  const list = visibleNotes();
-  const i = list.findIndex((x) => x.id === n.id);
-  const next = list[i + 1] || list[i - 1];
-  try {
-    if (!(draftNote && draftNote.id === n.id)) await invoke('delete_note', { id: n.id });
-  } catch (e) {
-    return tell('Could not delete the note: ' + e);
-  }
-  if (draftNote && draftNote.id === n.id) draftNote = null;
-  notes = notes.filter((x) => x.id !== n.id);
-  if (n.id === selectedNoteId) showNote(next ? next.id : null); else renderNoteList();
-}
-
-// every keystroke updates the note in memory and the list; the file is written half a second after typing stops
-function touchNote() {
-  const n = currentNote();
-  if (!n) return;
-  const root = cleaned(editor().innerHTML); // what is stored is rebuilt from the known formats, never the raw editor markup
-  n.title = $('note-title').value;
-  n.html = root.innerHTML;
-  n.body = plainFromContainer(root);
-  editor().dataset.empty = n.body.trim() ? '' : '1';
-  n.updatedAt = new Date().toISOString();
-  noteDirty = true;
-  renderNoteList();
-  clearTimeout(noteTimer);
-  noteTimer = setTimeout(flushNote, 500);
-}
-
 async function setView(next) {
   if (next === view || !VIEWS.includes(next)) return; // a view that is not switched on does not exist
-  await leaveNote();
+  await registry.notes?.leave?.(); // typing in a note is saved before the view changes
   view = next;
   for (const n of document.querySelectorAll('main[id$="-view"]')) n.hidden = n.id !== view + '-view';
   for (const b of document.querySelectorAll('.views button')) b.ariaSelected = String(b.id === 'view-' + view);
   if (view === 'home') return renderHome();
   if (view === 'tasks') { render(); return fitSide(); } // a note may have changed while the task list was hidden
-  if (view === 'calendar') return renderCalendar();
-  if (view !== 'notes') return registry[view]?.show?.(); // a module's own view
-  if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList();
+  return registry[view]?.show?.(); // any other view belongs to its module
 }
-
-// keys while the Notes view is showing: the Tasks shortcuts stay out of the way
-function notesKeys(e) {
-  const t = e.target.matches ? e.target : document.body;
-  const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;
-  if (ctrl && e.code === 'KeyN') { e.preventDefault(); newNote(); return; }
-  if (ctrl && e.code === 'KeyF') { e.preventDefault(); $('note-search').focus(); $('note-search').select(); return; }
-  if (e.key === 'Escape' && isField(t)) { t.blur(); return; }
-  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && (t.id === 'note-search' || t.classList.contains('note'))) {
-    e.preventDefault();
-    const list = visibleNotes();
-    const i = list.findIndex((x) => x.id === selectedNoteId);
-    const next = list[Math.max(0, Math.min(list.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
-    if (next) openNote(next.id).then(() => { if (t.classList.contains('note')) $('note-' + next.id)?.focus(); });
-    return;
-  }
-  if (e.key === 'Delete' && t.classList.contains('note')) { e.preventDefault(); deleteNote(t.id.slice('note-'.length)); }
-}
-
-$('note-new').onclick = newNote;
-$('note-delete').onclick = () => deleteNote();
-$('note-search').oninput = renderNoteList;
-$('note-title').oninput = $('note-body').oninput = touchNote;
-addEventListener('blur', flushNote); // the window lost focus: do not leave typing unsaved
-
-// ── calendar view: a month of tasks by due date, and the selected day beside it ──
-let calDay = localDay(new Date()); // the selected day
-let calMonth = calDay.slice(0, 7); // the month on show, "2026-11"
-let calMode = 'month'; // or 'day': the selected day hour by hour
-let tlDay = null; // the day the timeline was last scrolled for
-const HOUR_PX = 48; // keep in step with --hour in style.css
-const taskCount = (n) => `${n} ${n === 1 ? 'task' : 'tasks'}`;
-
-function dayCell(cell, list, cap, today) {
-  const date = parseDay(cell.day);
-  const lines = list.length > cap ? list.slice(0, Math.max(0, cap - 1)) : list; // the last line becomes "+N more"
-  const more = list.length - lines.length;
-  const now = new Date();
-  const btn = el('button', {
-    type: 'button', role: 'gridcell', tabIndex: cell.day === calDay ? 0 : -1,
-    className: 'cal-cell' + (cell.inMonth ? '' : ' out') + (cell.day === today ? ' today' : '') + (cell.day === calDay ? ' sel' : ''),
-    ariaLabel: `${fmt(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${taskCount(list.length)}`,
-  }, el('span', { className: 'cal-d' }, String(date.getDate())),
-  ...lines.map((t) => {
-    const line = el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') }, `${t.due.slice(11, 16)} ${t.title}`);
-    if (!t.done) line.dataset.id = t.id; // an open task can be dragged to another day
-    return line;
-  }),
-  ...(more ? [el('span', { className: 'cal-more' }, `+${more} more`)] : []));
-  btn.ariaSelected = String(cell.day === calDay);
-  btn.dataset.day = cell.day;
-  btn.onclick = () => selectDay(cell.day);
-  btn.ondblclick = () => setCalMode('day');
-  return btn;
-}
-
-function renderDayPanel(list) {
-  $('cal-day-title').textContent = fmt(parseDay(calDay), { weekday: 'long', day: 'numeric', month: 'long' });
-  $('cal-day-count').textContent = list.length ? taskCount(list.length) : 'Nothing due';
-  $('cal-day-list').replaceChildren(...list.map((t) => {
-    const box = el('input', { type: 'checkbox', checked: t.done, ariaLabel: (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title });
-    box.onchange = () => commit(t.done ? todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)) : complete(t));
-    const open = el('button', { type: 'button', className: 'cal-open' + (t.done ? ' done' : '') }, t.title);
-    open.onclick = () => showTask(t.id);
-    if (!t.done) open.dataset.id = t.id;
-    return el('li', {}, box, open, el('time', {}, t.due.slice(11, 16)));
-  }));
-}
-
-// the day as a timeline: one block per task, placed by its time and sized by its length
-function renderTimeline(list) {
-  const tl = $('tl');
-  const blocks = list.map((t) => ({ t, start: minutesOf(t.due), len: taskMinutes(t) })).map((b) => ({ ...b, end: Math.min(1440, b.start + b.len) }));
-  const lanes = layoutDay(blocks.map((b) => ({ id: b.t.id, start: b.start, end: b.end })));
-  const now = new Date();
-  tl.replaceChildren(
-    ...Array.from({ length: 24 }, (_, h) => el('div', { className: 'tl-hour', style: `top:${h * HOUR_PX}px` }, el('span', {}, String(h).padStart(2, '0') + ':00'))),
-    ...blocks.map(({ t, start, end }) => {
-      const { lane, lanes: n } = lanes[t.id];
-      const late = !t.done && new Date(t.due) < now;
-      const box = el('button', {
-        type: 'button', className: 'tl-block' + (t.done ? ' done' : late ? ' late' : ''),
-        style: `top:${start / 60 * HOUR_PX}px;height:${Math.max(22, (end - start) / 60 * HOUR_PX - 2)}px;left:calc(52px + (100% - 52px) * ${lane / n});width:calc((100% - 52px) / ${n} - 3px)`,
-      }, el('b', {}, t.title), el('time', {}, `${withTime('', start).slice(1)} – ${withTime('', end % 1440 || 1440 - 1).slice(1)}`));
-      box.ariaLabel = `${t.title}, ${t.due.slice(11, 16)}, ${end - start} minutes`;
-      box.onclick = () => showTask(t.id);
-      if (!t.done) {
-        box.dataset.id = t.id;
-        box.append(el('span', { className: 'tl-grip', ariaHidden: 'true' }));
-      }
-      return box;
-    }),
-    ...(calDay === localDay(now) ? [el('div', { className: 'tl-now', style: `top:${(now.getHours() * 60 + now.getMinutes()) / 60 * HOUR_PX}px` })] : []),
-    el('div', { className: 'tl-drop', id: 'tl-drop' }));
-  if (tlDay !== calDay) { // a new day: bring its first task into view, or the morning
-    tlDay = calDay;
-    const first = Math.min(...blocks.map((b) => b.start), 8 * 60);
-    $('tl-scroll').scrollTop = Math.max(0, first / 60 * HOUR_PX - HOUR_PX);
-  }
-}
-
-function renderNoDate() {
-  const open = todos.filter((t) => !t.done && !t.due);
-  $('cal-nodate-box').hidden = calMode !== 'day' || !open.length;
-  $('cal-nodate').replaceChildren(...open.map((t) => {
-    const b = el('button', { type: 'button', className: 'cal-open' }, t.title);
-    b.dataset.id = t.id; // drag it onto the timeline to give it a time
-    b.onclick = () => showTask(t.id);
-    return el('li', {}, b);
-  }));
-}
-
-function setCalMode(mode) {
-  calMode = mode;
-  tlDay = null;
-  renderCalendar();
-}
-
-function renderCalendar() {
-  const [y, m] = calMonth.split('-').map(Number);
-  const grid = $('cal-grid');
-  const byDay = groupByDay(todos);
-  const today = localDay(new Date());
-  const title = fmt(new Date(y, m - 1, 1), { month: 'long', year: 'numeric' });
-  const day = calMode === 'day';
-  $('cal-mode').textContent = day ? 'Month' : 'Day';
-  $('cal-prev').ariaLabel = day ? 'Previous day' : 'Previous month';
-  $('cal-next').ariaLabel = day ? 'Next day' : 'Next month';
-  $('cal-week').hidden = $('cal-grid').hidden = day;
-  $('tl-scroll').hidden = !day;
-  renderNoDate();
-  if (day) {
-    $('cal-title').textContent = fmt(parseDay(calDay), { weekday: 'long', day: 'numeric', month: 'long' });
-    renderTimeline(byDay[calDay] || []);
-    renderDayPanel(byDay[calDay] || []);
-    return;
-  }
-  $('cal-title').textContent = title;
-  grid.ariaLabel = title;
-  // how many task lines a cell has room for: its padding and border take 13px, the day number 28px, each line 18px
-  const cap = grid.clientHeight > 0 ? Math.max(1, Math.floor((grid.clientHeight / 6 - 41) / 18)) : 3;
-  const days = monthGrid(y, m - 1);
-  grid.replaceChildren(...Array.from({ length: 6 }, (_, w) =>
-    el('div', { className: 'cal-row', role: 'row' }, ...days.slice(w * 7, w * 7 + 7).map((cell) => dayCell(cell, byDay[cell.day] || [], cap, today)))));
-  renderDayPanel(byDay[calDay] || []);
-}
-
-function selectDay(day, focus) {
-  calDay = day;
-  calMonth = day.slice(0, 7);
-  renderCalendar();
-  if (focus) document.querySelector(`#cal-grid [data-day="${day}"]`)?.focus();
-}
-
-// moving a task keeps its time of day, and its reminder starts over for the new day
-async function moveTask(id, day) {
-  const t = todos.find((x) => x.id === id);
-  if (!t || !t.due || t.due.slice(0, 10) === day) return;
-  calDay = day;
-  calMonth = day.slice(0, 7);
-  await commit(todos.map((x) => (x.id === id ? { ...x, due: day + x.due.slice(10), snoozeUntil: null } : x)));
-}
-
-// drag with pointer events: HTML5 drag and drop is unreliable in the WebView, and this also gives a ghost and an Esc to cancel
-let drag = null;
-let dragged = false; // swallows the click that ends a drag
-const dayUnder = (e) => document.elementFromPoint(e.clientX, e.clientY)?.closest('.cal-cell');
-const slotUnder = (e) => (calMode === 'day' && document.elementFromPoint(e.clientX, e.clientY)?.closest('#tl-scroll') ? snapMinutes((e.clientY - $('tl').getBoundingClientRect().top) / HOUR_PX * 60) : null);
-let bdrag = null; // a block being moved or resized on the timeline
-
-// one write for a task's time slot: its due moves, its length may change, and a snooze would no longer match
-const setSlot = (id, patch) => commit(todos.map((x) => (x.id === id ? { ...x, snoozeUntil: null, ...patch } : x)));
-
-function endDrag() {
-  document.querySelector('.tl-scroll.drop')?.classList.remove('drop');
-  drag?.ghost?.remove();
-  document.querySelector('.cal-cell.drop')?.classList.remove('drop');
-  document.body.classList.remove('dragging');
-  drag = null;
-}
-$('calendar-view').addEventListener('pointerdown', (e) => {
-  const blk = e.button === 0 && e.target.closest('.tl-block[data-id]');
-  if (blk) {
-    const t = todos.find((x) => x.id === blk.dataset.id);
-    if (t) bdrag = { id: t.id, el: blk, resize: !!e.target.closest('.tl-grip'), y: e.clientY, start: minutesOf(t.due), len: taskMinutes(t), moved: false };
-    return;
-  }
-  const src = e.button === 0 && e.target.closest('.cal-line[data-id], .cal-open[data-id]');
-  if (src) drag = { id: src.dataset.id, x: e.clientX, y: e.clientY, text: src.textContent, ghost: null };
-});
-addEventListener('pointermove', (e) => {
-  if (bdrag) {
-    const dy = e.clientY - bdrag.y;
-    if (!bdrag.moved && Math.abs(dy) < 5) return;
-    bdrag.moved = true;
-    document.body.classList.add('dragging');
-    const d = Math.round(dy / HOUR_PX * 4) * 15; // quarter hours
-    if (bdrag.resize) {
-      bdrag.newLen = Math.max(15, Math.min(1440 - bdrag.start, bdrag.len + d));
-      bdrag.el.style.height = Math.max(22, bdrag.newLen / 60 * HOUR_PX - 2) + 'px';
-    } else {
-      bdrag.newStart = Math.max(0, Math.min(1440 - bdrag.len, bdrag.start + d));
-      bdrag.el.style.top = bdrag.newStart / 60 * HOUR_PX + 'px';
-    }
-    return;
-  }
-  if (!drag) return;
-  if (!drag.ghost) {
-    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return; // a click is not a drag
-    drag.ghost = el('div', { className: 'cal-ghost' }, drag.text);
-    document.body.append(drag.ghost);
-    document.body.classList.add('dragging');
-  }
-  drag.ghost.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 12}px)`;
-  const cell = dayUnder(e);
-  document.querySelector('.cal-cell.drop')?.classList.remove('drop');
-  cell?.classList.add('drop');
-  const slot = slotUnder(e); // over the timeline: a line shows where the task will start
-  $('tl-scroll').classList.toggle('drop', slot !== null);
-  if (slot !== null) $('tl-drop').style.top = slot / 60 * HOUR_PX + 'px';
-});
-addEventListener('pointerup', (e) => {
-  if (bdrag) {
-    const { id, moved, newStart, newLen } = bdrag;
-    bdrag = null;
-    document.body.classList.remove('dragging');
-    if (!moved) return;
-    dragged = true;
-    setTimeout(() => { dragged = false; });
-    const t = todos.find((x) => x.id === id);
-    if (newStart !== undefined && t) setSlot(id, { due: withTime(t.due.slice(0, 10), newStart) });
-    else if (newLen !== undefined) setSlot(id, { minutes: newLen });
-    else renderCalendar();
-    return;
-  }
-  if (!drag) return;
-  const { id, ghost } = drag;
-  const cell = ghost ? dayUnder(e) : null;
-  const slot = ghost ? slotUnder(e) : null;
-  endDrag();
-  if (!ghost) return;
-  dragged = true;
-  setTimeout(() => { dragged = false; });
-  if (slot !== null) setSlot(id, { due: withTime(calDay, slot) });
-  else if (cell) moveTask(id, cell.dataset.day);
-});
-addEventListener('pointercancel', () => { endDrag(); if (bdrag) { bdrag = null; document.body.classList.remove('dragging'); renderCalendar(); } });
-addEventListener('keydown', (e) => {
-  if (e.key !== 'Escape') return;
-  if (drag?.ghost) { e.stopPropagation(); endDrag(); }
-  else if (bdrag?.moved) { e.stopPropagation(); bdrag = null; document.body.classList.remove('dragging'); renderCalendar(); }
-}, true);
-$('calendar-view').addEventListener('click', (e) => { if (dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
-
-function calendarKeys(e) {
-  const t = e.target.matches ? e.target : document.body;
-  if (e.altKey && !e.ctrlKey && t.dataset?.id && t.classList.contains('cal-open')) { // Alt+arrows: the keyboard way to drag
-    const by = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
-    if (by) {
-      e.preventDefault();
-      const due = todos.find((x) => x.id === t.dataset.id)?.due;
-      if (due) moveTask(t.dataset.id, shiftDay(due.slice(0, 10), by)).then(() => setTimeout(() => document.querySelector(`#cal-day-list [data-id="${t.dataset.id}"]`)?.focus(), 80)); // after the view transition has swapped the list
-      return;
-    }
-  }
-  if (e.altKey && !e.ctrlKey && t.classList?.contains('tl-block') && t.dataset.id && (e.key === 'ArrowUp' || e.key === 'ArrowDown')) { // a block by keyboard: Alt+arrows move it a quarter hour, with Shift they resize it
-    e.preventDefault();
-    const task = todos.find((x) => x.id === t.dataset.id);
-    const d = e.key === 'ArrowUp' ? -15 : 15;
-    if (task) {
-      const patch = e.shiftKey ? { minutes: Math.max(15, taskMinutes(task) + d) } : { due: withTime(task.due.slice(0, 10), snapMinutes(minutesOf(task.due) + d)) };
-      setSlot(task.id, patch).then(() => setTimeout(() => document.querySelector(`#tl [data-id="${task.id}"]`)?.focus(), 80));
-    }
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && !e.altKey) return;
-  if (e.key === 'Escape' && isField(t)) { t.blur(); return; }
-  if (isField(t)) return;
-  if (e.code === 'KeyD' || e.code === 'KeyM') { setCalMode(e.code === 'KeyD' ? 'day' : 'month'); return; }
-  const step = { ArrowLeft: () => shiftDay(calDay, -1), ArrowRight: () => shiftDay(calDay, 1), ArrowUp: () => shiftDay(calDay, -7), ArrowDown: () => shiftDay(calDay, 7), PageUp: () => shiftMonth(calDay, -1), PageDown: () => shiftMonth(calDay, 1) }[e.key];
-  if (step) { e.preventDefault(); selectDay(step(), true); return; }
-  if (e.code === 'KeyT') selectDay(localDay(new Date()), true);
-  else if (e.key === 'Enter' || e.code === 'KeyN') { e.preventDefault(); $('cal-new').focus(); } // Enter would also click the focused day
-}
-
-$('cal-week').replaceChildren(...Array.from({ length: 7 }, (_, i) => el('span', {}, fmt(new Date(2024, 0, 1 + i), { weekday: 'short' })))); // 1 Jan 2024 is a Monday
-$('cal-prev').onclick = () => selectDay(calMode === 'day' ? shiftDay(calDay, -1) : shiftMonth(calDay, -1));
-$('cal-next').onclick = () => selectDay(calMode === 'day' ? shiftDay(calDay, 1) : shiftMonth(calDay, 1));
-$('cal-mode').onclick = () => setCalMode(calMode === 'day' ? 'month' : 'day');
-$('cal-today').onclick = () => selectDay(localDay(new Date()));
-$('cal-add').onsubmit = async (e) => {
-  e.preventDefault();
-  const title = $('cal-new').value.trim();
-  if (!title) return;
-  const task = { id: crypto.randomUUID(), title, due: `${calDay}T${$('cal-time').value || '09:00'}`, remindBefore: 0, done: false, createdAt: new Date().toISOString(), completedAt: null };
-  $('cal-new').value = '';
-  await commit([...todos, task]);
-  $('cal-new').focus(); // ready for the next one
-};
-new ResizeObserver(() => { if (view === 'calendar') renderCalendar(); }).observe($('cal-grid')); // more or fewer lines fit now
 
 // ── command palette: Ctrl+K searches tasks, notes and days, and runs commands ──
 let palItems = [];
@@ -1179,8 +575,8 @@ function paletteResults(q) {
   const commands = [
     ...VIEWS.map((id, i) => go(id === 'home' ? 'Go to Home' : 'Go to ' + byId(id).view, 'Ctrl+' + i, () => setView(id))),
     ...(has('tasks') ? [go('New task', 'N', async () => { await setView('tasks'); $('title').focus(); })] : []),
-    ...(has('notes') ? [go('New note', 'Ctrl+N', async () => { await setView('notes'); newNote(); })] : []),
-    ...(has('calendar') ? [go('Calendar: today', 'T', async () => { await setView('calendar'); selectDay(localDay(new Date()), true); })] : []),
+    ...(has('notes') ? [go('New note', 'Ctrl+N', async () => { await setView('notes'); registry.notes.newNote(); })] : []),
+    ...(has('calendar') ? [go('Calendar: today', 'T', async () => { await setView('calendar'); registry.calendar.today(); })] : []),
     ...commandHooks.flatMap((f) => f()),
     go('Switch theme', 'T', () => $('theme').click()),
     go('Keyboard shortcuts', '?', openShortcuts),
@@ -1194,13 +590,13 @@ function paletteResults(q) {
     })),
     ...(has('notes') ? notes : []).map((n) => ({
       label: n.title || 'Untitled', kind: 'Note', text: n.body, hint: noteLine(n),
-      run: async () => { await setView('notes'); await openNote(n.id, 'body'); },
+      run: async () => { await setView('notes'); await registry.notes.open(n.id, 'body'); },
     })),
   ];
   const when = parseQuick('go ' + q, new Date()); // a date or time typed as words opens that day
   const day = when.due && when.title === 'go' ? when.due.slice(0, 10) : null;
   return [
-    ...(day && has('calendar') ? [{ label: 'Open calendar on ' + fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), hint: '', kind: 'Day', run: async () => { await setView('calendar'); selectDay(day, true); } }] : []),
+    ...(day && has('calendar') ? [{ label: 'Open calendar on ' + fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), hint: '', kind: 'Day', run: async () => { await setView('calendar'); registry.calendar.goto(day); } }] : []),
     ...rankItems(found, q),
   ];
 }
@@ -1257,21 +653,13 @@ const shortcutGroups = [
     ['O', "Open the task's note"], ['Delete', 'Delete'], ['N', 'New task'], ['1–4', 'To do, Today, Week, History'],
     ['Ctrl+F', 'Search'], ['Ctrl+Z', 'Undo'], ['T', 'Theme: auto, light, dark'], ['Esc', 'Leave a field, cancel editing'],
   ] },
-  { module: 'notes', title: 'Notes', items: [
-    ['Ctrl+N', 'New note'], ['Ctrl+F', 'Search notes'], [['↑', '↓'], 'Walk the list'], ['Delete', 'Delete the note'],
-    ['Ctrl+B', 'Bold'], ['Ctrl+Shift+L', 'Checklist'], ['Ctrl+Enter', 'Tick a checklist item'],
-  ] },
-  { module: 'calendar', title: 'Calendar', items: [
-    [['←', '→'], 'Previous or next day'], [['↑', '↓'], 'Previous or next week'], [['PageUp', 'PageDown'], 'Previous or next month'],
-    ['T', 'Today'], [['Enter', 'N'], 'Add a task on this day'], ['D', 'Hour-by-hour day view'], ['M', 'Month view'],
-    ['Alt+←/→/↑/↓', 'Move the focused task a day or a week'], ['Alt+↑/↓', 'In day view: move a block 15 min (with Shift: resize)'],
-  ] },
   { title: 'Quick bar', items: [
     ['Ctrl+Alt+J', 'Add a due date (or type it: "tomorrow 9am")'], ['Ctrl+Alt+N', 'Switch between task and note'],
     ['Enter', 'Save'], ['Esc', 'Close'],
   ] },
 ];
 
+const groupRank = (g) => (g.title === 'Quick bar' ? 99 : ['Everywhere', 'Tasks', 'Notes', 'Calendar'].indexOf(g.title) + 1 || 50); // the core first, modules after, the quick bar last
 const keyChips = (combo) => el('span', { className: 'sk' }, ...combo.split('+').flatMap((k, i) => [...(i ? [el('i', { className: 'sk-plus' }, '+')] : []), el('kbd', { className: 'k' }, k)]));
 
 function openShortcuts() {
@@ -1285,7 +673,7 @@ function openShortcuts() {
   dlg.replaceChildren(
     el('h2', {}, 'Keyboard shortcuts'),
     ...(quickTaken ? [el('div', { className: 'keys-warn' }, 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.')] : []),
-    el('div', { className: 'keys-grid' }, ...shortcutGroups.filter((g) => !g.module || started.has(g.module)).map((g) => el('section', {}, el('h3', {}, g.title),
+    el('div', { className: 'keys-grid' }, ...[...shortcutGroups].filter((g) => !g.module || started.has(g.module)).sort((a, b) => groupRank(a) - groupRank(b)).map((g) => el('section', {}, el('h3', {}, g.title),
       el('ul', {}, ...g.items.map(([keys, what]) => el('li', {},
         el('span', { className: 'sk-keys' }, ...[].concat(keys).flatMap((k, i) => [...(i ? [el('i', { className: 'sk-or' }, 'or')] : []), keyChips(k)])),
         el('span', {}, what))))))),
@@ -1331,7 +719,7 @@ addEventListener('keydown', (e) => {
   if (mod && !e.altKey && e.code === 'Comma') { e.preventDefault(); setView('home'); return; }
   if (mod && !e.altKey && /^Digit[0-9]$/.test(e.code) && VIEWS[+e.code.slice(5)]) { e.preventDefault(); setView(VIEWS[+e.code.slice(5)]); return; } // Ctrl+0 is Home, then the tabs in order
   if (!mod && !e.altKey && !field && e.code === 'Slash' && e.shiftKey) { e.preventDefault(); openShortcuts(); return; } // ? lists the shortcuts in every view
-  if (view !== 'tasks') return view === 'notes' ? notesKeys(e) : view === 'calendar' ? calendarKeys(e) : registry[view]?.keys?.(e);
+  if (view !== 'tasks') return registry[view]?.keys?.(e);
 
   if (e.key === 'Escape') {
     if (t.id === 'search' && t.value) { t.value = ''; render(); }
@@ -1405,8 +793,7 @@ const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).
   if (draftNote && !notes.some((x) => x.id === draftNote.id)) notes.push(draftNote);
   render(enter);
   fillNoteLinks();
-  if (view === 'notes') renderNoteList();
-  if (view === 'calendar') renderCalendar();
+  if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); // the view on show redraws from the new data
 });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
 window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load(); });

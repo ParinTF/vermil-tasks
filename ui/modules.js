@@ -5,14 +5,14 @@
 // impl: { start() runs when it is switched on or the app starts with it on, stop() when it is switched off,
 //         show() when its view opens, keys(e) for keys while its view is showing }.
 // An entry with `view` gets a tab (Ctrl+1..9 in tab order) and a <main id="<id>-view">; `requires` lists the modules it needs.
-// `builtin` marks a module whose markup and code still live in the page itself.
+// `static` marks a module whose <main> is already in index.html; without `script` its code is in the page itself.
 // Hooks it may use: rowInfo.push(t => text) adds to a task row's details, rowTools.push(t => button) to its buttons,
 // commandHooks.push(() => [palette commands]), shortcutGroups.push({ module, title, items }); take them out again in stop().
 // Its data goes through saveModule(id, value) into the same data file.
 const MODULES = [
-  { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', builtin: true, recommended: true },
-  { id: 'notes', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', builtin: true },
-  { id: 'calendar', name: 'Calendar', about: 'Your tasks by month or hour by hour. Drag to reschedule.', view: 'Calendar', builtin: true, requires: ['tasks'] },
+  { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, recommended: true },
+  { id: 'notes', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
+  { id: 'calendar', name: 'Calendar', about: 'Your tasks by month or hour by hour. Drag to reschedule.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
   { id: 'pomodoro', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
   { id: 'money', name: 'Expenses', about: 'Record what you spend and earn, by category, month by month.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
 ];
@@ -51,11 +51,9 @@ function syncViews() {
 
 async function startModule(m) {
   if (started.has(m.id)) return;
-  if (!m.builtin) {
-    if (m.style && !$('style-' + m.id)) await loadFile('link', { rel: 'stylesheet', href: m.style, id: 'style-' + m.id });
-    if (!registry[m.id]) await loadFile('script', { src: m.script, id: 'script-' + m.id });
-    if (m.view && !$(m.id + '-view')) document.querySelector('.foot').before(el('main', { id: m.id + '-view', className: m.id + '-page', hidden: true }));
-  }
+  if (m.style && !$('style-' + m.id)) await loadFile('link', { rel: 'stylesheet', href: m.style, id: 'style-' + m.id });
+  if (m.script && !registry[m.id]) await loadFile('script', { src: m.script, id: 'script-' + m.id });
+  if (m.view && !m.static && !$(m.id + '-view')) document.querySelector('.foot').before(el('main', { id: m.id + '-view', className: m.id + '-page', hidden: true }));
   started.add(m.id);
   syncViews();
   await registry[m.id]?.start?.();
@@ -66,8 +64,8 @@ async function stopModule(m) {
   if (view === m.id) await setView('home');
   started.delete(m.id);
   await registry[m.id]?.stop?.();
-  if (m.view && !m.builtin) $(m.id + '-view')?.remove();
-  if (!m.builtin) $('style-' + m.id)?.remove(); // its look goes with it; the script stays cached
+  if (m.view && !m.static) $(m.id + '-view')?.remove();
+  $('style-' + m.id)?.remove(); // its look goes with it; the script stays cached
   syncViews();
 }
 
