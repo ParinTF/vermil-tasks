@@ -677,8 +677,7 @@ function notesKeys(e) {
   if (e.key === 'Delete' && t.classList.contains('note')) { e.preventDefault(); deleteNote(t.id.slice('note-'.length)); }
 }
 
-$('view-tasks').onclick = () => setView('tasks');
-$('view-notes').onclick = () => setView('notes');
+for (const v of VIEWS) $('view-' + v).onclick = () => setView(v); // every switch button, Calendar included
 $('note-new').onclick = newNote;
 $('note-delete').onclick = () => deleteNote();
 $('note-search').oninput = renderNoteList;
