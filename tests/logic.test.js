@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -200,4 +200,18 @@ test('checkProgress counts ticked and total checklist lines only', () => {
   assert.deepEqual(checkProgress('just text'), { done: 0, total: 0 });
   assert.deepEqual(checkProgress(''), { done: 0, total: 0 });
   assert.deepEqual(checkProgress(undefined), { done: 0, total: 0 });
+});
+
+test('rankItems needs every word, and puts label starts before label contains before other text', () => {
+  const items = [
+    { label: 'Buy milk', hint: 'Due tomorrow' },
+    { label: 'Call the bank', hint: '', text: 'ask about milk account' },
+    { label: 'Milk run planning', hint: '' },
+    { label: 'Pay rent', hint: '' },
+  ];
+  assert.deepEqual(rankItems(items, 'milk').map((i) => i.label), ['Milk run planning', 'Buy milk', 'Call the bank']);
+  assert.deepEqual(rankItems(items, 'MILK buy').map((i) => i.label), ['Buy milk']);
+  assert.deepEqual(rankItems(items, 'zzz'), []);
+  assert.equal(rankItems(items, '  ').length, 4); // no words: everything, in order
+  assert.equal(rankItems(items, 'e', 2).length, 2); // the limit
 });

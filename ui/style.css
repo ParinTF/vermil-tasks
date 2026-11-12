@@ -392,6 +392,17 @@ dialog::backdrop { background: #12110f73; }
 dialog p { margin: 0 0 28px; font-size: 20px; font-weight: 600; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
 dialog[open] { animation: rise-in .35s var(--ease) both; }
 
+/* ── command palette (Ctrl+K) ── */
+dialog.pal { width: min(580px, calc(100vw - 48px)); margin-top: 12vh; padding: 0; overflow: hidden; }
+dialog.pal input { display: block; width: 100%; box-sizing: border-box; padding: 18px 22px; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; font-size: 18px; color: var(--ink); outline: none; }
+.pal ul { margin: 0; padding: 6px; list-style: none; max-height: min(50vh, 380px); overflow-y: auto; }
+.pal li { display: grid; grid-template-columns: 70px minmax(0, 1fr) auto; gap: 12px; align-items: baseline; padding: 9px 16px; border-radius: 3px; cursor: pointer; }
+.pal li[aria-selected="true"] { background: color-mix(in srgb, var(--ink) 8%, transparent); box-shadow: inset 2px 0 var(--accent); }
+.pal-kind { font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.pal-label { overflow: hidden; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.pal-hint { color: var(--mute); font-size: 12.5px; white-space: nowrap; }
+.pal-none { padding: 14px 16px; color: var(--mute); }
+
 /* ── motion ── */
 @keyframes rise { from { transform: translateY(105%); } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(18px); } }

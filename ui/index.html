@@ -172,6 +172,11 @@
     </div>
   </dialog>
 
+  <dialog id="pal" class="pal" aria-label="Command palette">
+    <input id="pal-q" type="text" autocomplete="off" spellcheck="false" placeholder="Search tasks, notes and days, or run a command" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list">
+    <ul id="pal-list" role="listbox"></ul>
+  </dialog>
+
   <script src="logic.js"></script>
   <script src="renderer.js"></script>
 </body>

@@ -210,4 +210,18 @@ function checkProgress(body) {
   return { done: items.filter((line) => line.startsWith('[x]')).length, total: items.length };
 }
 
-if (typeof module !== 'undefined') module.exports = { checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// Command palette ranking: every word of the query must appear in the item's label, hint or text. A label that starts
+// with the first word comes first, then one that contains it, then a match elsewhere; ties keep the list's order.
+function rankItems(items, query, limit = 30) {
+  const words = String(query || '').toLowerCase().split(/\s+/).filter(Boolean);
+  const scored = [];
+  items.forEach((item, i) => {
+    const label = item.label.toLowerCase();
+    const all = `${label} ${(item.hint || '').toLowerCase()} ${(item.text || '').toLowerCase()}`;
+    if (!words.every((w) => all.includes(w))) return;
+    scored.push({ item, i, score: !words.length || label.startsWith(words[0]) ? 0 : label.includes(words[0]) ? 1 : 2 });
+  });
+  return scored.sort((a, b) => a.score - b.score || a.i - b.i).slice(0, limit).map((s) => s.item);
+}
+
+if (typeof module !== 'undefined') module.exports = { rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

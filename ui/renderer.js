@@ -1033,6 +1033,78 @@ $('cal-add').onsubmit = async (e) => {
 };
 new ResizeObserver(() => { if (view === 'calendar') renderCalendar(); }).observe($('cal-grid')); // more or fewer lines fit now
 
+// ── command palette: Ctrl+K searches tasks, notes and days, and runs commands ──
+let palItems = [];
+let palIndex = 0;
+
+function paletteResults(q) {
+  const go = (label, hint, run) => ({ label, hint, kind: 'Command', run });
+  const commands = [
+    go('Go to Tasks', 'Ctrl+1', () => setView('tasks')),
+    go('Go to Notes', 'Ctrl+2', () => setView('notes')),
+    go('Go to Calendar', 'Ctrl+3', () => setView('calendar')),
+    go('New task', 'N', async () => { await setView('tasks'); $('title').focus(); }),
+    go('New note', 'Ctrl+N', async () => { await setView('notes'); newNote(); }),
+    go('Calendar: today', 'T', async () => { await setView('calendar'); selectDay(localDay(new Date()), true); }),
+    go('Switch theme', 'T', () => $('theme').click()),
+    go('Keyboard shortcuts', '?', () => tell(shortcutText())),
+  ];
+  if (!q.trim()) return commands;
+  const found = [
+    ...commands,
+    ...todos.map((t) => ({
+      label: t.title, kind: 'Task', run: () => showTask(t.id),
+      hint: t.done ? 'Done' : t.due ? fmt(t.due, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'No date',
+    })),
+    ...notes.map((n) => ({
+      label: n.title || 'Untitled', kind: 'Note', text: n.body, hint: noteLine(n),
+      run: async () => { await setView('notes'); await openNote(n.id, 'body'); },
+    })),
+  ];
+  const when = parseQuick('go ' + q, new Date()); // a date or time typed as words opens that day
+  const day = when.due && when.title === 'go' ? when.due.slice(0, 10) : null;
+  return [
+    ...(day ? [{ label: 'Open calendar on ' + fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), hint: '', kind: 'Day', run: async () => { await setView('calendar'); selectDay(day, true); } }] : []),
+    ...rankItems(found, q),
+  ];
+}
+
+function paletteRender() {
+  palItems = paletteResults($('pal-q').value);
+  palIndex = Math.min(palIndex, Math.max(0, palItems.length - 1));
+  $('pal-list').replaceChildren(...(palItems.length ? palItems.map((it, i) => {
+    const row = el('li', { role: 'option', id: 'pal-' + i, ariaSelected: String(i === palIndex) },
+      el('span', { className: 'pal-kind' }, it.kind), el('span', { className: 'pal-label' }, it.label), el('span', { className: 'pal-hint' }, it.hint || ''));
+    row.onclick = () => runPalette(i);
+    return row;
+  }) : [el('li', { className: 'pal-none' }, 'Nothing found')]));
+  $('pal-q').setAttribute('aria-activedescendant', palItems.length ? 'pal-' + palIndex : '');
+  document.getElementById('pal-' + palIndex)?.scrollIntoView({ block: 'nearest' });
+}
+
+function runPalette(i) {
+  const it = palItems[i];
+  if (!it) return;
+  $('pal').close();
+  it.run();
+}
+
+function openPalette() {
+  if ($('dlg').open) return;
+  $('pal-q').value = '';
+  palIndex = 0;
+  paletteRender();
+  $('pal').showModal();
+}
+
+$('pal-q').oninput = () => { palIndex = 0; paletteRender(); };
+$('pal-q').onkeydown = (e) => {
+  const step = { ArrowDown: 1, ArrowUp: -1 }[e.key];
+  if (step) { e.preventDefault(); palIndex = (palIndex + step + palItems.length) % Math.max(1, palItems.length); paletteRender(); }
+  else if (e.key === 'Enter') { e.preventDefault(); runPalette(palIndex); }
+};
+$('pal').onclick = (e) => { if (e.target === $('pal')) $('pal').close(); }; // the backdrop
+
 // ── keyboard ──
 const SHORTCUTS = [
   '↑ ↓: select a task',
@@ -1043,6 +1115,7 @@ const SHORTCUTS = [
   'Delete: delete the selected task',
   'N: new task',
   'T: switch theme (auto, light, dark)',
+  'Ctrl+K: command palette (search everything, run a command)',
   'Ctrl+1, 2, 3: Tasks, Notes, Calendar',
   'Ctrl+N (in Notes): new note',
   'In a note: Ctrl+B bold, Ctrl+Shift+L checklist, Ctrl+Enter tick an item',
@@ -1085,10 +1158,11 @@ async function undo() {
 }
 
 addEventListener('keydown', (e) => {
-  if ($('dlg').open) return; // the dialog handles Enter and Esc itself
+  if ($('dlg').open || $('pal').open) return; // a dialog handles Enter and Esc itself
   const t = e.target.matches ? e.target : document.body;
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
+  if (mod && !e.altKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); return; }
   if (mod && !e.altKey && /^Digit[1-3]$/.test(e.code)) { e.preventDefault(); setView(VIEWS[+e.code.slice(5) - 1]); return; }
   if (view !== 'tasks') return view === 'notes' ? notesKeys(e) : calendarKeys(e);
 
