@@ -127,4 +127,13 @@ function parseQuick(text, now) {
   return { title: words.join(' '), due: `${localDay(date)}T${two(h)}:${two(min)}` };
 }
 
-if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence, streak, parseQuick };
+// Is a task with this due date part of the Today or Week view? Anything overdue is in both;
+// `week` covers today and the next six days. A task without a due date is in neither.
+function inView(view, due, now) {
+  if (!due) return false;
+  if (new Date(due) < now) return true;
+  const last = new Date(now.getFullYear(), now.getMonth(), now.getDate() + (view === 'today' ? 0 : 6));
+  return due.slice(0, 10) <= localDay(last);
+}
+
+if (typeof module !== 'undefined') module.exports = { localDay, parseDay, nextOccurrence, streak, parseQuick, inView };

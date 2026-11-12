@@ -1,6 +1,7 @@
 const $ = (id) => document.getElementById(id);
 const { invoke } = window.__TAURI__.core;
 let todos = [];
+const TABS = ['pending', 'today', 'week', 'history'];
 let tab = 'pending';
 let editingId = null;
 let marqueeKey;
@@ -218,9 +219,11 @@ function render(enter = false) {
   renderHero(open, done);
   renderMarquee(done);
 
-  $('tab-pending').ariaSelected = String(tab === 'pending');
-  $('tab-history').ariaSelected = String(tab === 'history');
+  const now = new Date();
+  for (const name of TABS) $('tab-' + name).ariaSelected = String(tab === name);
   $('n-pending').textContent = open.length;
+  $('n-today').textContent = open.filter((t) => inView('today', t.due, now)).length;
+  $('n-week').textContent = open.filter((t) => inView('week', t.due, now)).length;
   $('n-history').textContent = done.length;
 
   const list = $('list');
@@ -234,10 +237,11 @@ function render(enter = false) {
 
   const q = $('search').value.trim().toLowerCase();
   const match = (t) => (t.title + '\n' + (t.notes || '')).toLowerCase().includes(q);
-  if (tab === 'pending') {
-    const shown = open.filter(match);
-    const shownLater = later.filter(match);
-    if (!shown.length && !(q && shownLater.length)) empty(q ? 'No matches' : 'Nothing left. Take a break.');
+  if (tab !== 'history') {
+    const shown = (tab === 'pending' ? open : open.filter((t) => inView(tab, t.due, now))).filter(match);
+    const shownLater = tab === 'pending' ? later.filter(match) : []; // waiting copies of finished repeating tasks live only in To do
+    const none = { pending: 'Nothing left. Take a break.', today: 'Nothing due today.', week: 'Nothing due this week.' }[tab];
+    if (!shown.length && !(q && shownLater.length)) empty(q ? 'No matches' : none);
     if (shown.length + shownLater.length) list.append(el('ul', {}, ...[...shown, ...shownLater].map(pendingItem)));
   } else {
     const items = done.filter(match);
@@ -282,11 +286,10 @@ $('form').onsubmit = (e) => {
   commit(next);
 };
 $('cancel').onclick = resetForm;
-$('tab-pending').onclick = () => { tab = 'pending'; render(true); };
-$('tab-history').onclick = () => { tab = 'history'; render(true); };
+for (const name of TABS) $('tab-' + name).onclick = () => { tab = name; render(true); };
 $('search').oninput = () => render();
 
-setInterval(() => { if (tab === 'pending') render(); }, 60000); // refresh overdue colouring and bring back repeating tasks after midnight
+setInterval(() => { if (tab !== 'history') render(); }, 60000); // refresh overdue colouring and bring back repeating tasks after midnight
 
 // ready to type on launch without the autofocus scroll jumping past the hero
 $('title').focus({ preventScroll: true });
@@ -369,6 +372,7 @@ const SHORTCUTS = [
   'P: pin or unpin the selected task',
   'Delete: delete the selected task',
   'N: new task',
+  '1 2 3 4: To do, Today, Week, History',
   'Ctrl+F: search',
   'Ctrl+Z: undo',
   'Esc: leave a field, cancel editing',
@@ -431,6 +435,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space' && !t.matches('button, summary, input, a')) press('input[type=checkbox], .act-restore');
   else if (e.code === 'KeyE') press('.act-edit');
   else if (e.code === 'KeyP') press('.act-pin');
+  else if (/^Digit[1-4]$/.test(e.code)) { e.preventDefault(); $('tab-' + TABS[+e.code.slice(5) - 1]).click(); }
   else if (e.key === 'Delete') press('.act-del');
   else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
   else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(SHORTCUTS); }

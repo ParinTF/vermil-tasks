@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -96,4 +96,24 @@ test('quick: no match leaves the text alone', () => {
   assert.deepEqual(q('tomorrow'), { title: 'tomorrow', due: null }); // the title keeps at least one word
   assert.deepEqual(q('9am'), { title: '9am', due: null });
   assert.deepEqual(q('  '), { title: '', due: null });
+});
+
+// ── inView: "now" is Wednesday 11 Nov 2026, 10:00 ──
+test('today view: overdue and anything due today, nothing later or undated', () => {
+  assert.equal(inView('today', '2026-11-10T09:00', at10), true); // overdue
+  assert.equal(inView('today', '2026-11-11T09:00', at10), true); // earlier today is overdue too
+  assert.equal(inView('today', '2026-11-11T23:59', at10), true);
+  assert.equal(inView('today', '2026-11-12T00:00', at10), false);
+  assert.equal(inView('today', null, at10), false);
+});
+test('week view: overdue plus today and the next six days', () => {
+  assert.equal(inView('week', '2026-11-01T09:00', at10), true); // overdue
+  assert.equal(inView('week', '2026-11-17T23:59', at10), true); // day 7 of the window
+  assert.equal(inView('week', '2026-11-18T00:00', at10), false);
+  assert.equal(inView('week', null, at10), false);
+});
+test('week view across a month end', () => {
+  const now = new Date(2026, 10, 28, 10, 0);
+  assert.equal(inView('week', '2026-12-04T12:00', now), true);
+  assert.equal(inView('week', '2026-12-05T00:00', now), false);
 });

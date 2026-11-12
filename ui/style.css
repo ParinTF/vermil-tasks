@@ -156,6 +156,7 @@ nav button::after {
   transform: scaleX(0); transform-origin: left; transition: transform .45s var(--ease);
 }
 nav button[aria-selected="true"]::after { transform: scaleX(1); }
+@media (max-width: 520px) { nav { gap: 16px; } nav button { font-size: 18px; } } /* four tabs in a narrow window */
 nav sup { margin-left: 5px; font-size: .42em; font-weight: 600; font-variant-numeric: tabular-nums; }
 #search { padding-block: 16px; font-size: 16px; }
 
