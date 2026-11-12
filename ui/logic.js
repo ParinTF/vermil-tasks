@@ -500,4 +500,22 @@ function weekDays(day) {
   return Array.from({ length: 7 }, (_, i) => shiftDay(monday, i));
 }
 
-if (typeof module !== 'undefined') module.exports = { parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── health ──
+// weights is { "YYYY-MM-DD": kg }. The points are the days that have one over the last `days` days (oldest first) and
+// the change is from the first to the last of them.
+function weightTrend(weights, today, days) {
+  const points = [];
+  for (let i = days - 1; i >= 0; i--) { const d = shiftDay(today, -i); if (weights[d] > 0) points.push({ day: d, kg: weights[d] }); }
+  return { points, change: points.length > 1 ? Math.round((points.at(-1).kg - points[0].kg) * 10) / 10 : null };
+}
+
+// a medicine is { id, name, times: ["08:00"], days: [0..6] }; true when it is to be taken on that day
+const medDue = (med, day) => med.days.includes(parseDay(day).getDay());
+
+// the doses whose time has come and that are neither taken nor already announced: [{ med, time, key }]
+// taken is { "<id>@<time>": true } for the day, announced is the same shape
+function dosesDue(meds, day, hhmm, taken, announced) {
+  return meds.filter((m) => medDue(m, day)).flatMap((m) => m.times.filter((t) => t <= hhmm).map((t) => ({ med: m, time: t, key: `${m.id}@${t}` }))).filter((d) => !taken[d.key] && !announced[d.key]);
+}
+
+if (typeof module !== 'undefined') module.exports = { weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

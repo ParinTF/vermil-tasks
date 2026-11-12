@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -454,4 +454,19 @@ test('shopping: ingredients from a meal, usual items, the week', () => {
   assert.deepEqual(weekDays('2026-11-12'), ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']);
   assert.equal(weekDays('2026-11-15')[0], '2026-11-09'); // a Sunday belongs to the week before it
   assert.equal(weekDays('2026-11-09')[6], '2026-11-15');
+});
+
+test('health: weight trend and medicine doses', () => {
+  const t = weightTrend({ '2026-11-12': 70.4, '2026-11-05': 71.0, '2026-10-01': 80, '2026-11-08': 0 }, '2026-11-12', 14);
+  assert.deepEqual(t.points.map((p) => p.day), ['2026-11-05', '2026-11-12']); // the old day and the empty one are out
+  assert.equal(t.change, -0.6);
+  assert.equal(weightTrend({ '2026-11-12': 70 }, '2026-11-12', 14).change, null); // one point: no change yet
+  const med = { id: 'm', name: 'Vitamin', times: ['08:00', '20:00'], days: [1, 2, 3, 4, 5] }; // weekdays
+  assert.equal(medDue(med, '2026-11-12'), true); // Thursday
+  assert.equal(medDue(med, '2026-11-14'), false); // Saturday
+  assert.deepEqual(dosesDue([med], '2026-11-12', '07:59', {}, {}).length, 0);
+  assert.deepEqual(dosesDue([med], '2026-11-12', '08:00', {}, {}).map((d) => d.key), ['m@08:00']);
+  assert.deepEqual(dosesDue([med], '2026-11-12', '21:00', { 'm@08:00': true }, {}).map((d) => d.key), ['m@20:00']); // the morning one was taken
+  assert.deepEqual(dosesDue([med], '2026-11-12', '21:00', {}, { 'm@08:00': true, 'm@20:00': true }), []); // both already announced
+  assert.deepEqual(dosesDue([med], '2026-11-14', '21:00', {}, {}), []);
 });
