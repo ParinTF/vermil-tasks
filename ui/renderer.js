@@ -425,11 +425,13 @@ $('import').onchange = async (e) => {
   if (!file) return;
   let incoming;
   let incomingNotes = [];
+  let incomingModules = {};
   try {
     const data = JSON.parse(await file.text());
     incoming = Array.isArray(data) ? data : data.todos;
     if (!Array.isArray(incoming)) throw new Error('no task list');
     if (Array.isArray(data.notes)) incomingNotes = data.notes;
+    if (data.modules && typeof data.modules === 'object') incomingModules = data.modules;
   } catch {
     return tell('That file is not a Vermil Tasks backup.');
   }
@@ -450,6 +452,7 @@ $('import').onchange = async (e) => {
     if (incomingNotes.length) await invoke('save_notes', { notes: incomingNotes });
     notes = await invoke('get_notes');
     fillNoteLinks();
+    for (const [id, value] of Object.entries(incomingModules)) if (!(id in moduleData)) await saveModule(id, value); // a module you already use keeps its own data; the rest come back after a restart
   } catch (err) {
     return tell('Could not save the notes: ' + err);
   }
@@ -851,12 +854,13 @@ async function setView(next) {
   if (next === view) return;
   await leaveNote();
   view = next;
-  $('tasks-view').hidden = view !== 'tasks';
-  $('notes-view').hidden = view !== 'notes';
-  $('calendar-view').hidden = view !== 'calendar';
-  for (const v of VIEWS) $('view-' + v).ariaSelected = String(view === v);
+  for (const v of VIEWS) {
+    $(v + '-view').hidden = view !== v;
+    $('view-' + v).ariaSelected = String(view === v);
+  }
   if (view === 'tasks') { render(); return fitSide(); } // a note may have changed while the task list was hidden
   if (view === 'calendar') return renderCalendar();
+  if (view !== 'notes') return registry[view]?.show?.(); // a module's own view
   if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList();
 }
 
@@ -1046,6 +1050,8 @@ function paletteResults(q) {
     go('New task', 'N', async () => { await setView('tasks'); $('title').focus(); }),
     go('New note', 'Ctrl+N', async () => { await setView('notes'); newNote(); }),
     go('Calendar: today', 'T', async () => { await setView('calendar'); selectDay(localDay(new Date()), true); }),
+    ...MODULES.filter((m) => m.view && started.has(m.id)).map((m) => go('Go to ' + m.view, 'Ctrl+' + (VIEWS.indexOf(m.id) + 1), () => setView(m.id))),
+    go('Modules…', 'Ctrl+,', openModules),
     go('Switch theme', 'T', () => $('theme').click()),
     go('Keyboard shortcuts', '?', () => tell(shortcutText())),
   ];
@@ -1116,7 +1122,8 @@ const SHORTCUTS = [
   'N: new task',
   'T: switch theme (auto, light, dark)',
   'Ctrl+K: command palette (search everything, run a command)',
-  'Ctrl+1, 2, 3: Tasks, Notes, Calendar',
+  'Ctrl+1, 2, 3: Tasks, Notes, Calendar (Ctrl+4 and up: views of switched-on modules)',
+  'Ctrl+, : switch optional modules on or off',
   'Ctrl+N (in Notes): new note',
   'In a note: Ctrl+B bold, Ctrl+Shift+L checklist, Ctrl+Enter tick an item',
   'In Calendar: arrows move a day, PageUp and PageDown a month, T today, Enter adds a task',
@@ -1158,13 +1165,14 @@ async function undo() {
 }
 
 addEventListener('keydown', (e) => {
-  if ($('dlg').open || $('pal').open) return; // a dialog handles Enter and Esc itself
+  if ($('dlg').open || $('pal').open || $('mods')?.open) return; // a dialog handles Enter and Esc itself
   const t = e.target.matches ? e.target : document.body;
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
   if (mod && !e.altKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); return; }
-  if (mod && !e.altKey && /^Digit[1-3]$/.test(e.code)) { e.preventDefault(); setView(VIEWS[+e.code.slice(5) - 1]); return; }
-  if (view !== 'tasks') return view === 'notes' ? notesKeys(e) : calendarKeys(e);
+  if (mod && !e.altKey && e.code === 'Comma') { e.preventDefault(); openModules(); return; }
+  if (mod && !e.altKey && /^Digit[1-9]$/.test(e.code) && VIEWS[+e.code.slice(5) - 1]) { e.preventDefault(); setView(VIEWS[+e.code.slice(5) - 1]); return; }
+  if (view !== 'tasks') return view === 'notes' ? notesKeys(e) : view === 'calendar' ? calendarKeys(e) : registry[view]?.keys?.(e);
 
   if (e.key === 'Escape') {
     if (t.id === 'search' && t.value) { t.value = ''; render(); }

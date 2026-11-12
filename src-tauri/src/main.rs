@@ -63,6 +63,9 @@ struct Data {
     // true once the notes that tasks used to carry as text were turned into notes of their own
     #[serde(default)]
     notes_migrated: bool,
+    // optional modules keep their data here, one JSON value per module id; "_on" lists the ones switched on
+    #[serde(default)]
+    modules: serde_json::Map<String, serde_json::Value>,
 }
 
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
@@ -346,6 +349,29 @@ fn get_notes(store: State<Store>) -> Vec<Note> {
     store.data.lock().unwrap().notes.clone()
 }
 
+/// A module id is a short lowercase word (the UI also uses "_on" for the enabled list), so it can never be a path or a clash with a field.
+fn valid_module_id(id: &str) -> bool {
+    !id.is_empty() && id.len() <= 24 && id.bytes().all(|b| b.is_ascii_lowercase() || b == b'_')
+}
+
+#[tauri::command]
+fn get_modules(store: State<Store>) -> serde_json::Map<String, serde_json::Value> {
+    store.data.lock().unwrap().modules.clone()
+}
+
+#[tauri::command]
+fn save_module(store: State<Store>, id: String, value: serde_json::Value) -> Result<(), String> {
+    if !valid_module_id(&id) {
+        return Err("bad module id".into());
+    }
+    if value.to_string().len() > 8 * 1024 * 1024 {
+        return Err("module data is too large".into());
+    }
+    let mut data = store.data.lock().unwrap();
+    data.modules.insert(id, value);
+    save(&store.file, &data)
+}
+
 /// Adds or replaces notes by id (one at a time from the editor, many at once from an import).
 #[tauri::command]
 fn save_notes(store: State<Store>, notes: Vec<Note>) -> Result<(), String> {
@@ -419,6 +445,7 @@ fn export_todos(app: AppHandle, store: State<Store>) -> Result<String, String> {
         "version": app.package_info().version.to_string(),
         "todos": data.todos,
         "notes": data.notes,
+        "modules": data.modules,
     });
     let text = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
     fs::write(&file, text).map_err(|e| e.to_string())?;
@@ -503,7 +530,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -582,6 +609,20 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn module_ids_are_short_lowercase_words() {
+        assert!(valid_module_id("pomodoro") && valid_module_id("_on"));
+        for bad in ["", "Money", "a/b", "..", "has space", "x1", "waytoolongamoduleidentifierhere"] {
+            assert!(!valid_module_id(bad), "{bad}");
+        }
+    }
+
+    #[test]
+    fn data_without_modules_still_loads() {
+        let d: Data = serde_json::from_str(r#"{"todos":[]}"#).unwrap();
+        assert!(d.modules.is_empty());
+    }
 
     const NOW: &str = "2026-11-11T10:00";
     fn ms(s: &str) -> i64 {

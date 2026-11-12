@@ -403,6 +403,14 @@ dialog.pal input { display: block; width: 100%; box-sizing: border-box; padding:
 .pal-hint { color: var(--mute); font-size: 12.5px; white-space: nowrap; }
 .pal-none { padding: 14px 16px; color: var(--mute); }
 
+/* ── modules dialog (Ctrl+,) ── */
+dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
+.mods-sub { margin-bottom: 18px; color: var(--mute); font-size: 13px; }
+.mods label.mod { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 2px 14px; align-items: center; padding: 14px 0; border-top: 1px solid var(--line); cursor: pointer; }
+.mod-name { font-weight: 600; }
+.mod-about { grid-column: 2; color: var(--mute); font-size: 13px; line-height: 1.4; }
+.mods .actions { margin-top: 22px; }
+
 /* ── motion ── */
 @keyframes rise { from { transform: translateY(105%); } }
 @keyframes rise-in { from { opacity: 0; transform: translateY(18px); } }
