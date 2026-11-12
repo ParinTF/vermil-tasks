@@ -382,4 +382,26 @@ function budgetStatus(spent, limit) {
   return { pct, level: pct >= 100 ? 'over' : pct >= 80 ? 'near' : 'ok', left: Math.round((limit - spent) * 100) / 100 };
 }
 
-if (typeof module !== 'undefined') module.exports = { budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── subscriptions: a charge repeats every week, month or year; `anchor` is the day of the month it started on, so a
+// charge on the 31st returns to the 31st after a short month instead of drifting to the 28th ──
+function addCycle(day, cycle, anchor) {
+  const d = parseDay(day);
+  if (cycle === 'week') return shiftDay(day, 7);
+  const months = cycle === 'year' ? 12 : 1;
+  const y = d.getFullYear() + Math.floor((d.getMonth() + months) / 12);
+  const m = (d.getMonth() + months) % 12;
+  const last = new Date(y, m + 1, 0).getDate();
+  return localDay(new Date(y, m, Math.min(anchor || d.getDate(), last)));
+}
+
+// the next charge on or after `today`, counting forward from a date that may be in the past
+function rollForward(day, cycle, anchor, today) {
+  let d = day;
+  for (let i = 0; d < today && i < 2000; i++) d = addCycle(d, cycle, anchor);
+  return d;
+}
+
+const monthlyCost = (amount, cycle) => Math.round((cycle === 'year' ? amount / 12 : cycle === 'week' ? amount * 52 / 12 : amount) * 100) / 100;
+const daysUntil = (day, today) => Math.round((parseDay(day) - parseDay(today)) / 86400000);
+
+if (typeof module !== 'undefined') module.exports = { addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

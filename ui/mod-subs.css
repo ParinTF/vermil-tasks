@@ -1,0 +1,32 @@
+/* Subscriptions module: loaded only while it is switched on */
+.subs-page { display: grid; gap: 32px; padding-top: 24px; }
+.sb-main, .sb-side { min-width: 0; }
+.sb-head { margin-bottom: 14px; }
+.sb-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.sb-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 16px 0 20px; border-top: 1px solid var(--ink); }
+.sb-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.sb-sum b { font-size: clamp(22px, 2.4vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.sb-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.sb-list li { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) auto 22px; align-items: center; gap: 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.sb-name, .sb-when { display: grid; min-width: 0; }
+.sb-name b { font-size: 16px; }
+.sb-name small, .sb-when small { color: var(--mute); font-size: 12.5px; }
+.sb-when b { font-size: 14px; font-variant-numeric: tabular-nums; }
+.sb-list li.soon .sb-when b { color: var(--accent-text); }
+.sb-list .linkish { font-size: 13px; }
+.sb-del { padding: 0; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; opacity: 0; }
+.sb-list li:hover .sb-del, .sb-del:focus-visible { opacity: 1; }
+.sb-del:hover { color: var(--accent-text); }
+.sb-side form { display: grid; gap: 16px; }
+.sb-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 20px; }
+.sb-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.sb-field input, .sb-field select { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.sb-field input:focus, .sb-field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.sb-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
+
+@media (min-width: 860px) {
+  .subs-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .sb-main { display: flex; flex-direction: column; min-height: 0; }
+  .sb-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .sb-side { min-height: 0; overflow-y: auto; }
+}
