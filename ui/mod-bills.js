@@ -116,7 +116,7 @@
       if (data.alerted[key]) continue;
       data.alerted[key] = t;
       changed = true;
-      invoke('toast', { title: `${b.name}: ${stateText(st)}`, text: b.amount ? money(b.amount) : '' }).catch(() => {});
+      invoke('toast', { title: `${b.name}: ${stateText(st)}`, text: b.amount ? money(b.amount) : '', module: 'bills' }).catch(() => {});
     }
     for (const k of Object.keys(data.alerted)) if (data.alerted[k] < shiftDay(t, -90)) delete data.alerted[k];
     if (changed) save();

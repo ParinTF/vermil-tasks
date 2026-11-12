@@ -59,7 +59,7 @@ function loadFile(tag, props) {
 
 // the tab bar and VIEWS follow what is switched on: Home first, then the modules with a view, in list order
 function syncViews() {
-  const want = ['home', ...MODULES.filter((m) => m.view && started.has(m.id)).map((m) => m.id)];
+  const want = ['home', ...orderTabs(MODULES.filter((m) => m.view && started.has(m.id)).map((m) => m.id), prefsNow.tabOrder)];
   VIEWS.splice(0, VIEWS.length, ...want);
   const more = el('button', { className: 'views-more-btn', type: 'button', hidden: true, ariaHaspopup: 'menu', ariaExpanded: 'false' });
   more.onclick = toggleTabMenu;
@@ -286,4 +286,10 @@ invoke('get_modules').then(async (saved) => {
   for (const m of MODULES) if (moduleOn(m.id)) await startModule(m).catch((e) => console.error(m.id, e));
   syncViews();
   renderHome();
+  // after a reload that Settings asked for it opens again; otherwise a start page of "where I left off" returns to the last tab
+  let again = false;
+  try { again = sessionStorage.getItem('reopen-settings') === '1'; sessionStorage.removeItem('reopen-settings'); } catch {}
+  let last = '';
+  try { last = localStorage.getItem('last-view') || ''; } catch {}
+  if (again) setView('settings'); else if (prefsNow.startPage === 'last' && last && last !== 'home') setView(last);
 });

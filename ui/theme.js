@@ -66,10 +66,41 @@ function applyLook(look) {
   set('--font', fixed.font === 'anuphan' ? '' : fontStack(fixed));
 }
 
+// Preferences kept on this computer (Settings): week start, 12 or 24 hour clock, default reminder, motion, the ticker, the page
+// to open on, the order of the tabs, and whether to look for updates. Applied before first paint where they change the look.
+const normalPrefs = (raw) => {
+  const r = raw && typeof raw === 'object' ? raw : {};
+  return {
+    weekStart: r.weekStart === 0 ? 0 : 1,
+    h12: r.h12 === true,
+    defaultRemind: ['0', '10', '60', '1440', ''].includes(r.defaultRemind) ? r.defaultRemind : '0',
+    motion: r.motion === 'off' ? 'off' : '',
+    ticker: r.ticker !== false,
+    startPage: r.startPage === 'last' ? 'last' : 'home',
+    tabOrder: Array.isArray(r.tabOrder) ? r.tabOrder.filter((x) => typeof x === 'string' && /^[a-z]{1,20}$/.test(x)).slice(0, 40) : [],
+    updateCheck: r.updateCheck !== false,
+  };
+};
+let prefsNow = normalPrefs(null);
+const readPrefs = () => { try { return normalPrefs(JSON.parse(localStorage.getItem('prefs'))); } catch { return normalPrefs(null); } };
+function applyPrefs(p) {
+  prefsNow = normalPrefs(p);
+  const d = document.documentElement.dataset;
+  if (prefsNow.motion) d.motion = 'off'; else delete d.motion;
+  if (!prefsNow.ticker) d.ticker = 'off'; else delete d.ticker;
+}
+function setPrefs(change) {
+  const p = normalPrefs({ ...prefsNow, ...change });
+  try { localStorage.setItem('prefs', JSON.stringify(p)); } catch {}
+  applyPrefs(p);
+  return p;
+}
+
 try {
+  applyPrefs(readPrefs());
   const stored = localStorage.getItem('theme');
   if (stored) document.documentElement.dataset.theme = stored;
   applyLook(storedLook());
 } catch {}
 
-if (typeof module !== 'undefined') module.exports = { DEFAULT_ACCENT, PAPER, luminance, contrast, fitAccent, accentTokens, cleanFontName, fontStack, normalLook, FONTS };
+if (typeof module !== 'undefined') module.exports = { normalPrefs, DEFAULT_ACCENT, PAPER, luminance, contrast, fitAccent, accentTokens, cleanFontName, fontStack, normalLook, FONTS };

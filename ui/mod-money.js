@@ -122,7 +122,7 @@
     const seen = (data.alerted[month] ||= {});
     if (level <= (seen[entry.cat] || 0)) return;
     seen[entry.cat] = level;
-    invoke('toast', { title: level === 100 ? `${entry.cat}: over budget` : `${entry.cat}: ${st.pct}% of budget`, text: `${money(spent)} of ${money(limit)} this month` }).catch(() => {});
+    invoke('toast', { title: level === 100 ? `${entry.cat}: over budget` : `${entry.cat}: ${st.pct}% of budget`, text: `${money(spent)} of ${money(limit)} this month`, module: 'money' }).catch(() => {});
     if (level === 100) emit('over-budget', { cat: entry.cat, amount: spent });
   }
 

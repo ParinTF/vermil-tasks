@@ -15,9 +15,9 @@ const undoStack = []; // earlier states of `todos`, newest last
 let notes = []; // notes, kept apart from tasks; a task points at one with its noteId
 const noteOf = (t) => (t.noteId ? notes.find((n) => n.id === t.noteId) : undefined);
 
-const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', opts);
+const fmt = (d, opts) => new Date(d).toLocaleString('en-GB', prefsNow.h12 ? { ...opts, hour12: true } : opts);
 const remindLabel = { 0: 'reminds at due time', 10: 'reminds 10 min before', 60: 'reminds 1 h before', 1440: 'reminds 1 day before' };
-const calm = matchMedia('(prefers-reduced-motion: reduce)');
+const calm = { get matches() { return matchMedia('(prefers-reduced-motion: reduce)').matches || document.documentElement.dataset.motion === 'off'; } }; // Windows asks for less motion, or Settings does
 const isOverdue = (t) => t.due && new Date(t.due) < new Date();
 // a repeating task that was finished waits here until its hideUntil day arrives
 const isLater = (t) => t.hideUntil && t.hideUntil > localDay(new Date());
@@ -63,7 +63,7 @@ async function commit(next, { undo = true } = {}) {
   for (const t of next) if (t.done && !before.some((b) => b.id === t.id && b.done)) emit('task-done', { title: t.title });
   const apply = () => { todos = next; render(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); registry.widget?.publishSoon?.(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
-  if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
+  if (document.startViewTransition && !document.hidden && !calm.matches) document.startViewTransition(apply); else apply();
   return true;
 }
 
@@ -102,28 +102,6 @@ const eventHooks = []; // (type, data) => void: what happened ('task-done', 'bil
 const emit = (type, data = {}) => { for (const f of [...eventHooks]) try { f(type, data); } catch (e) { console.error('event', type, e); } };
 
 window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
-
-invoke('get_autostart').then((on) => { $('autostart').checked = on; });
-$('autostart').onchange = (e) => invoke('set_autostart', { on: e.target.checked }).catch((err) => {
-  e.target.checked = !e.target.checked;
-  tell('Could not change the startup setting: ' + err);
-});
-
-// Morning summary: one toast a day at this time (empty = off). Saved a second after typing stops, so
-// editing the digits does not re-trigger it on every keystroke.
-invoke('get_summary_time').then((t) => {
-  $('summary-on').checked = t !== '';
-  $('summary-time').value = t || '09:00';
-  $('summary-time').disabled = t === '';
-});
-let summaryTimer;
-const saveSummary = () => {
-  clearTimeout(summaryTimer);
-  const on = $('summary-on').checked && $('summary-time').value;
-  invoke('set_summary_time', { time: on ? $('summary-time').value : '' }).catch((e) => tell('Could not save the summary time: ' + e));
-};
-$('summary-on').onchange = () => { $('summary-time').disabled = !$('summary-on').checked; saveSummary(); };
-$('summary-time').oninput = () => { clearTimeout(summaryTimer); summaryTimer = setTimeout(saveSummary, 1000); };
 
 $('export').onclick = () => invoke('export_todos').then(
   (path) => { $('backup-msg').textContent = 'Saved to Downloads'; $('backup-msg').title = path; },
@@ -203,10 +181,10 @@ $('update').onclick = () => {
     $('update').textContent = label;
   });
 };
-checkUpdate();
-setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
+if (prefsNow.updateCheck) checkUpdate();
+setInterval(() => { if (prefsNow.updateCheck) checkUpdate(); }, 6 * 3600000); // the app can sit in the tray for days
 // Closing the window only hides it to the tray, so "reopening" never restarts the app: look again whenever the window comes back
-addEventListener('focus', () => { if (Date.now() - lastUpdateCheck > 5 * 60000) checkUpdate(); });
+addEventListener('focus', () => { if (prefsNow.updateCheck && Date.now() - lastUpdateCheck > 5 * 60000) checkUpdate(); });
 
 // ── notes view: a list of notes and a plain-text editor that saves itself ──
 const VIEWS = ['home']; // kept in step with what is switched on by syncViews() in modules.js
@@ -244,6 +222,7 @@ async function showTask(id) {
 async function setView(next) {
   if (next === view || !(VIEWS.includes(next) || next === 'settings')) return; // a view that is not switched on does not exist
   if (next === 'settings') lastView = view;
+  else try { localStorage.setItem('last-view', next); } catch {}
   await registry.notes?.leave?.(); // typing in a note is saved before the view changes
   view = next;
   for (const n of document.querySelectorAll('main[id$="-view"]')) n.hidden = n.id !== view + '-view';

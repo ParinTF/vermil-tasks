@@ -26,6 +26,8 @@
 }
 :root[data-theme="light"] { color-scheme: light; }
 :root[data-theme="dark"] { color-scheme: dark; }
+html[data-motion="off"] *, html[data-motion="off"] *::before, html[data-motion="off"] *::after { animation: none !important; transition: none !important; } /* Settings: no motion */
+html[data-ticker="off"] .marquee { display: none !important; } /* Settings: no ticker */
 
 * { box-sizing: border-box; }
 html { scrollbar-color: color-mix(in srgb, var(--ink) 33%, transparent) transparent; scrollbar-width: thin; }

@@ -60,6 +60,11 @@ struct Data {
     // the day (YYYY-MM-DD) the summary last fired, so it shows once a day
     #[serde(default)]
     summary_day: Option<String>,
+    // notifications: quiet hours "HH:MM-HH:MM" (nothing is shown inside them; reminders wait), and the sources switched off
+    #[serde(default)]
+    quiet: Option<String>,
+    #[serde(default)]
+    mute: Vec<String>,
     #[serde(default)]
     notes: Vec<Note>,
     // true once the notes that tasks used to carry as text were turned into notes of their own
@@ -355,7 +360,14 @@ fn notify_summary(app: &AppHandle, due_today: usize, overdue: usize, open: usize
 
 /// A plain toast for a module (the focus timer): clicking it brings the window up.
 #[tauri::command]
-fn toast(app: AppHandle, title: String, text: String) {
+fn toast(app: AppHandle, store: State<Store>, title: String, text: String, module: Option<String>, test: Option<bool>) {
+    if test != Some(true) {
+        let data = store.data.lock().unwrap();
+        let muted = module.as_deref().is_some_and(|m| data.mute.iter().any(|x| x == m));
+        if muted || data.quiet.as_deref().is_some_and(|q| in_quiet(q, &Local::now().format("%H:%M").to_string())) {
+            return;
+        }
+    }
     let handle = app.clone();
     let _ = Toast::new(&toast_app_id(&app))
         .title(&title.chars().take(100).collect::<String>())
@@ -394,14 +406,20 @@ fn check_reminders(app: &AppHandle) {
     let mut data = store.data.lock().unwrap();
     let now = Local::now();
     let mut changed = false;
-    for (todo, at) in due_reminders(&data.todos, &data.notified, now.timestamp_millis()) {
-        notify(app, &todo);
-        data.notified.insert(todo.id, at);
-        changed = true;
+    let quiet = data.quiet.as_deref().is_some_and(|q| in_quiet(q, &now.format("%H:%M").to_string())); // a reminder not shown now is not marked, so it shows when the quiet hours end
+    let tasks_muted = data.mute.iter().any(|m| m == "tasks");
+    if !quiet {
+        for (todo, at) in due_reminders(&data.todos, &data.notified, now.timestamp_millis()) {
+            if !tasks_muted {
+                notify(app, &todo);
+            }
+            data.notified.insert(todo.id, at);
+            changed = true;
+        }
     }
     let today = now.format("%Y-%m-%d").to_string();
     let setting = data.summary_time.clone().unwrap_or_else(|| DEFAULT_SUMMARY_TIME.to_string());
-    if summary_due(&setting, data.summary_day.as_deref(), &today, &now.format("%H:%M").to_string()) {
+    if !quiet && summary_due(&setting, data.summary_day.as_deref(), &today, &now.format("%H:%M").to_string()) {
         // the day is recorded even with nothing to show, so adding a task at 14:00 does not trigger a "morning" summary
         data.summary_day = Some(today.clone());
         changed = true;
@@ -417,6 +435,42 @@ fn check_reminders(app: &AppHandle) {
     if changed {
         let _ = save(&store.file, &data);
     }
+}
+
+/// True when `now` ("HH:MM") is inside "HH:MM-HH:MM"; a range that ends before it starts runs over midnight (22:00-07:00).
+fn in_quiet(spec: &str, now: &str) -> bool {
+    let Some((from, to)) = spec.split_once('-') else { return false };
+    if NaiveTime::parse_from_str(from, "%H:%M").is_err() || NaiveTime::parse_from_str(to, "%H:%M").is_err() || from == to {
+        return false;
+    }
+    if from < to { from <= now && now < to } else { now >= from || now < to }
+}
+
+#[derive(Serialize)]
+struct NotifyInfo {
+    quiet: String,
+    mute: Vec<String>,
+}
+
+#[tauri::command]
+fn get_notify(store: State<Store>) -> NotifyInfo {
+    let data = store.data.lock().unwrap();
+    NotifyInfo { quiet: data.quiet.clone().unwrap_or_default(), mute: data.mute.clone() }
+}
+
+/// `quiet` is "HH:MM-HH:MM" or "" for none; `mute` lists module ids whose notifications are off.
+#[tauri::command]
+fn set_notify(store: State<Store>, quiet: String, mute: Vec<String>) -> Result<(), String> {
+    if !quiet.is_empty() && !quiet.split_once('-').is_some_and(|(a, b)| a != b && NaiveTime::parse_from_str(a, "%H:%M").is_ok() && NaiveTime::parse_from_str(b, "%H:%M").is_ok()) {
+        return Err("quiet hours must look like 22:00-07:00".into());
+    }
+    if mute.len() > 40 || !mute.iter().all(|m| valid_module_id(m)) {
+        return Err("bad module id".into());
+    }
+    let mut data = store.data.lock().unwrap();
+    data.quiet = if quiet.is_empty() { None } else { Some(quiet) };
+    data.mute = mute;
+    save(&store.file, &data)
 }
 
 #[tauri::command]
@@ -1141,7 +1195,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -1230,6 +1284,14 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn quiet_hours_run_over_midnight_too() {
+        assert!(in_quiet("22:00-07:00", "23:30") && in_quiet("22:00-07:00", "03:00") && in_quiet("22:00-07:00", "22:00"));
+        assert!(!in_quiet("22:00-07:00", "07:00") && !in_quiet("22:00-07:00", "12:00"));
+        assert!(in_quiet("13:00-14:00", "13:30") && !in_quiet("13:00-14:00", "14:00") && !in_quiet("13:00-14:00", "12:59"));
+        assert!(!in_quiet("", "10:00") && !in_quiet("nonsense", "10:00") && !in_quiet("10:00-10:00", "10:00") && !in_quiet("25:00-07:00", "03:00"));
+    }
 
     #[test]
     fn backups_run_weekly() {

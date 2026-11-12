@@ -57,6 +57,7 @@ function seriesStreaks() {
 function resetForm() {
   editingId = null;
   $('form').reset();
+  $('remind').value = prefsNow.defaultRemind;
   $('submit').textContent = 'Add task';
   $('cancel').hidden = true;
 }
@@ -473,6 +474,7 @@ defineModule('tasks', {
       sub: [dueToday && `${dueToday} due today`, overdue && `${overdue} overdue`].filter(Boolean).join(' · ') || 'Nothing due today' };
   },
   start() {
+    $('remind').value = prefsNow.defaultRemind;
     shortcutGroups.push(tasksGroup);
     metricHooks.push(tasksMetrics);
     document.querySelector('.marquee').hidden = false;

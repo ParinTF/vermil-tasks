@@ -271,7 +271,7 @@ function calendarKeys(e) {
   else if (e.key === 'Enter' || e.code === 'KeyN') { e.preventDefault(); $('cal-new').focus(); } // Enter would also click the focused day
 }
 
-$('cal-week').replaceChildren(...Array.from({ length: 7 }, (_, i) => el('span', {}, fmt(new Date(2024, 0, 1 + i), { weekday: 'short' })))); // 1 Jan 2024 is a Monday
+$('cal-week').replaceChildren(...Array.from({ length: 7 }, (_, i) => el('span', {}, fmt(new Date(2024, 0, 1 + i - (weekStartDay === 0 ? 1 : 0)), { weekday: 'short' })))); // 1 Jan 2024 is a Monday
 $('cal-prev').onclick = () => selectDay(calMode === 'day' ? shiftDay(calDay, -1) : shiftMonth(calDay, -1));
 $('cal-next').onclick = () => selectDay(calMode === 'day' ? shiftDay(calDay, 1) : shiftMonth(calDay, 1));
 $('cal-mode').onclick = () => setCalMode(calMode === 'day' ? 'month' : 'day');

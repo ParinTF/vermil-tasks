@@ -95,7 +95,7 @@
       if (n > REMIND_DAYS || data.alerted[s.id] === s.next) continue;
       data.alerted[s.id] = s.next;
       changed = true;
-      invoke('toast', { title: `${s.name} ${n < 0 ? 'was due' : n === 0 ? 'renews today' : `renews in ${n} day${n === 1 ? '' : 's'}`}`, text: `${money(s.amount)} every ${CYCLES[s.cycle]}` }).catch(() => {});
+      invoke('toast', { title: `${s.name} ${n < 0 ? 'was due' : n === 0 ? 'renews today' : `renews in ${n} day${n === 1 ? '' : 's'}`}`, text: `${money(s.amount)} every ${CYCLES[s.cycle]}`, module: 'subs' }).catch(() => {});
     }
     if (changed) save();
   }

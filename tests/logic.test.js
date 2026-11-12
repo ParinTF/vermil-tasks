@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -712,4 +712,22 @@ test('insights: a count is 0 on quiet days, from its first day to today', () => 
   assert.deepEqual(f, { '2026-11-09': 3, '2026-11-10': 0, '2026-11-11': 2, '2026-11-12': 0 });
   assert.deepEqual(zeroFill({}, '2026-11-12', 90), {});
   assert.equal(Object.keys(zeroFill({ '2020-01-01': 1 }, '2026-11-12', 30)).length, 30);
+});
+
+test('settings: tabs follow the chosen order and new ones come last', () => {
+  assert.deepEqual(orderTabs(['tasks', 'notes', 'money'], []), ['tasks', 'notes', 'money']);
+  assert.deepEqual(orderTabs(['tasks', 'notes', 'money'], ['money', 'tasks']), ['money', 'tasks', 'notes']);
+  assert.deepEqual(orderTabs(['a', 'b', 'c'], ['x', 'c', 'y']), ['c', 'a', 'b']); // ids it no longer has are ignored
+});
+
+test('settings: the week can start on Sunday', () => {
+  setWeekStart(0);
+  try {
+    assert.equal(weekDays('2026-11-11')[0], '2026-11-08'); // Wednesday 11 Nov: the Sunday before
+    assert.equal(weekDays('2026-11-08')[0], '2026-11-08');
+    assert.equal(monthGrid(2026, 10)[0].day, '2026-11-01'); // 1 Nov 2026 is a Sunday
+    assert.equal(timeRange('week', '2026-11-11').until, '2026-11-14');
+  } finally { setWeekStart(1); }
+  assert.equal(weekDays('2026-11-11')[0], '2026-11-09');
+  assert.equal(monthGrid(2026, 10)[0].day, '2026-10-26');
 });

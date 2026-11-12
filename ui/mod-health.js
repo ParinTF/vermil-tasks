@@ -158,7 +158,7 @@
     const due = dosesDue(data.meds, d, hhmm, data.taken[d] || {}, data.announced[d] || {});
     if (!due.length) return;
     const seen = (data.announced[d] ||= {});
-    for (const x of due) { seen[x.key] = true; invoke('toast', { title: `Time for ${x.med.name}`, text: x.time }).catch(() => {}); }
+    for (const x of due) { seen[x.key] = true; invoke('toast', { title: `Time for ${x.med.name}`, text: x.time, module: 'health' }).catch(() => {}); }
     for (const k of Object.keys(data.announced)) if (k < shiftDay(d, -7)) delete data.announced[k]; // keep a week of notes, not all of history
     save();
   }

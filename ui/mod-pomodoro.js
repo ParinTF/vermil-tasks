@@ -20,7 +20,7 @@
     refresh();
   }
 
-  const toast = (title, text) => invoke('toast', { title, text }).catch(() => {});
+  const toast = (title, text) => invoke('toast', { title, text, module: 'pomodoro' }).catch(() => {});
 
   function begin(task) {
     data.work = clamp($('fo-work')?.value ?? data.work, 1, 180);

@@ -69,7 +69,7 @@
       if (left(ev) !== 0 || data.alerted[ev.id] === today()) continue;
       data.alerted[ev.id] = today();
       changed = true;
-      invoke('toast', { title: `${ev.title} is today`, text: '' }).catch(() => {});
+      invoke('toast', { title: `${ev.title} is today`, text: '', module: 'countdown' }).catch(() => {});
     }
     if (changed) save();
   }

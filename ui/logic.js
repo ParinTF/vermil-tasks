@@ -151,10 +151,12 @@ function niceMax(n) {
   return n <= 10 ? Math.max(2, Math.ceil(n / 2) * 2) : Math.ceil(n / 10) * 10;
 }
 
-// ── calendar maths: weeks start on Monday ──
+// ── calendar maths: weeks start on Monday, or on Sunday when Settings says so ──
+let weekStartDay = typeof prefsNow === 'object' ? prefsNow.weekStart : 1; // 1 = Monday, 0 = Sunday
+const setWeekStart = (d) => { weekStartDay = d === 0 ? 0 : 1; };
 // The six weeks of a month view (42 days), from the Monday on or before the 1st. `month` is 0 to 11.
 function monthGrid(year, month) {
-  const lead = (new Date(year, month, 1).getDay() + 6) % 7; // days since Monday
+  const lead = (new Date(year, month, 1).getDay() - weekStartDay + 7) % 7; // days since the week started
   return Array.from({ length: 42 }, (_, i) => {
     const d = new Date(year, month, 1 - lead + i);
     return { day: localDay(d), inMonth: d.getMonth() === month };
@@ -494,9 +496,9 @@ function topItems(history, n, exclude = []) {
   return Object.entries(history).filter(([name]) => !skip.has(name.toLowerCase())).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, n).map(([name]) => name);
 }
 
-// the seven days of the week (Monday first) that contain `day`
+// the seven days of the week (Monday first, or Sunday) that contain `day`
 function weekDays(day) {
-  const dow = (parseDay(day).getDay() + 6) % 7;
+  const dow = (parseDay(day).getDay() - weekStartDay + 7) % 7;
   const monday = shiftDay(day, -dow);
   return Array.from({ length: 7 }, (_, i) => shiftDay(monday, i));
 }
@@ -668,6 +670,12 @@ function autoSummary(rule) {
   return `When ${when}, ${what}`;
 }
 
+// the tabs in the order Settings chose; ones it does not know keep their own order, after the known ones
+function orderTabs(ids, order) {
+  const at = (id) => { const i = order.indexOf(id); return i < 0 ? 1000 + ids.indexOf(id) : i; };
+  return [...ids].sort((a, b) => at(a) - at(b));
+}
+
 // ── Assistant: what is sent to the model, and what is accepted back. Pure. ──
 // The model is asked for JSON { reply, actions }. An action is only ever a suggestion the user confirms, and only
 // these shapes are accepted, so whatever the model writes cannot do anything else.
@@ -689,7 +697,7 @@ function assistantPrompt({ now, sections, can, views }) {
     'You are the assistant inside Vermil, a personal organiser on the user\'s Windows PC. Answer in the language the user writes in, briefly and plainly.',
     `Today is ${weekday} ${day}, local time ${time}.`,
     'Use only the data below for questions about the user\'s own life. If it is not there, say you cannot see it. Never invent entries.',
-    'To add or open something, put it in "actions". The user sees each action and decides, so never say it is already done.',
+    'To add or open something, put it in "actions". The user sees each action and decides, so phrase it as an offer ("I can add..."), never as already done.',
     'Reply with JSON only, in this form: {"reply": "text for the user", "actions": []}',
     can.length ? 'An action is one of:\n' + can.map((k) => ASSIST_ACTION_HELP[k].replace('"view":"..."', `"view":"one of: ${views.join(', ')}"`)).join('\n') : 'You cannot suggest actions: no module that could carry them out is on.',
     '', 'Data you may use:', data,
@@ -821,4 +829,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

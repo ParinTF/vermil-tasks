@@ -119,7 +119,7 @@
       if (data.alerted[key] === t) continue;
       data.alerted[key] = t;
       changed = true;
-      invoke('toast', { title: b.days === 0 ? `${p.name}'s birthday is today` : `${p.name}'s birthday is in 3 days`, text: b.turning ? `Turning ${b.turning}` : '' }).catch(() => {});
+      invoke('toast', { title: b.days === 0 ? `${p.name}'s birthday is today` : `${p.name}'s birthday is in 3 days`, text: b.turning ? `Turning ${b.turning}` : '', module: 'people' }).catch(() => {});
     }
     if (changed) save();
   }
