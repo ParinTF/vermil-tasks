@@ -404,4 +404,15 @@ function rollForward(day, cycle, anchor, today) {
 const monthlyCost = (amount, cycle) => Math.round((cycle === 'year' ? amount / 12 : cycle === 'week' ? amount * 52 / 12 : amount) * 100) / 100;
 const daysUntil = (day, today) => Math.round((parseDay(day) - parseDay(today)) / 86400000);
 
-if (typeof module !== 'undefined') module.exports = { addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── countdown: an event is { title, day, yearly }; a yearly one (a birthday) counts to its next occurrence ──
+function nextEventDay(ev, today) {
+  if (!ev.yearly) return ev.day;
+  const [, m, d] = ev.day.split('-').map(Number);
+  const on = (y) => localDay(new Date(y, m - 1, Math.min(d, new Date(y, m, 0).getDate()))); // 29 Feb falls on 28 Feb in other years
+  const y = Number(today.slice(0, 4));
+  return on(y) >= today ? on(y) : on(y + 1);
+}
+
+const countdownLabel = (n) => (n === 0 ? 'Today' : n === 1 ? 'Tomorrow' : n === -1 ? 'Yesterday' : n > 0 ? `${n} days` : `${-n} days ago`);
+
+if (typeof module !== 'undefined') module.exports = { nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

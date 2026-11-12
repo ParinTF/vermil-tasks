@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -376,4 +376,15 @@ test('subscriptions: monthly cost and days until', () => {
   assert.equal(daysUntil('2026-11-15', '2026-11-12'), 3);
   assert.equal(daysUntil('2026-11-10', '2026-11-12'), -2);
   assert.equal(daysUntil('2026-12-01', '2026-11-30'), 1); // across a month end
+});
+
+test('countdown: yearly events return, others stay put', () => {
+  assert.equal(nextEventDay({ day: '2026-12-25', yearly: false }, '2026-11-12'), '2026-12-25');
+  assert.equal(nextEventDay({ day: '2026-03-01', yearly: false }, '2026-11-12'), '2026-03-01'); // past, stays past
+  assert.equal(nextEventDay({ day: '1990-11-20', yearly: true }, '2026-11-12'), '2026-11-20'); // later this year
+  assert.equal(nextEventDay({ day: '1990-11-12', yearly: true }, '2026-11-12'), '2026-11-12'); // today
+  assert.equal(nextEventDay({ day: '1990-03-05', yearly: true }, '2026-11-12'), '2027-03-05'); // next year
+  assert.equal(nextEventDay({ day: '2000-02-29', yearly: true }, '2027-01-10'), '2027-02-28');
+  assert.equal(nextEventDay({ day: '2000-02-29', yearly: true }, '2028-01-10'), '2028-02-29');
+  assert.deepEqual([0, 1, -1, 5, -3].map(countdownLabel), ['Today', 'Tomorrow', 'Yesterday', '5 days', '3 days ago']);
 });
