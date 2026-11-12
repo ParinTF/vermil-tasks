@@ -138,6 +138,11 @@
   const commandFn = () => [{ label: 'Focus timer…', hint: 'F on a task', kind: 'Command', run: () => openFocus(selectedId || '') }];
 
   defineModule('pomodoro', {
+    daily() { // for Insights
+      const byDay = {};
+      for (const s of data.sessions) byDay[s.day] = (byDay[s.day] || 0) + s.min;
+      return [{ id: 'focus.minutes', label: 'focus time', byDay, zero: true }];
+    },
     weekly(since, until) {
       const list = data.sessions.filter((s) => s.day >= since && s.day <= until);
       if (!list.length) return { title: 'Focus', lines: ['No focus sessions'] };

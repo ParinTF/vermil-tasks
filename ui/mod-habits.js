@@ -127,6 +127,11 @@
   const commandFn = () => [{ label: 'Add a habit', hint: 'Habits', kind: 'Command', run: async () => { await setView('habits'); $('hb-name').focus(); } }];
 
   defineModule('habits', {
+    daily() { // for Insights: the share of due habits kept, per day
+      const byDay = {};
+      for (const day of Object.keys(data.log)) { const h = habitDay(data.habits, data.log, day); if (h.total) byDay[day] = Math.round(h.done / h.total * 100); }
+      return [{ id: 'habits.rate', label: 'habits kept', byDay }];
+    },
     weekly(since, until) {
       if (!data.habits.length) return null;
       let done = 0, total = 0;

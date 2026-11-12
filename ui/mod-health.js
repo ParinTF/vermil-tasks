@@ -181,6 +181,11 @@
       if (!w && !data.sleep[t] && !doses.length && !data.workouts.length) return null;
       return { label: 'Health', value: `${w}/${data.waterGoal}`, unit: 'water', warn: left > 0, sub: [left ? `${left} dose${left === 1 ? '' : 's'} to take` : doses.length ? 'Medicine taken' : '', data.sleep[t] ? `${num(data.sleep[t])} h sleep` : ''].filter(Boolean).join(' · ') || 'Glasses today' };
     },
+    daily() { // for Insights
+      const work = {};
+      for (const w of data.workouts || []) work[w.day] = (work[w.day] || 0) + w.minutes;
+      return [{ id: 'health.sleep', label: 'sleep', byDay: { ...data.sleep } }, { id: 'health.water', label: 'water', byDay: { ...data.water } }, { id: 'health.workout', label: 'workout time', byDay: work, zero: true }];
+    },
     weekly(since, until) {
       const lines = [];
       const w = avg(data.water, since, until), s = avg(data.sleep, since, until);

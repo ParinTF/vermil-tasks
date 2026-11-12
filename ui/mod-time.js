@@ -173,6 +173,11 @@
       const secs = data.entries.filter((e) => localDay(new Date(e.start)) === today()).reduce((n, e) => n + secondsBetween(e.start, e.end), 0);
       return data.projects.length ? { label: 'Time today', value: hoursLabel(secs), unit: '', sub: `${hoursLabel(weekSeconds())} this week` } : null;
     },
+    daily() { // for Insights
+      const byDay = {};
+      for (const e of data.entries) { const d = localDay(new Date(e.start)); byDay[d] = (byDay[d] || 0) + secondsBetween(e.start, e.end) / 3600; }
+      return [{ id: 'time.hours', label: 'tracked work', byDay, zero: true }];
+    },
     weekly(since, until) {
       const r = timeReport(data.entries, data.projects, since, until);
       return { title: 'Time', lines: r.rows.length ? [...r.rows.slice(0, 4).map((x) => `${x.name}: ${hoursLabel(x.seconds)}${x.amount ? ' (' + money(x.amount) + ')' : ''}`), `Total ${hoursLabel(r.seconds)}`] : ['No time tracked'] };

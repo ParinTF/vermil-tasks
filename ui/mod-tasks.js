@@ -451,6 +451,11 @@ const tasksMetrics = () => [
 ];
 
 defineModule('tasks', {
+  daily() { // for Insights
+    const byDay = {};
+    for (const t of todos) if (t.done && t.completedAt) { const d = localDay(new Date(t.completedAt)); byDay[d] = (byDay[d] || 0) + 1; }
+    return [{ id: 'tasks.done', label: 'tasks done', byDay, zero: true }];
+  },
   weekly(since, until) {
     const inRange = (t) => t.done && t.completedAt && localDay(new Date(t.completedAt)) >= since && localDay(new Date(t.completedAt)) <= until;
     const done = todos.filter(inRange);

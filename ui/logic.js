@@ -754,4 +754,71 @@ function assistantTurns(log, max = 12) {
   return turns;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns };
+// ── Insights: patterns across modules, from one number per day per series. Pure. ──
+// series: [{ id: 'health.sleep', label, unit, byDay: { 'YYYY-MM-DD': number } }]. These are patterns in the user's own days,
+// never causes, so a pair is reported only with enough days and a clear, unlikely-to-be-chance link (Spearman, |r| >= 0.4, t >= 3).
+function ranksOf(values) {
+  const order = values.map((v, i) => [v, i]).sort((a, b) => a[0] - b[0]);
+  const r = new Array(values.length);
+  for (let i = 0; i < order.length;) {
+    let j = i;
+    while (j + 1 < order.length && order[j + 1][0] === order[i][0]) j++;
+    for (let k = i; k <= j; k++) r[order[k][1]] = (i + j) / 2 + 1; // ties share the average rank
+    i = j + 1;
+  }
+  return r;
+}
+function pearson(x, y) {
+  const n = x.length, mx = x.reduce((s, v) => s + v, 0) / n, my = y.reduce((s, v) => s + v, 0) / n;
+  let sxy = 0, sxx = 0, syy = 0;
+  for (let i = 0; i < n; i++) { sxy += (x[i] - mx) * (y[i] - my); sxx += (x[i] - mx) ** 2; syy += (y[i] - my) ** 2; }
+  return sxx && syy ? sxy / Math.sqrt(sxx * syy) : 0;
+}
+const spearman = (x, y) => pearson(ranksOf(x), ranksOf(y));
+
+// a count-like series (tasks done, money spent) is 0 on the days nothing happened, from its first day to today
+function zeroFill(byDay, today, days) {
+  const keys = Object.keys(byDay).sort();
+  if (!keys.length) return {};
+  const out = {};
+  for (let d = keys[0] > shiftDay(today, -(days - 1)) ? keys[0] : shiftDay(today, -(days - 1)); d <= today; d = shiftDay(d, 1)) out[d] = byDay[d] || 0;
+  return out;
+}
+
+const INSIGHT_MIN_DAYS = 21;
+function insightFindings(series, today, days = 90) {
+  const since = shiftDay(today, -(days - 1));
+  const mean = (a) => a.reduce((s, v) => s + v, 0) / a.length;
+  const found = [];
+  for (const a of series) for (const b of series) {
+    if (a.id.split('.')[0] === b.id.split('.')[0]) continue; // two numbers of one module say little
+    for (const lag of [0, 1]) { // lag 1: what A did today against B tomorrow
+      if (lag === 0 && a.id > b.id) continue; // the same pair once
+      const xs = [], ys = [];
+      for (const day of Object.keys(a.byDay)) {
+        const other = lag ? shiftDay(day, 1) : day;
+        if (day < since || other > today || !(other in b.byDay)) continue;
+        xs.push(a.byDay[day]); ys.push(b.byDay[other]);
+      }
+      const n = xs.length;
+      if (n < INSIGHT_MIN_DAYS) continue;
+      const r = spearman(xs, ys);
+      if (Math.abs(r) < 0.4 || Math.abs(r * Math.sqrt((n - 2) / (1 - r * r))) < 3) continue;
+      const mid = [...xs].sort((p, q) => p - q)[Math.floor(n / 2)];
+      const hi = ys.filter((_, i) => xs[i] > mid), lo = ys.filter((_, i) => xs[i] <= mid);
+      if (hi.length < 5 || lo.length < 5) continue; // too lopsided to compare
+      found.push({ a: a.id, b: b.id, lag, r, n, hi: mean(hi), lo: mean(lo), higher: r > 0, strength: Math.abs(r) >= 0.6 ? 'Strong' : Math.abs(r) >= 0.5 ? 'Moderate' : 'Mild' });
+    }
+  }
+  const best = new Map(); // the stronger of the two timings for each pair
+  for (const f of found) { const k = [f.a, f.b].sort().join('|'); if (!best.has(k) || Math.abs(f.r) > Math.abs(best.get(k).r)) best.set(k, f); }
+  return [...best.values()].sort((p, q) => Math.abs(q.r) - Math.abs(p.r)).slice(0, 8);
+}
+
+// "On days with more sleep, mood tends to be higher (4.1 vs 3.2, 27 days)"
+function insightSentence(f, a, b) {
+  const num = (v) => String(Math.round(v * 10) / 10);
+  return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, zeroFill, insightFindings, insightSentence };

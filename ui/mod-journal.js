@@ -105,6 +105,11 @@
   const commandFn = () => [{ label: 'Write in the journal', hint: 'Journal', kind: 'Command', run: async () => { await setView('journal'); open(today()); $('jr-text').focus(); } }];
 
   defineModule('journal', {
+    daily() { // for Insights
+      const byDay = {};
+      for (const [day, e] of Object.entries(data.entries)) if (e.mood) byDay[day] = e.mood;
+      return [{ id: 'journal.mood', label: 'mood', byDay }];
+    },
     weekly(since, until) {
       const days = Object.keys(data.entries).filter((d) => d >= since && d <= until);
       const written = days.filter((d) => data.entries[d].text.trim()).length;
