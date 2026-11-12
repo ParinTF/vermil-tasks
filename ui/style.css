@@ -371,6 +371,10 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 #cal-day-list input[type=checkbox] { margin: 0; }
 .cal-open { padding: 0; border: 0; background: none; font: inherit; font-size: 16px; font-weight: 600; color: var(--ink); text-align: left; overflow-wrap: anywhere; cursor: pointer; }
 .cal-open:hover { text-decoration: underline; text-underline-offset: 4px; }
+.cal-line[data-id], .cal-open[data-id] { cursor: grab; user-select: none; }
+.cal-cell.drop { background: color-mix(in srgb, var(--accent) 14%, transparent); box-shadow: inset 0 0 0 2px var(--accent); }
+.cal-ghost { position: fixed; z-index: 60; top: 0; left: 0; max-width: 240px; padding: 4px 10px; overflow: hidden; border-radius: 6px; background: var(--ink); color: var(--paper); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; box-shadow: 0 6px 18px color-mix(in srgb, var(--ink) 30%, transparent); }
+body.dragging, body.dragging * { cursor: grabbing !important; user-select: none; }
 .cal-open.done { color: var(--mute); text-decoration: line-through; }
 #cal-day-list time { font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; }
 #cal-add { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px 16px; margin-top: 18px; }

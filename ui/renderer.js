@@ -900,7 +900,11 @@ function dayCell(cell, list, cap, today) {
     className: 'cal-cell' + (cell.inMonth ? '' : ' out') + (cell.day === today ? ' today' : '') + (cell.day === calDay ? ' sel' : ''),
     ariaLabel: `${fmt(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${taskCount(list.length)}`,
   }, el('span', { className: 'cal-d' }, String(date.getDate())),
-  ...lines.map((t) => el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') }, `${t.due.slice(11, 16)} ${t.title}`)),
+  ...lines.map((t) => {
+    const line = el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') }, `${t.due.slice(11, 16)} ${t.title}`);
+    if (!t.done) line.dataset.id = t.id; // an open task can be dragged to another day
+    return line;
+  }),
   ...(more ? [el('span', { className: 'cal-more' }, `+${more} more`)] : []));
   btn.ariaSelected = String(cell.day === calDay);
   btn.dataset.day = cell.day;
@@ -916,6 +920,7 @@ function renderDayPanel(list) {
     box.onchange = () => commit(t.done ? todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)) : complete(t));
     const open = el('button', { type: 'button', className: 'cal-open' + (t.done ? ' done' : '') }, t.title);
     open.onclick = () => showTask(t.id);
+    if (!t.done) open.dataset.id = t.id;
     return el('li', {}, box, open, el('time', {}, t.due.slice(11, 16)));
   }));
 }
@@ -943,8 +948,67 @@ function selectDay(day, focus) {
   if (focus) document.querySelector(`#cal-grid [data-day="${day}"]`)?.focus();
 }
 
+// moving a task keeps its time of day, and its reminder starts over for the new day
+async function moveTask(id, day) {
+  const t = todos.find((x) => x.id === id);
+  if (!t || !t.due || t.due.slice(0, 10) === day) return;
+  calDay = day;
+  calMonth = day.slice(0, 7);
+  await commit(todos.map((x) => (x.id === id ? { ...x, due: day + x.due.slice(10), snoozeUntil: null } : x)));
+}
+
+// drag with pointer events: HTML5 drag and drop is unreliable in the WebView, and this also gives a ghost and an Esc to cancel
+let drag = null;
+let dragged = false; // swallows the click that ends a drag
+const dayUnder = (e) => document.elementFromPoint(e.clientX, e.clientY)?.closest('.cal-cell');
+function endDrag() {
+  drag?.ghost?.remove();
+  document.querySelector('.cal-cell.drop')?.classList.remove('drop');
+  document.body.classList.remove('dragging');
+  drag = null;
+}
+$('calendar-view').addEventListener('pointerdown', (e) => {
+  const src = e.button === 0 && e.target.closest('.cal-line[data-id], .cal-open[data-id]');
+  if (src) drag = { id: src.dataset.id, x: e.clientX, y: e.clientY, text: src.textContent, ghost: null };
+});
+addEventListener('pointermove', (e) => {
+  if (!drag) return;
+  if (!drag.ghost) {
+    if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 6) return; // a click is not a drag
+    drag.ghost = el('div', { className: 'cal-ghost' }, drag.text);
+    document.body.append(drag.ghost);
+    document.body.classList.add('dragging');
+  }
+  drag.ghost.style.transform = `translate(${e.clientX + 12}px, ${e.clientY + 12}px)`;
+  const cell = dayUnder(e);
+  document.querySelector('.cal-cell.drop')?.classList.remove('drop');
+  cell?.classList.add('drop');
+});
+addEventListener('pointerup', (e) => {
+  if (!drag) return;
+  const { id, ghost } = drag;
+  const cell = ghost ? dayUnder(e) : null;
+  endDrag();
+  if (!ghost) return;
+  dragged = true;
+  setTimeout(() => { dragged = false; });
+  if (cell) moveTask(id, cell.dataset.day);
+});
+addEventListener('pointercancel', endDrag);
+addEventListener('keydown', (e) => { if (e.key === 'Escape' && drag?.ghost) { e.stopPropagation(); endDrag(); } }, true);
+$('calendar-view').addEventListener('click', (e) => { if (dragged) { e.stopPropagation(); e.preventDefault(); } }, true);
+
 function calendarKeys(e) {
   const t = e.target.matches ? e.target : document.body;
+  if (e.altKey && !e.ctrlKey && t.dataset?.id && t.classList.contains('cal-open')) { // Alt+arrows: the keyboard way to drag
+    const by = { ArrowLeft: -1, ArrowRight: 1, ArrowUp: -7, ArrowDown: 7 }[e.key];
+    if (by) {
+      e.preventDefault();
+      const due = todos.find((x) => x.id === t.dataset.id)?.due;
+      if (due) moveTask(t.dataset.id, shiftDay(due.slice(0, 10), by)).then(() => setTimeout(() => document.querySelector(`#cal-day-list [data-id="${t.dataset.id}"]`)?.focus(), 80)); // after the view transition has swapped the list
+      return;
+    }
+  }
   if ((e.ctrlKey || e.metaKey) && !e.altKey) return;
   if (e.key === 'Escape' && isField(t)) { t.blur(); return; }
   if (isField(t)) return;
@@ -983,6 +1047,7 @@ const SHORTCUTS = [
   'Ctrl+N (in Notes): new note',
   'In a note: Ctrl+B bold, Ctrl+Shift+L checklist, Ctrl+Enter tick an item',
   'In Calendar: arrows move a day, PageUp and PageDown a month, T today, Enter adds a task',
+  'In Calendar: drag a task to another day, or Alt+arrows on it',
   '1 2 3 4: To do, Today, Week, History',
   'Ctrl+Alt+T (from anywhere): quick add',
   'Ctrl+Alt+J (in quick add): due date',
