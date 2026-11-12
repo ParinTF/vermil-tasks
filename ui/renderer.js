@@ -340,6 +340,18 @@ $('import').onchange = async (e) => {
   if (await commit([...todos.filter((t) => !ids.has(t.id)), ...incoming])) $('backup-msg').textContent = `Imported ${incoming.length} tasks`;
 };
 
+// Theme: auto follows Windows, light and dark force one. theme.js applies the stored choice before first paint.
+const THEMES = ['', 'light', 'dark'];
+let theme = document.documentElement.dataset.theme || '';
+const showTheme = () => { $('theme').textContent = 'Theme: ' + (theme || 'auto'); };
+showTheme();
+$('theme').onclick = () => {
+  theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
+  if (theme) document.documentElement.dataset.theme = theme; else delete document.documentElement.dataset.theme;
+  try { localStorage.setItem('theme', theme); } catch {}
+  showTheme();
+};
+
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();
 $('win-max').onclick = () => win.toggleMaximize();
@@ -372,6 +384,7 @@ const SHORTCUTS = [
   'P: pin or unpin the selected task',
   'Delete: delete the selected task',
   'N: new task',
+  'T: switch theme (auto, light, dark)',
   '1 2 3 4: To do, Today, Week, History',
   'Ctrl+Alt+T (from anywhere): quick add',
   'Ctrl+Alt+J (in quick add): due date',
@@ -439,6 +452,7 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'KeyP') press('.act-pin');
   else if (/^Digit[1-4]$/.test(e.code)) { e.preventDefault(); $('tab-' + TABS[+e.code.slice(5) - 1]).click(); }
   else if (e.key === 'Delete') press('.act-del');
+  else if (e.code === 'KeyT') $('theme').click();
   else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
   else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); tell(SHORTCUTS); }
 });
