@@ -447,6 +447,15 @@ dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
 .mod-actions .primary { min-height: 0; padding: 11px 22px; font-size: 14px; }
 .mod-actions .linkish { font-size: 14px; }
 
+.bk { max-width: 760px; margin-top: 10px; padding-top: 18px; border-top: 1px solid var(--ink); }
+.bk h3 { margin: 0 0 12px; font-size: 20px; font-weight: 700; }
+.bk .check { font-size: 14px; gap: 10px; }
+.bk-dir { display: grid; gap: 4px; margin-top: 14px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.bk-dir input { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 14px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.bk-dir input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.bk-row { display: flex; align-items: baseline; gap: 18px; margin-top: 12px; font-size: 13px; }
+.bk-msg { overflow-wrap: anywhere; color: var(--mute); }
+
 /* ── keyboard shortcuts list ── */
 dialog.keys { width: min(880px, calc(100vw - 48px)); max-height: calc(100vh - 48px); padding: 26px 32px 22px; overflow-y: auto; }
 dialog.keys:focus { outline: 0; }

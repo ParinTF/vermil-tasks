@@ -63,12 +63,22 @@ struct Data {
     // true once the notes that tasks used to carry as text were turned into notes of their own
     #[serde(default)]
     notes_migrated: bool,
+    // automatic backups: on unless switched off; the folder is "<product name> Backups" in Documents unless one is chosen
+    #[serde(default)]
+    backup_off: bool,
+    #[serde(default)]
+    backup_dir: Option<String>,
+    // the day the last automatic or manual backup was written
+    #[serde(default)]
+    backup_day: Option<String>,
     // optional modules keep their data here, one JSON value per module id; "_on" lists the ones switched on
     #[serde(default)]
     modules: serde_json::Map<String, serde_json::Value>,
 }
 
 const YAHOO: &str = "https://query1.finance.yahoo.com";
+const BACKUP_EVERY_DAYS: i64 = 7;
+const BACKUP_KEEP: usize = 8; // the newest eight automatic backups stay
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
 const NOTE_SHORTCUT: &str = "Ctrl+Alt+N"; // the same bar, in note mode
 
@@ -307,12 +317,16 @@ fn check_reminders(app: &AppHandle) {
     let setting = data.summary_time.clone().unwrap_or_else(|| DEFAULT_SUMMARY_TIME.to_string());
     if summary_due(&setting, data.summary_day.as_deref(), &today, &now.format("%H:%M").to_string()) {
         // the day is recorded even with nothing to show, so adding a task at 14:00 does not trigger a "morning" summary
-        data.summary_day = Some(today);
+        data.summary_day = Some(today.clone());
         changed = true;
         let (due_today, overdue, open) = summary_counts(&data.todos, now);
         if open > 0 {
             notify_summary(app, due_today, overdue, open);
         }
+    }
+    // the weekly backup (a failure is retried at the next pass, so a missing drive does not lose the week)
+    if !data.backup_off && backup_due(data.backup_day.as_deref(), &today) && write_backup(app, &mut data, &today).is_ok() {
+        changed = true;
     }
     if changed {
         let _ = save(&store.file, &data);
@@ -450,20 +464,105 @@ async fn install_update(app: AppHandle) -> Result<(), String> {
     Ok(())
 }
 
+// ── automatic backups ──
+
+/// True when a week has passed since the last backup (or there never was one).
+fn backup_due(last: Option<&str>, today: &str) -> bool {
+    let parse = |s: &str| chrono::NaiveDate::parse_from_str(s, "%Y-%m-%d").ok();
+    match (last.and_then(parse), parse(today)) {
+        (Some(l), Some(t)) => (t - l).num_days() >= BACKUP_EVERY_DAYS,
+        (None, Some(_)) => true,
+        _ => false,
+    }
+}
+
+fn backup_name(day: &str) -> String {
+    format!("vermil-backup-{day}.json")
+}
+
+/// Which automatic backups to delete so only the newest `keep` remain. Files that are not ours are never listed.
+fn backups_to_delete(names: &[String], keep: usize) -> Vec<String> {
+    let mut ours: Vec<&String> = names.iter().filter(|n| {
+        n.strip_prefix("vermil-backup-").and_then(|r| r.strip_suffix(".json")).map_or(false, |d| chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").is_ok())
+    }).collect();
+    ours.sort();
+    let extra = ours.len().saturating_sub(keep);
+    ours.into_iter().take(extra).cloned().collect()
+}
+
+fn backup_value(version: &str, data: &Data) -> serde_json::Value {
+    serde_json::json!({ "app": "vermil-tasks", "version": version, "todos": data.todos, "notes": data.notes, "modules": data.modules })
+}
+
+fn backup_folder(app: &AppHandle, data: &Data) -> PathBuf {
+    match data.backup_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
+        Some(d) => PathBuf::from(d),
+        // named after the product, so a test copy ("Vermil Tasks Test") never writes into the real app's folder
+        None => app.path().document_dir().unwrap_or_else(|_| PathBuf::from(".")).join(format!("{} Backups", app.config().product_name.clone().unwrap_or_else(|| "Vermil".into()))),
+    }
+}
+
+/// Writes today's backup and trims old ones; returns the file written.
+fn write_backup(app: &AppHandle, data: &mut Data, today: &str) -> Result<PathBuf, String> {
+    let dir = backup_folder(app, data);
+    fs::create_dir_all(&dir).map_err(|e| format!("cannot use {}: {e}", dir.display()))?;
+    let file = dir.join(backup_name(today));
+    let text = serde_json::to_string_pretty(&backup_value(&app.package_info().version.to_string(), data)).map_err(|e| e.to_string())?;
+    fs::write(&file, text).map_err(|e| e.to_string())?;
+    data.backup_day = Some(today.to_string());
+    if let Ok(entries) = fs::read_dir(&dir) {
+        let names: Vec<String> = entries.flatten().filter_map(|e| e.file_name().into_string().ok()).collect();
+        for old in backups_to_delete(&names, BACKUP_KEEP) {
+            let _ = fs::remove_file(dir.join(old));
+        }
+    }
+    Ok(file)
+}
+
+#[derive(Serialize)]
+struct BackupInfo {
+    on: bool,
+    dir: String,
+    custom: bool,
+    last: Option<String>,
+}
+
+#[tauri::command]
+fn get_backup(app: AppHandle, store: State<Store>) -> BackupInfo {
+    let data = store.data.lock().unwrap();
+    BackupInfo { on: !data.backup_off, dir: backup_folder(&app, &data).display().to_string(), custom: data.backup_dir.as_deref().map_or(false, |d| !d.trim().is_empty()), last: data.backup_day.clone() }
+}
+
+/// `dir` is a folder, or "" for the default one.
+#[tauri::command]
+fn set_backup(store: State<Store>, on: bool, dir: String) -> Result<(), String> {
+    let dir = dir.trim();
+    if dir.chars().count() > 260 {
+        return Err("that folder path is too long".into());
+    }
+    let mut data = store.data.lock().unwrap();
+    data.backup_off = !on;
+    data.backup_dir = if dir.is_empty() { None } else { Some(dir.to_string()) };
+    save(&store.file, &data)
+}
+
+/// Backs up now (whatever the schedule says) and returns the file.
+#[tauri::command]
+fn backup_now(app: AppHandle, store: State<Store>) -> Result<String, String> {
+    let mut data = store.data.lock().unwrap();
+    let today = Local::now().format("%Y-%m-%d").to_string();
+    let file = write_backup(&app, &mut data, &today)?;
+    save(&store.file, &data)?;
+    Ok(file.display().to_string())
+}
+
 /// Writes a backup of all tasks to the Downloads folder and returns its path.
 #[tauri::command]
 fn export_todos(app: AppHandle, store: State<Store>) -> Result<String, String> {
     let dir = app.path().download_dir().map_err(|e| e.to_string())?;
     let file = dir.join(format!("vermil-tasks-backup-{}.json", Local::now().format("%Y-%m-%d-%H%M%S")));
     let data = store.data.lock().unwrap();
-    let backup = serde_json::json!({
-        "app": "vermil-tasks",
-        "version": app.package_info().version.to_string(),
-        "todos": data.todos,
-        "notes": data.notes,
-        "modules": data.modules,
-    });
-    let text = serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())?;
+    let text = serde_json::to_string_pretty(&backup_value(&app.package_info().version.to_string(), &data)).map_err(|e| e.to_string())?;
     fs::write(&file, text).map_err(|e| e.to_string())?;
     Ok(file.display().to_string())
 }
@@ -755,7 +854,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -838,6 +937,23 @@ fn main() {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn backups_run_weekly() {
+        assert!(backup_due(None, "2026-11-12"));
+        assert!(!backup_due(Some("2026-11-06"), "2026-11-12")); // 6 days
+        assert!(backup_due(Some("2026-11-05"), "2026-11-12")); // 7 days
+        assert!(!backup_due(Some("garbage"), "2026-11-12") || backup_due(None, "2026-11-12"));
+        assert_eq!(backup_name("2026-11-12"), "vermil-backup-2026-11-12.json");
+    }
+
+    #[test]
+    fn only_the_oldest_backups_go_and_only_ours() {
+        let names: Vec<String> = ["vermil-backup-2026-10-01.json", "vermil-backup-2026-10-15.json", "vermil-backup-2026-11-01.json", "notes.txt", "vermil-backup-oops.json", "vermil-tasks-backup-2026-01-01.json"].iter().map(|s| s.to_string()).collect();
+        assert_eq!(backups_to_delete(&names, 2), ["vermil-backup-2026-10-01.json"]);
+        assert!(backups_to_delete(&names, 8).is_empty());
+        assert_eq!(backups_to_delete(&names, 0).len(), 3);
+    }
 
     #[test]
     fn module_ids_are_short_lowercase_words() {

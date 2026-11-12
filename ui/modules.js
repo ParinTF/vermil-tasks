@@ -111,8 +111,34 @@ function renderHome() {
       el('p', { className: 'home-sub' }, started.size
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
-    el('div', { className: 'mod-grid' }, ...MODULES.map(card)));
+    el('div', { className: 'mod-grid' }, ...MODULES.map(card)),
+    el('section', { className: 'bk', id: 'backup', ariaLabel: 'Backup' }, el('h3', {}, 'Backup'), el('div', { id: 'bk-body' })));
+  paintBackup();
   if (focused) document.querySelector('#' + focused + ' button')?.focus();
+}
+
+// Backup: one copy of all your data a week, in a folder you can point at OneDrive or a USB drive. Lives on Home because it covers every module.
+async function paintBackup() {
+  const body = $('bk-body');
+  if (!body) return;
+  let info;
+  try { info = await invoke('get_backup'); } catch { return; }
+  const on = el('input', { id: 'bk-on', type: 'checkbox', checked: info.on });
+  const dir = el('input', { id: 'bk-dir', type: 'text', value: info.custom ? info.dir : '', placeholder: info.dir, ariaLabel: 'Backup folder', autocomplete: 'off', maxLength: 260 });
+  const msg = el('span', { id: 'bk-msg', className: 'bk-msg', role: 'status' }, info.last ? `Last backup: ${info.last}` : 'No backup yet.');
+  const apply = () => invoke('set_backup', { on: on.checked, dir: dir.value }).catch((e) => { msg.textContent = 'Could not save: ' + e; });
+  on.onchange = apply;
+  let t;
+  dir.oninput = () => { clearTimeout(t); t = setTimeout(apply, 700); };
+  const now = el('button', { id: 'bk-now', type: 'button', className: 'linkish', textContent: 'Back up now' });
+  now.onclick = async () => {
+    await apply();
+    try { const file = await invoke('backup_now'); msg.textContent = 'Saved ' + file; } catch (e) { msg.textContent = 'Could not back up: ' + e; }
+  };
+  body.replaceChildren(
+    el('label', { className: 'check' }, on, ' Back up every week, keeping the newest eight'),
+    el('label', { className: 'bk-dir' }, 'Folder', dir),
+    el('div', { className: 'bk-row' }, now, msg));
 }
 
 // at start: read what is saved, then start the modules that are on (one that fails to load is skipped, not fatal)
