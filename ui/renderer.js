@@ -60,7 +60,7 @@ async function commit(next, { undo = true } = {}) {
     undoStack.push(before);
     if (undoStack.length > 20) undoStack.shift();
   }
-  const apply = () => { todos = next; render(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); };
+  const apply = () => { todos = next; render(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); registry.widget?.publishSoon?.(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
   if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
   return true;
@@ -338,6 +338,7 @@ const shortcutGroups = [
     ['Ctrl+K', 'Command palette: search, run a command'],
     ['Ctrl+Alt+T', 'Quick add a task, from any app'],
     ['Ctrl+Alt+N', 'Quick note or link, from any app'],
+    ['Ctrl+Alt+W', 'Show or hide the Today widget (when its module is on)'],
     ['?', 'This list'],
   ] },
   { title: 'Quick bar', items: [
@@ -405,5 +406,5 @@ const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).
   if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); // the view on show redraws from the new data
 });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
-window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load(); });
+window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load().then(() => registry.widget?.publishSoon?.()); });
 load(true);

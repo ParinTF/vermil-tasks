@@ -80,7 +80,82 @@ const YAHOO: &str = "https://query1.finance.yahoo.com";
 const BACKUP_EVERY_DAYS: i64 = 7;
 const BACKUP_KEEP: usize = 8; // the newest eight automatic backups stay
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
+const WIDGET_SHORTCUT: &str = "Ctrl+Alt+W"; // shows or hides the Today widget
 const NOTE_SHORTCUT: &str = "Ctrl+Alt+N"; // the same bar, in note mode
+
+// ── the Today widget: a small always-on-top window the Today module fills with tiles ──
+
+#[derive(Default)]
+struct Widget {
+    tiles: Mutex<String>, // the latest tiles as JSON, so the widget has something to show the moment it opens
+    enabled: Mutex<bool>, // the Today widget module is on
+    placed: Mutex<bool>,  // put in the corner once, then left where the user drags it
+}
+
+/// Tiles are a JSON array, not too large to be a mistake.
+fn valid_tiles(s: &str) -> bool {
+    s.len() <= 20_000 && serde_json::from_str::<serde_json::Value>(s).map_or(false, |v| v.is_array())
+}
+
+fn show_widget(app: &AppHandle) {
+    let state = app.state::<Widget>();
+    if !*state.enabled.lock().unwrap() {
+        return;
+    }
+    if let Some(win) = app.get_webview_window("widget") {
+        let mut placed = state.placed.lock().unwrap();
+        if !*placed {
+            *placed = true;
+            if let (Ok(Some(mon)), Ok(size)) = (win.current_monitor(), win.outer_size()) {
+                let margin = (24.0 * mon.scale_factor()) as i32;
+                let x = mon.position().x + mon.size().width as i32 - size.width as i32 - margin;
+                let _ = win.set_position(tauri::PhysicalPosition::new(x, mon.position().y + margin));
+            }
+        }
+        let _ = app.emit_to("widget", "widget-update", state.tiles.lock().unwrap().clone());
+        let _ = win.show();
+    }
+}
+
+fn toggle_widget(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window("widget") {
+        if win.is_visible().unwrap_or(false) { let _ = win.hide(); } else { show_widget(app); }
+    }
+}
+
+#[tauri::command]
+fn widget_enable(app: AppHandle, state: State<Widget>, on: bool) {
+    *state.enabled.lock().unwrap() = on;
+    if on {
+        show_widget(&app);
+    } else if let Some(win) = app.get_webview_window("widget") {
+        let _ = win.hide();
+    }
+}
+
+#[tauri::command]
+fn widget_set(app: AppHandle, state: State<Widget>, tiles: String) -> Result<(), String> {
+    if !valid_tiles(&tiles) {
+        return Err("bad tiles".into());
+    }
+    *state.tiles.lock().unwrap() = tiles.clone();
+    let _ = app.emit_to("widget", "widget-update", tiles);
+    Ok(())
+}
+
+#[tauri::command]
+fn widget_get(state: State<Widget>) -> String {
+    state.tiles.lock().unwrap().clone()
+}
+
+/// A tile was clicked in the widget: bring the main window up on that view.
+#[tauri::command]
+fn widget_click(app: AppHandle, view: String) {
+    if view.len() <= 24 && view.bytes().all(|b| b.is_ascii_lowercase()) {
+        show(&app);
+        let _ = app.emit_to("main", "open-view", view);
+    }
+}
 
 struct Store {
     file: PathBuf,
@@ -852,7 +927,11 @@ fn main() {
             tauri_plugin_global_shortcut::Builder::new()
                 .with_handler(|app, shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
-                        show_quick_as(app, if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyN) { "note" } else { "task" });
+                        if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyW) {
+                            toggle_widget(app);
+                        } else {
+                            show_quick_as(app, if shortcut.matches(Modifiers::CONTROL | Modifiers::ALT, Code::KeyN) { "note" } else { "task" });
+                        }
                     }
                 })
                 .build(),
@@ -860,7 +939,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -877,6 +956,7 @@ fn main() {
                 fs::copy(&old, &file)?;
             }
             app.manage(Store { data: Mutex::new(load(&file)), file });
+            app.manage(Widget::default());
 
             // reminders only fire while the app runs, so start with Windows by default;
             // done once, after that the checkbox in the footer decides
@@ -896,7 +976,8 @@ fn main() {
                 for _ in 0..8 {
                     let task_ok = shortcuts.global_shortcut().is_registered(QUICK_SHORTCUT) || shortcuts.global_shortcut().register(QUICK_SHORTCUT).is_ok();
                     let note_ok = shortcuts.global_shortcut().is_registered(NOTE_SHORTCUT) || shortcuts.global_shortcut().register(NOTE_SHORTCUT).is_ok();
-                    if task_ok && note_ok {
+                    let widget_ok = shortcuts.global_shortcut().is_registered(WIDGET_SHORTCUT) || shortcuts.global_shortcut().register(WIDGET_SHORTCUT).is_ok();
+                    if task_ok && note_ok && widget_ok {
                         break;
                     }
                     std::thread::sleep(Duration::from_millis(500));
@@ -909,16 +990,18 @@ fn main() {
             let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
             let quick = MenuItem::with_id(app, "quick", "Quick add", true, None::<&str>)?;
             let quick_note = MenuItem::with_id(app, "quick-note", "Quick note", true, None::<&str>)?;
+            let widget_item = MenuItem::with_id(app, "widget", "Today widget", true, None::<&str>)?;
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
                 .tooltip("Vermil")
-                .menu(&Menu::with_items(app, &[&open, &quick, &quick_note, &quit])?)
+                .menu(&Menu::with_items(app, &[&open, &quick, &quick_note, &widget_item, &quit])?)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
                     "open" => show(app),
                     "quick" => show_quick(app),
                     "quick-note" => show_quick_as(app, "note"),
+                    "widget" => toggle_widget(app),
                     "quit" => app.exit(0),
                     _ => {}
                 })
@@ -1021,6 +1104,15 @@ mod tests {
     fn symbols_cannot_change_the_request() {
         for ok in ["AAPL", "BRK-B", "PTT.BK", "^GSPC", "EURUSD=X"] { assert!(valid_symbol(ok), "{ok}"); }
         for bad in ["", "a/b", "A B", "A?x=1", "..\\x", "WAYTOOLONGSYMBOLNAME12345"] { assert!(!valid_symbol(bad), "{bad}"); }
+    }
+
+    #[test]
+    fn widget_tiles_must_be_a_small_json_array() {
+        assert!(valid_tiles("[]"));
+        assert!(valid_tiles(r#"[{"label":"Tasks","value":"3"}]"#));
+        assert!(!valid_tiles("{}"));
+        assert!(!valid_tiles("not json"));
+        assert!(!valid_tiles(&format!("[\"{}\"]", "x".repeat(20_001))));
     }
 
     #[test]

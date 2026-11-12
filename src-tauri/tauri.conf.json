@@ -31,6 +31,20 @@
         "visible": false,
         "center": true,
         "backgroundColor": "#12110f"
+      },
+      {
+        "label": "widget",
+        "url": "widget.html",
+        "title": "Vermil today",
+        "width": 300,
+        "height": 420,
+        "minWidth": 240,
+        "minHeight": 160,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "backgroundColor": "#f4f1ea"
       }
     ],
     "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost" }

@@ -24,6 +24,7 @@ const MODULES = [
   { id: 'bills', name: 'Home & Bills', about: 'Electricity, water, rent, insurance, the car tax: when each is due, what you paid, and where the paperwork is.', script: 'mod-bills.js', style: 'mod-bills.css', view: 'Bills' },
   { id: 'travel', name: 'Travel', about: 'Trips with a packing list, a plan for each day and what it costs against your budget.', script: 'mod-travel.js', style: 'mod-travel.css', view: 'Travel' },
   { id: 'time', name: 'Time Tracker', about: 'Time your work by project, add it by hand, and get hours and earnings for the week or the month to copy into an invoice.', script: 'mod-time.js', style: 'mod-time.css', view: 'Time' },
+  { id: 'widget', name: 'Today widget', about: 'A small window that stays on top with today\u2019s numbers. Ctrl+Alt+W shows or hides it, a click opens the module.', script: 'mod-widget.js' },
   { id: 'countdown', name: 'Countdown', about: 'Days until what matters: a trip, an exam, a birthday that comes back every year.', script: 'mod-countdown.js', style: 'mod-countdown.css', view: 'Countdown' },
   { id: 'journal', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
   { id: 'goals', name: 'Goals', about: 'Targets that watch your other modules: tasks done, focus time, money saved, habits kept. Or track anything by hand.', script: 'mod-goals.js', style: 'mod-goals.css', view: 'Goals' },
@@ -41,6 +42,7 @@ const moduleOn = (id) => (moduleData._on || []).includes(id);
 async function saveModule(id, value) {
   await invoke('save_module', { id, value });
   moduleData[id] = value;
+  registry.widget?.publishSoon?.(); // the Today widget shows the new numbers
 }
 
 function loadFile(tag, props) {
@@ -131,20 +133,26 @@ function renderHome() {
   if (focused) document.querySelector('#' + focused + ' button')?.focus();
 }
 
-// the Today strip: one tile per module that has something to say (a module that fails to summarise is skipped, not fatal)
-function todayStrip() {
-  const tiles = MODULES.filter((m) => started.has(m.id)).flatMap((m) => {
+// what each switched-on module has to say today (a module that fails to summarise is skipped, not fatal)
+function todayTiles() {
+  return MODULES.filter((m) => started.has(m.id) && m.id !== 'widget').flatMap((m) => {
     try {
       const s = registry[m.id]?.summary?.();
-      if (!s) return [];
-      const tile = el(m.view ? 'button' : 'div', { type: 'button', className: 'dash-tile' + (s.warn ? ' warn' : ''), id: 'tile-' + m.id },
-        el('small', {}, s.label), el('b', {}, s.value, ...(s.unit ? [el('span', {}, ' ' + s.unit)] : [])), el('em', {}, s.sub || ''));
-      if (m.view) tile.onclick = () => setView(m.id);
-      return [tile];
+      return s ? [{ id: m.id, view: m.view ? m.id : '', label: s.label, value: s.value, unit: s.unit || '', sub: s.sub || '', warn: !!s.warn }] : [];
     } catch (e) {
       console.error(m.id, 'summary', e);
       return [];
     }
+  });
+}
+
+// the Today strip on Home: one tile per module
+function todayStrip() {
+  const tiles = todayTiles().map((s) => {
+    const tile = el(s.view ? 'button' : 'div', { type: 'button', className: 'dash-tile' + (s.warn ? ' warn' : ''), id: 'tile-' + s.id },
+      el('small', {}, s.label), el('b', {}, s.value, ...(s.unit ? [el('span', {}, ' ' + s.unit)] : [])), el('em', {}, s.sub));
+    if (s.view) tile.onclick = () => setView(s.view);
+    return tile;
   });
   return tiles.length ? [el('section', { className: 'dash', ariaLabel: 'Today' }, el('h3', {}, 'Today'), el('div', { className: 'dash-grid' }, ...tiles))] : [];
 }

@@ -1,0 +1,15 @@
+/* The Today widget window */
+body.widget { display: flex; flex-direction: column; height: 100vh; margin: 0; padding: 0; overflow: hidden; background: var(--paper); color: var(--ink); font-size: 14px; }
+.widget header { display: flex; align-items: center; justify-content: space-between; flex: none; padding: 10px 14px; border-bottom: 1px solid var(--ink); font-size: 11px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
+.widget header button { padding: 2px 4px; border: 0; background: none; font: inherit; font-size: 12px; color: var(--mute); cursor: pointer; }
+.widget header button:hover { color: var(--accent-text); }
+#w-list { flex: 1; min-height: 0; padding: 0 14px 10px; overflow-y: auto; scrollbar-width: thin; }
+.w-tile { display: flex; flex-direction: column; gap: 2px; width: 100%; padding: 11px 0 12px; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; text-align: left; color: var(--ink); }
+button.w-tile { cursor: pointer; }
+button.w-tile:hover b { text-decoration: underline; text-underline-offset: 4px; }
+.w-tile small { font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.w-tile b { font-size: 19px; font-weight: 700; letter-spacing: -.01em; overflow-wrap: anywhere; }
+.w-tile b span { font-size: 12px; font-weight: 500; color: var(--mute); }
+.w-tile em { font-size: 12px; font-style: normal; color: var(--mute); }
+.w-tile.warn em { color: var(--accent-text); }
+.w-empty { padding: 18px 0; color: var(--mute); line-height: 1.5; }
