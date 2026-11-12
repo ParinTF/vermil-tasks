@@ -255,4 +255,30 @@ function layoutDay(blocks) {
   return out;
 }
 
-if (typeof module !== 'undefined') module.exports = { minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── focus timer ──
+const clock = (ms) => { // 1500000 -> "25:00"; rounds up so a timer shows 00:01 until it is really over
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+};
+const minutesLabel = (m) => (m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + (m % 60) + ' min' : ''}`);
+
+// sessions are { task, title, day, min }; returns today, the last 7 days, the minutes per task (all time) and the week's top tasks
+function focusSummary(sessions, today) {
+  const since = shiftDay(today, -6);
+  const out = { todayMin: 0, todayCount: 0, weekMin: 0, total: {}, byTask: [] };
+  const week = new Map();
+  for (const s of sessions) {
+    if (s.task) out.total[s.task] = (out.total[s.task] || 0) + s.min;
+    if (s.day === today) { out.todayMin += s.min; out.todayCount++; }
+    if (s.day >= since && s.day <= today) {
+      out.weekMin += s.min;
+      const key = s.task || '';
+      const prev = week.get(key) || { task: key, title: '', min: 0 };
+      week.set(key, { ...prev, title: s.title || prev.title, min: prev.min + s.min });
+    }
+  }
+  out.byTask = [...week.values()].sort((a, b) => b.min - a.min).slice(0, 5);
+  return out;
+}
+
+if (typeof module !== 'undefined') module.exports = { clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

@@ -4,9 +4,11 @@
 // To add one: put an entry in MODULES, write the script (and style) it names, and call defineModule(id, impl) in it.
 // impl: { start() runs when it is switched on or the app starts with it on, stop() when it is switched off,
 //         show() when its view opens, keys(e) for keys while its view is showing }.
+// Hooks it may use: rowInfo.push(t => text) adds to a task row's details, rowTools.push(t => button) to its buttons,
+// commandHooks.push(() => [palette commands]); take them out again in stop().
 // Its data goes through saveModule(id, value) into the same data file; a module with `view` gets a tab and a <main id="<id>-view">.
 const MODULES = [
-  // { id: 'pomodoro', name: 'Pomodoro', about: '…', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', view: 'Label' }
+  { id: 'pomodoro', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css' },
 ];
 
 const moduleData = {}; // id -> saved value; "_on" lists the ids that are switched on

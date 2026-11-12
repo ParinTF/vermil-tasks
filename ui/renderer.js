@@ -132,6 +132,11 @@ function removeButton(t) {
   return btn;
 }
 
+// hooks for optional modules (see modules.js): extra row details, extra row buttons, extra palette commands
+const rowInfo = [];
+const rowTools = [];
+const commandHooks = [];
+
 function pendingItem(t) {
   const later = isLater(t);
   const overdue = !later && isOverdue(t);
@@ -142,6 +147,7 @@ function pendingItem(t) {
     t.snoozeUntil > Date.now() ? 'snoozed to ' + fmt(t.snoozeUntil, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
     t.repeat || '',
     streaks.get(t.id) > 1 ? streaks.get(t.id) + '-day streak' : '',
+    ...rowInfo.map((f) => f(t)),
   ].filter(Boolean);
   const meta = parts.length ? el('div', { className: 'meta' + (overdue ? ' overdue' : '') }, parts.join(' · ')) : '';
   const lead = later
@@ -153,7 +159,7 @@ function pendingItem(t) {
   const title = el('span', { className: 'title' }, ...(t.pinned ? [el('i', { className: 'pin-dot', title: 'Pinned' })] : []), t.title);
   const li = el('li', { className: 'item' + (later ? ' later' : ''), id: 'r-' + t.id }, lead,
     el('div', {}, title, meta, notesBlock(t)),
-    el('div', { className: 'tools' }, pin, edit, removeButton(t)));
+    el('div', { className: 'tools' }, ...rowTools.map((f) => f(t)), pin, edit, removeButton(t)));
   lead.onchange = () => {
     lead.disabled = true;
     li.classList.add('done'); // let the strike-through land before the row leaves
@@ -1180,6 +1186,7 @@ function paletteResults(q) {
     go('Calendar: today', 'T', async () => { await setView('calendar'); selectDay(localDay(new Date()), true); }),
     ...MODULES.filter((m) => m.view && started.has(m.id)).map((m) => go('Go to ' + m.view, 'Ctrl+' + (VIEWS.indexOf(m.id) + 1), () => setView(m.id))),
     go('Modules…', 'Ctrl+,', openModules),
+    ...commandHooks.flatMap((f) => f()),
     go('Switch theme', 'T', () => $('theme').click()),
     go('Keyboard shortcuts', '?', () => tell(shortcutText())),
   ];
@@ -1245,6 +1252,7 @@ const SHORTCUTS = [
   'Space: mark done (in History: restore)',
   'E: edit the selected task',
   'P: pin or unpin the selected task',
+  'F: focus timer on the selected task (module)',
   "O: open the selected task's note",
   'Delete: delete the selected task',
   'N: new task',
@@ -1294,7 +1302,7 @@ async function undo() {
 }
 
 addEventListener('keydown', (e) => {
-  if ($('dlg').open || $('pal').open || $('mods')?.open) return; // a dialog handles Enter and Esc itself
+  if (document.querySelector('dialog[open]')) return; // a dialog handles Enter and Esc itself
   const t = e.target.matches ? e.target : document.body;
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
@@ -1327,6 +1335,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space' && !t.matches('button, summary, input, a')) press('input[type=checkbox], .act-restore');
   else if (e.code === 'KeyE') press('.act-edit');
   else if (e.code === 'KeyP') press('.act-pin');
+  else if (e.code === 'KeyF') press('.act-focus'); // only there while the focus timer module is on
   else if (e.code === 'KeyO') press('.act-open');
   else if (/^Digit[1-4]$/.test(e.code)) { e.preventDefault(); $('tab-' + TABS[+e.code.slice(5) - 1]).click(); }
   else if (e.key === 'Delete') press('.act-del');

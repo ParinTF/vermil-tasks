@@ -1,0 +1,16 @@
+/* Focus timer module: loaded only while it is switched on */
+.focus-chip { max-width: 240px; margin-right: 18px; padding: 0; overflow: hidden; border: 0; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--accent-text); font-variant-numeric: tabular-nums; text-overflow: ellipsis; white-space: nowrap; cursor: pointer; }
+.focus-chip:hover { text-decoration: underline; text-underline-offset: 4px; }
+dialog.focus h2 { margin: 0 0 18px; font-size: 24px; font-weight: 700; }
+.fo-field { display: grid; gap: 6px; margin-bottom: 16px; font-size: 12px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.fo-field select, .fo-num input { padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.fo-row { display: flex; gap: 28px; margin-bottom: 8px; }
+.fo-num { display: flex; align-items: baseline; gap: 8px; font-size: 13px; color: var(--mute); }
+.fo-num input { width: 3.4em; text-align: right; }
+.fo-clock { margin-top: 18px; font-size: 72px; font-weight: 700; letter-spacing: -.03em; line-height: 1; font-variant-numeric: tabular-nums; }
+.fo-phase { margin: 6px 0 22px; font-size: 12px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); }
+.focus .actions { flex-wrap: wrap; }
+.fo-sum { margin-top: 24px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--mute); }
+.fo-by { margin: 8px 0 0; padding: 0; list-style: none; font-size: 14px; }
+.fo-by li { display: flex; justify-content: space-between; gap: 16px; padding: 5px 0; }
+.fo-by time { color: var(--mute); font-variant-numeric: tabular-nums; }

@@ -255,6 +255,20 @@ fn notify_summary(app: &AppHandle, due_today: usize, overdue: usize, open: usize
         .show();
 }
 
+/// A plain toast for a module (the focus timer): clicking it brings the window up.
+#[tauri::command]
+fn toast(app: AppHandle, title: String, text: String) {
+    let handle = app.clone();
+    let _ = Toast::new(&toast_app_id(&app))
+        .title(&title.chars().take(100).collect::<String>())
+        .text1(&text.chars().take(200).collect::<String>())
+        .on_activated(move |_| {
+            show(&handle);
+            Ok(())
+        })
+        .show();
+}
+
 /// Shows a reminder that stays on screen until answered, with snooze buttons.
 fn notify(app: &AppHandle, todo: &Todo) {
     let app_id = toast_app_id(app);
@@ -530,7 +544,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
