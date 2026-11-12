@@ -39,6 +39,8 @@ body {
 ::selection { background: var(--accent); color: var(--paper); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button, input, select { font: inherit; color: inherit; }
+/* the open list of a dropdown is drawn by Windows: without explicit colours it can come out light text on a light list in dark mode */
+option { background-color: var(--paper); color: var(--ink); }
 button { cursor: pointer; }
 
 /* ── top bar ── */
