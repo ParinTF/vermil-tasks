@@ -16,6 +16,8 @@ tauri-plugin-updater = "2"
 tauri-plugin-autostart = "2"
 tauri-plugin-global-shortcut = "2"
 tauri-winrt-notification = "0.8"
+# quotes for the Stocks module: the updater already brings reqwest with rustls, so this adds no new code to the build
+reqwest = { version = "0.13", default-features = false, features = ["json", "system-proxy"] }
 
 [profile.release]
 opt-level = "s"

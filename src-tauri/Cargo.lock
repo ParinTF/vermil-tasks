@@ -4656,6 +4656,7 @@ name = "vermil-tasks"
 version = "1.0.0"
 dependencies = [
  "chrono",
+ "reqwest",
  "serde",
  "serde_json",
  "tauri",

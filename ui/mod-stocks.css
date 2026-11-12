@@ -1,0 +1,58 @@
+/* Stocks module: loaded only while it is switched on */
+.stocks-page { display: grid; gap: 32px; padding-top: 24px; }
+.st-main, .st-side { min-width: 0; }
+.st-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 12px; }
+.st-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.st-tools { display: flex; align-items: baseline; gap: 18px; font-size: 13px; color: var(--mute); }
+.st-tools .linkish { font-size: 14px; }
+.st-dot { display: inline-block; width: 8px; height: 8px; margin-right: 8px; border-radius: 50%; background: var(--mute); }
+.st-dot.on { background: var(--ink); }
+.st-dot.off { background: var(--accent); }
+.st-offline, .st-note-err { margin-bottom: 14px; padding: 12px 0; border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); font-size: 14px; line-height: 1.5; color: var(--accent-text); }
+.st-offline .linkish { font-size: 14px; color: var(--accent-text); }
+.st-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; padding: 16px 0 20px; border-top: 1px solid var(--ink); }
+.st-sum:empty { display: none; }
+.st-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.st-sum b { font-size: clamp(20px, 2.2vw, 30px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.st-sum .neg b { color: var(--accent-text); }
+.st-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.st-list li { display: grid; grid-template-columns: minmax(110px, 1.3fr) minmax(110px, 1fr) minmax(100px, 1fr) minmax(110px, 1.2fr) auto; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.st-name { display: grid; min-width: 0; }
+.st-name b { font-size: 16px; }
+.st-name small { overflow: hidden; color: var(--mute); text-overflow: ellipsis; white-space: nowrap; }
+.st-price { display: grid; font-weight: 600; }
+.st-wait, .st-watch { font-weight: 400; color: var(--mute); }
+.st-move { font-size: 12.5px; font-weight: 600; }
+.st-move.down, .st-pl.down { color: var(--accent-text); }
+.st-ext { display: grid; gap: 2px; font-size: 12px; color: var(--mute); }
+.st-pos-cell { display: grid; gap: 2px; }
+.st-pl { font-size: 12.5px; font-weight: 600; }
+.st-acts { display: flex; gap: 10px; }
+.st-act { padding: 0; border: 0; background: none; font-size: 13px; color: var(--mute); cursor: pointer; opacity: 0; }
+.st-list li:hover .st-act, .st-act:focus-visible { opacity: 1; }
+.st-act:hover { color: var(--accent-text); }
+.st-fine { margin: 14px 0 0; font-size: 12px; line-height: 1.5; color: var(--mute); }
+.st-side form { display: grid; gap: 14px; }
+.st-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.st-field input { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.st-field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.st-field input:disabled { opacity: .4; }
+.st-results { margin: 10px 0 0; padding: 0; list-style: none; }
+.st-results button { display: grid; grid-template-columns: 70px minmax(0, 1fr); gap: 2px 10px; width: 100%; padding: 9px 0; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; font-size: 13.5px; text-align: left; color: var(--ink); cursor: pointer; }
+.st-results button:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.st-results button span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.st-results button small { grid-column: 2; color: var(--mute); }
+.st-msg { min-height: 1.2em; margin-top: 8px; font-size: 13px; color: var(--mute); }
+.st-pos { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--ink); }
+.st-pos-title { font-size: 16px; font-weight: 700; }
+
+@media (min-width: 860px) {
+  .stocks-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .st-main { display: flex; flex-direction: column; min-height: 0; }
+  .st-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .st-side { min-height: 0; overflow-y: auto; }
+}
+@media (max-width: 1100px) {
+  .st-list li { grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) auto; }
+  .st-ext { display: none; }
+}

@@ -68,6 +68,7 @@ struct Data {
     modules: serde_json::Map<String, serde_json::Value>,
 }
 
+const YAHOO: &str = "https://query1.finance.yahoo.com";
 const QUICK_SHORTCUT: &str = "Ctrl+Alt+T";
 const NOTE_SHORTCUT: &str = "Ctrl+Alt+N"; // the same bar, in note mode
 
@@ -500,6 +501,173 @@ fn quick_add(app: AppHandle, store: State<Store>, title: String, due: Option<Str
     Ok(())
 }
 
+// ── Stocks module: quotes from Yahoo Finance's public chart and search endpoints (no key, may be delayed or change) ──
+
+#[derive(Serialize, Debug, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct Quote {
+    symbol: String,
+    name: String,
+    currency: String,
+    price: f64,
+    prev_close: f64,
+    change: f64,
+    change_pct: f64,
+    pre_price: Option<f64>,
+    pre_pct: Option<f64>,
+    post_price: Option<f64>,
+    post_pct: Option<f64>,
+    state: String, // PRE, REGULAR, POST or CLOSED
+    time: i64,
+}
+
+#[derive(Serialize, Debug, PartialEq)]
+struct Found {
+    symbol: String,
+    name: String,
+    exchange: String,
+    kind: String,
+}
+
+#[derive(Serialize)]
+struct Quotes {
+    quotes: Vec<Quote>,
+    failed: Vec<String>,
+}
+
+/// Percent change to two decimals.
+fn pct(value: f64, base: f64) -> f64 {
+    if base == 0.0 { 0.0 } else { ((value - base) / base * 10000.0).round() / 100.0 }
+}
+
+/// A quote from Yahoo's chart JSON (5-minute candles with pre and post market). Pre-market moves are against the
+/// previous close, after-hours moves against today's regular close. `now` is unix seconds, for the market state.
+fn parse_chart(v: &serde_json::Value, now: i64) -> Result<Quote, String> {
+    let res = v["chart"]["result"].get(0).ok_or("no data for that symbol")?;
+    let meta = &res["meta"];
+    let price = meta["regularMarketPrice"].as_f64().ok_or("no price for that symbol")?;
+    let prev = meta["chartPreviousClose"].as_f64().or(meta["previousClose"].as_f64()).unwrap_or(price);
+    let window = |k: &str| (meta["currentTradingPeriod"][k]["start"].as_i64().unwrap_or(0), meta["currentTradingPeriod"][k]["end"].as_i64().unwrap_or(0));
+    let (pre, regular, post) = (window("pre"), window("regular"), window("post"));
+    let inside = |w: (i64, i64), t: i64| t >= w.0 && t < w.1;
+    // the last real price inside a window
+    let last_in = |w: (i64, i64)| -> Option<f64> {
+        let times = res["timestamp"].as_array()?;
+        let closes = res["indicators"]["quote"].get(0)?["close"].as_array()?;
+        times.iter().zip(closes).filter_map(|(t, c)| Some((t.as_i64()?, c.as_f64()?))).filter(|(t, _)| inside(w, *t)).last().map(|(_, c)| c)
+    };
+    let (pre_price, post_price) = (last_in(pre), last_in(post));
+    let state = if inside(pre, now) { "PRE" } else if inside(regular, now) { "REGULAR" } else if inside(post, now) { "POST" } else { "CLOSED" };
+    let symbol = meta["symbol"].as_str().unwrap_or("").to_string();
+    let name = meta["longName"].as_str().or(meta["shortName"].as_str()).unwrap_or(&symbol).to_string();
+    Ok(Quote {
+        name,
+        currency: meta["currency"].as_str().unwrap_or("").to_string(),
+        price,
+        prev_close: prev,
+        change: ((price - prev) * 10000.0).round() / 10000.0,
+        change_pct: pct(price, prev),
+        pre_price,
+        pre_pct: pre_price.map(|p| pct(p, prev)),
+        post_price,
+        post_pct: post_price.map(|p| pct(p, price)),
+        state: state.to_string(),
+        time: meta["regularMarketTime"].as_i64().unwrap_or(0),
+        symbol,
+    })
+}
+
+fn parse_search(v: &serde_json::Value) -> Vec<Found> {
+    v["quotes"].as_array().map(|list| {
+        list.iter().filter_map(|q| {
+            let kind = q["quoteType"].as_str()?;
+            if !["EQUITY", "ETF", "CRYPTOCURRENCY", "INDEX", "MUTUALFUND"].contains(&kind) { return None; }
+            let symbol = q["symbol"].as_str()?.to_string();
+            Some(Found {
+                name: q["longname"].as_str().or(q["shortname"].as_str()).unwrap_or(&symbol).to_string(),
+                exchange: q["exchDisp"].as_str().unwrap_or("").to_string(),
+                kind: kind.to_string(),
+                symbol,
+            })
+        }).collect()
+    }).unwrap_or_default()
+}
+
+/// Letters, digits and . - ^ = only (BRK-B, PTT.BK, ^GSPC, EURUSD=X): nothing that can change the request's path.
+fn valid_symbol(s: &str) -> bool {
+    !s.is_empty() && s.len() <= 20 && s.bytes().all(|b| b.is_ascii_alphanumeric() || b".-^=".contains(&b))
+}
+
+fn http() -> Result<reqwest::Client, String> {
+    reqwest::Client::builder()
+        .user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) Vermil")
+        .timeout(Duration::from_secs(8))
+        .build()
+        .map_err(|e| e.to_string())
+}
+
+fn net_error(e: reqwest::Error) -> String {
+    if e.is_connect() || e.is_timeout() { "no internet connection".into() } else { e.to_string() }
+}
+
+/// True when the quote service can be reached at all (any answer counts, even an error status).
+#[tauri::command]
+async fn net_online() -> bool {
+    match http() {
+        Ok(c) => c.get(format!("{YAHOO}/v1/finance/search?q=a&quotesCount=0&newsCount=0")).timeout(Duration::from_secs(5)).send().await.is_ok(),
+        Err(_) => false,
+    }
+}
+
+#[tauri::command]
+async fn stock_search(q: String) -> Result<Vec<Found>, String> {
+    let q = q.trim();
+    if q.is_empty() || q.chars().count() > 40 {
+        return Ok(vec![]);
+    }
+    let mut url = reqwest::Url::parse(&format!("{YAHOO}/v1/finance/search")).map_err(|e| e.to_string())?;
+    url.query_pairs_mut().append_pair("q", q).append_pair("quotesCount", "8").append_pair("newsCount", "0"); // encodes what was typed
+    let r = http()?.get(url).send().await.map_err(net_error)?;
+    if !r.status().is_success() {
+        return Err(format!("the quote service answered {}", r.status()));
+    }
+    Ok(parse_search(&r.json().await.map_err(|e| e.to_string())?))
+}
+
+#[tauri::command]
+async fn stock_quotes(symbols: Vec<String>) -> Result<Quotes, String> {
+    if symbols.len() > 60 || !symbols.iter().all(|s| valid_symbol(s)) {
+        return Err("bad symbol".into());
+    }
+    let client = http()?;
+    let now = chrono::Utc::now().timestamp();
+    let jobs: Vec<_> = symbols.into_iter().map(|symbol| {
+        let client = client.clone();
+        tauri::async_runtime::spawn(async move {
+            let mut url = reqwest::Url::parse(YAHOO).map_err(|e| e.to_string())?;
+            url.path_segments_mut().map_err(|_| "bad url".to_string())?.extend(["v8", "finance", "chart", symbol.as_str()]);
+            url.query_pairs_mut().append_pair("interval", "5m").append_pair("range", "1d").append_pair("includePrePost", "true");
+            let r = client.get(url).send().await.map_err(net_error)?;
+            if r.status().as_u16() == 404 { return Err("unknown symbol".to_string()); }
+            if !r.status().is_success() { return Err(format!("the quote service answered {}", r.status())); }
+            parse_chart(&r.json().await.map_err(|e| e.to_string())?, now)
+        })
+    }).collect();
+    let mut out = Quotes { quotes: vec![], failed: vec![] };
+    let mut offline = false;
+    for job in jobs {
+        match job.await {
+            Ok(Ok(q)) => out.quotes.push(q),
+            Ok(Err(e)) => { offline |= e == "no internet connection"; out.failed.push(e); }
+            Err(e) => out.failed.push(e.to_string()),
+        }
+    }
+    if out.quotes.is_empty() && offline {
+        return Err("no internet connection".into());
+    }
+    Ok(out)
+}
+
 /// A quick note from one line of text: the first line is the title (a link is titled by its site), and the body is
 /// the whole text unless the title already is all of it.
 fn note_from_text(text: &str) -> Option<(String, String)> {
@@ -587,7 +755,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -683,6 +851,54 @@ mod tests {
     fn data_without_modules_still_loads() {
         let d: Data = serde_json::from_str(r#"{"todos":[]}"#).unwrap();
         assert!(d.modules.is_empty());
+    }
+
+    fn chart_fixture() -> serde_json::Value {
+        serde_json::json!({ "chart": { "result": [{
+            "meta": { "symbol": "AAPL", "longName": "Apple Inc.", "currency": "USD", "regularMarketPrice": 110.0, "chartPreviousClose": 100.0, "regularMarketTime": 2900,
+                "currentTradingPeriod": { "pre": { "start": 1000, "end": 2000 }, "regular": { "start": 2000, "end": 3000 }, "post": { "start": 3000, "end": 4000 } } },
+            "timestamp": [900, 1100, 1500, 2500, 3100, 3500, 4100],
+            "indicators": { "quote": [{ "close": [99.0, 101.0, 102.0, 110.0, 111.1, null, 120.0] }] }
+        }], "error": null } })
+    }
+
+    #[test]
+    fn chart_gives_day_pre_and_post_moves() {
+        let q = parse_chart(&chart_fixture(), 3500).unwrap();
+        assert_eq!((q.symbol.as_str(), q.name.as_str(), q.currency.as_str()), ("AAPL", "Apple Inc.", "USD"));
+        assert_eq!((q.price, q.prev_close, q.change, q.change_pct), (110.0, 100.0, 10.0, 10.0));
+        assert_eq!((q.pre_price, q.pre_pct), (Some(102.0), Some(2.0))); // last pre-market price, against the previous close
+        assert_eq!((q.post_price, q.post_pct), (Some(111.1), Some(1.0))); // the empty candle is skipped; against the regular close
+        assert_eq!(q.state, "POST");
+        assert_eq!(parse_chart(&chart_fixture(), 1500).unwrap().state, "PRE");
+        assert_eq!(parse_chart(&chart_fixture(), 2500).unwrap().state, "REGULAR");
+        assert_eq!(parse_chart(&chart_fixture(), 9000).unwrap().state, "CLOSED");
+    }
+
+    #[test]
+    fn chart_without_extended_hours_or_data() {
+        let v = serde_json::json!({ "chart": { "result": [{ "meta": { "symbol": "X", "regularMarketPrice": 5.0, "chartPreviousClose": 4.0 } }] } });
+        let q = parse_chart(&v, 0).unwrap();
+        assert_eq!((q.pre_price, q.post_price, q.change_pct, q.name.as_str()), (None, None, 25.0, "X"));
+        assert!(parse_chart(&serde_json::json!({ "chart": { "result": null, "error": { "code": "Not Found" } } }), 0).is_err());
+    }
+
+    #[test]
+    fn search_keeps_real_instruments_only() {
+        let v = serde_json::json!({ "quotes": [
+            { "symbol": "AAPL", "quoteType": "EQUITY", "longname": "Apple Inc.", "exchDisp": "NASDAQ" },
+            { "symbol": "SAAPL=F", "quoteType": "FUTURE", "shortname": "Apple futures" },
+            { "symbol": "SPY", "quoteType": "ETF", "shortname": "SPDR S&P 500", "exchDisp": "NYSEArca" } ] });
+        let found = parse_search(&v);
+        assert_eq!(found.iter().map(|f| f.symbol.as_str()).collect::<Vec<_>>(), ["AAPL", "SPY"]);
+        assert_eq!(found[1].name, "SPDR S&P 500");
+        assert!(parse_search(&serde_json::json!({})).is_empty());
+    }
+
+    #[test]
+    fn symbols_cannot_change_the_request() {
+        for ok in ["AAPL", "BRK-B", "PTT.BK", "^GSPC", "EURUSD=X"] { assert!(valid_symbol(ok), "{ok}"); }
+        for bad in ["", "a/b", "A B", "A?x=1", "..\\x", "WAYTOOLONGSYMBOLNAME12345"] { assert!(!valid_symbol(bad), "{bad}"); }
     }
 
     #[test]

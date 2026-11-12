@@ -300,4 +300,36 @@ function moneyMonth(entries, month) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── stocks: signs, labels and the portfolio maths (amounts rounded to cents row by row) ──
+const CURRENCY_SIGNS = { USD: '$', THB: '฿', EUR: '€', GBP: '£', JPY: '¥', CNY: '¥', KRW: '₩', INR: '₹', HKD: 'HK$', SGD: 'S$', AUD: 'A$', CAD: 'C$' };
+const currencySign = (code) => CURRENCY_SIGNS[code] || (code ? code + ' ' : '');
+const priceLabel = (n, cur) => currencySign(cur) + n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: n < 1 ? 4 : 2 });
+const pctLabel = (n) => (n > 0 ? '+' : n < 0 ? '−' : '') + Math.abs(n).toFixed(2) + '%';
+const signedLabel = (n, cur) => (n > 0 ? '+' : n < 0 ? '−' : '') + currencySign(cur) + Math.abs(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const cents = (n) => Math.round(n * 100) / 100;
+
+// items are { symbol, shares, cost } (shares 0 = just watching, cost = average price paid per share), quotes are by symbol.
+// Returns a row per item and totals per currency: value, today's change, and profit or loss over the positions that have a cost.
+function portfolio(items, quotes) {
+  const rows = items.map((it) => {
+    const q = quotes[it.symbol] || null;
+    const shares = Number(it.shares) || 0;
+    const cost = Number(it.cost) || 0;
+    if (!q || !shares) return { ...it, q, shares, cost, value: null, day: null, pl: null, plPct: null };
+    const value = cents(shares * q.price);
+    const spent = cents(shares * cost);
+    return { ...it, q, shares, cost, value, day: cents(shares * (q.price - q.prevClose)), pl: cost ? cents(value - spent) : null, plPct: cost ? cents((value - spent) / spent * 100) : null, spent: cost ? spent : 0 };
+  });
+  const totals = {};
+  for (const r of rows) {
+    if (r.value === null) continue;
+    const t = (totals[r.q.currency] ||= { currency: r.q.currency, value: 0, day: 0, pl: 0, spent: 0, hasPl: false });
+    t.value = cents(t.value + r.value);
+    t.day = cents(t.day + r.day);
+    if (r.pl !== null) { t.pl = cents(t.pl + r.pl); t.spent = cents(t.spent + r.spent); t.hasPl = true; }
+  }
+  for (const t of Object.values(totals)) t.plPct = t.hasPl && t.spent ? cents(t.pl / t.spent * 100) : null;
+  return { rows, totals: Object.values(totals) };
+}
+
+if (typeof module !== 'undefined') module.exports = { currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
