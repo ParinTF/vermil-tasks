@@ -474,11 +474,12 @@ $('win-max').onclick = () => win.toggleMaximize();
 $('win-close').onclick = () => { flushNote(); win.close(); }; // the backend turns this into "hide to tray"
 
 // Offer new versions without interrupting: the button appears only when the release feed has one.
-const checkUpdate = () => invoke('check_update').then((v) => {
+let lastUpdateCheck = 0;
+const checkUpdate = () => { lastUpdateCheck = Date.now(); return invoke('check_update').then((v) => {
   if (!v) return;
   $('update').textContent = `Update to v${v} →`;
   $('update').hidden = false;
-}).catch(() => {}); // offline or feed unreachable: try again later
+}).catch(() => {}); }; // offline or feed unreachable: try again later
 $('update').onclick = () => {
   const label = $('update').textContent;
   $('update').disabled = true;
@@ -491,6 +492,8 @@ $('update').onclick = () => {
 };
 checkUpdate();
 setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
+// Closing the window only hides it to the tray, so "reopening" never restarts the app: look again whenever the window comes back
+addEventListener('focus', () => { if (Date.now() - lastUpdateCheck > 5 * 60000) checkUpdate(); });
 
 // ── notes view: a list of notes and a plain-text editor that saves itself ──
 const VIEWS = ['tasks', 'notes', 'calendar'];
