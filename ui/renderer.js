@@ -60,6 +60,7 @@ async function commit(next, { undo = true } = {}) {
     undoStack.push(before);
     if (undoStack.length > 20) undoStack.shift();
   }
+  for (const t of next) if (t.done && !before.some((b) => b.id === t.id && b.done)) emit('task-done', { title: t.title });
   const apply = () => { todos = next; render(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); registry.widget?.publishSoon?.(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
   if (document.startViewTransition && !document.hidden) document.startViewTransition(apply); else apply();
@@ -71,6 +72,8 @@ const rowInfo = [];
 const rowTools = [];
 const commandHooks = [];
 const metricHooks = []; // () => [{ id, label, unit, get() }]: numbers a module offers to Goals
+const eventHooks = []; // (type, data) => void: what happened ('task-done', 'bill-paid', 'over-budget'); Automations listens
+const emit = (type, data = {}) => { for (const f of [...eventHooks]) try { f(type, data); } catch (e) { console.error('event', type, e); } };
 
 window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
 

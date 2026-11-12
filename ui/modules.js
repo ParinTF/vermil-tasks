@@ -29,6 +29,7 @@ const MODULES = [
   { id: 'journal', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
   { id: 'goals', name: 'Goals', about: 'Targets that watch your other modules: tasks done, focus time, money saved, habits kept. Or track anything by hand.', script: 'mod-goals.js', style: 'mod-goals.css', view: 'Goals' },
   { id: 'stocks', name: 'Stocks', about: 'Look up a stock: today’s move, pre-market and after-hours, and what your positions are worth. Needs the internet.', script: 'mod-stocks.js', style: 'mod-stocks.css', view: 'Stocks' },
+  { id: 'auto', name: 'Automations', about: 'Rules that do things for you: every morning add a task, when a bill is paid open Expenses, when a budget runs out send a notification.', script: 'mod-auto.js', style: 'mod-auto.css', view: 'Automations' },
   { id: 'review', name: 'Weekly Review', about: 'One page that sums up your week from every module you use, ready to copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
 ];
 

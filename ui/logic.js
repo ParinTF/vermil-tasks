@@ -616,4 +616,56 @@ function timeReport(entries, projects, since, until) {
   return { rows, seconds: rows.reduce((n, r) => n + r.seconds, 0), amount: Math.round(rows.reduce((n, r) => n + r.amount * 100, 0)) / 100 };
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── Automations: a rule is "when X happens, do Y". The pure parts. ──
+// when: { type: 'daily', time: 'HH:MM', days: [0..6] } | { type: 'task-done' | 'bill-paid' | 'over-budget' | 'overdue', text } | { type: 'metric', metric, op: 'above' | 'below', value }
+// A daily or metric rule runs at most once a day (rule.last is that day).
+function autoDaily(rule, now) {
+  const w = rule.when;
+  if (!w || w.type !== 'daily' || !/^\d\d:\d\d$/.test(w.time || '')) return false;
+  if (rule.last === localDay(now)) return false;
+  if (!(w.days || []).includes(now.getDay())) return false;
+  return `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}` >= w.time;
+}
+function autoMetric(rule, value, today) {
+  const w = rule.when;
+  if (!w || w.type !== 'metric' || rule.last === today || !Number.isFinite(value)) return false;
+  return w.op === 'below' ? value < w.value : value > w.value;
+}
+// an event (task-done, bill-paid...) matches a rule of that type; a filter word must appear in the title, name or category
+function autoMatches(rule, type, data) {
+  const w = rule.when;
+  if (!w || w.type !== type) return false;
+  const text = (w.text || '').trim().toLowerCase();
+  return !text || String(data.title || data.name || data.cat || '').toLowerCase().includes(text);
+}
+// "Review {title}" with the event's words filled in; an unknown word stays as typed
+function autoFill(text, ctx = {}) {
+  return String(text || '').replace(/\{(title|name|amount|cat|day)\}/g, (_, k) => (ctx[k] == null ? '' : String(ctx[k]))).trim();
+}
+// "today" or "tomorrow" at HH:MM -> "YYYY-MM-DDTHH:MM" in local time; nothing -> null
+function autoDue(spec, time, now) {
+  if (spec !== 'today' && spec !== 'tomorrow') return null;
+  const day = spec === 'today' ? localDay(now) : shiftDay(localDay(now), 1);
+  return `${day}T${/^\d\d:\d\d$/.test(time || '') ? time : '09:00'}`;
+}
+// A runaway guard: at most `max` runs of one rule inside `windowMs`. Mutates and returns whether this run may go.
+function autoAllowed(stamps, now, max = 5, windowMs = 60000) {
+  while (stamps.length && now - stamps[0] > windowMs) stamps.shift();
+  if (stamps.length >= max) return false;
+  stamps.push(now);
+  return true;
+}
+const AUTO_WHEN = { daily: 'At a time', 'task-done': 'A task is done', 'bill-paid': 'A bill is paid', 'over-budget': 'A budget runs out', overdue: 'A task becomes overdue', metric: 'A number passes a value' };
+const AUTO_DO = { task: 'Add a task', shop: 'Add to the shopping list', expense: 'Record an expense', toast: 'Show a notification', open: 'Open a tab' };
+const AUTO_WEEK = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+// one line for the list: "When every day at 08:00, add a task: Plan the day"
+function autoSummary(rule) {
+  const w = rule.when || {}, d = rule.do || {};
+  const ds = w.days || [];
+  const days = ds.length === 7 ? 'every day' : ds.length === 5 && ![0, 6].some((x) => ds.includes(x)) ? 'on weekdays' : ds.map((x) => AUTO_WEEK[x]).join(', ');
+  const when = w.type === 'daily' ? `${days} at ${w.time}` : w.type === 'metric' ? `${w.label || w.metric} ${w.op === 'below' ? 'falls below' : 'passes'} ${w.value}` : `${(AUTO_WHEN[w.type] || w.type).toLowerCase()}${w.text ? ` ("${w.text}")` : ''}`;
+  const what = d.type === 'open' ? `open ${d.view || 'a tab'}` : `${(AUTO_DO[d.type] || d.type).toLowerCase()}${d.text ? `: ${d.text}` : ''}`;
+  return `When ${when}, ${what}`;
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary };

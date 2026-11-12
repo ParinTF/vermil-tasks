@@ -60,6 +60,7 @@
     paying = null;
     save();
     paint();
+    emit('bill-paid', { name: b.name, amount });
   }
 
   async function remove(b) {

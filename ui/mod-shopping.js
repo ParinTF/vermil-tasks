@@ -140,6 +140,7 @@
   const commandFn = () => [{ label: 'Add to the shopping list', hint: 'Shopping', kind: 'Command', run: async () => { await setView('shopping'); $('sh-name').focus(); } }];
 
   defineModule('shopping', {
+    add(name) { if (addItem(name)) { save(); if ($('sh-list')) paint(); } }, // for Automations
     summary() {
       const dinner = (data.meals[today()] || {}).d;
       const open = data.items.filter((i) => !i.done).length;

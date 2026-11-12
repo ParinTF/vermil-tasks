@@ -29,6 +29,7 @@ The app opens on **Home**: a strip of today's numbers and one card per module. A
 | [Journal](docs/Journal.md) | A few lines a day and a mood, with a two-week chart |
 | [Goals](docs/Goals.md) | Targets that watch numbers from your other modules |
 | [Stocks](docs/Stocks.md) | Look up a stock, pre-market moves, portfolio profit and loss (needs the internet) |
+| [Automations](docs/Automations.md) | Rules: when something happens, add a task, record an expense or notify you |
 | [Weekly Review](docs/Weekly-Review.md) | One page summing up your week from every module |
 
 Everything else is in [Home, backup and sync](docs/Home.md), the [command palette](docs/Command-palette.md), the [quick bar](docs/Quick-bar.md) and the [keyboard shortcuts](docs/Shortcuts.md).
