@@ -24,10 +24,10 @@ const tag = `v${version}`;
 run('npx tauri build', { TAURI_SIGNING_PRIVATE_KEY: key, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' });
 
 // GitHub rewrites spaces in asset names, so publish under a name without any
-const built = join('src-tauri', 'target', 'release', 'bundle', 'nsis', `Vermil Tasks_${version}_x64-setup.exe`);
+const built = join('src-tauri', 'target', 'release', 'bundle', 'nsis', `Vermil_${version}_x64-setup.exe`);
 const dir = join('src-tauri', 'target', 'release-assets');
 mkdirSync(dir, { recursive: true });
-const asset = `VermilTasks_${version}_x64-setup.exe`;
+const asset = `Vermil_${version}_x64-setup.exe`;
 copyFileSync(built, join(dir, asset));
 writeFileSync(join(dir, 'latest.json'), JSON.stringify({
   version,
@@ -44,7 +44,7 @@ if (bump !== 'none') {
   run('git add package.json package-lock.json');
   run(`git commit -m "Release ${tag}"`);
 }
-if (!out(`git tag -l ${tag}`)) run(`git tag -a ${tag} -m "Vermil Tasks ${version}"`);
+if (!out(`git tag -l ${tag}`)) run(`git tag -a ${tag} -m "Vermil ${version}"`);
 run('git push --follow-tags');
-run(`gh release create ${tag} "${join(dir, asset)}" "${join(dir, 'latest.json')}" --title "Vermil Tasks ${version}" --generate-notes`);
+run(`gh release create ${tag} "${join(dir, asset)}" "${join(dir, 'latest.json')}" --title "Vermil ${version}" --generate-notes`);
 console.log(`\nReleased ${tag}. Installed copies will offer the update.`);

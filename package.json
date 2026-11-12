@@ -1,7 +1,7 @@
 {
   "name": "vermil-tasks",
-  "version": "2.0.0",
-  "description": "Vermil Tasks: to-dos with due dates, reminders, daily repeats and history",
+  "version": "2.0.1",
+  "description": "Vermil: tasks, notes, calendar and a set of optional modules, in one light Windows app",
   "private": true,
   "scripts": {
     "start": "tauri dev",

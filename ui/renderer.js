@@ -114,7 +114,7 @@ $('import').onchange = async (e) => {
     if (Array.isArray(data.notes)) incomingNotes = data.notes;
     if (data.modules && typeof data.modules === 'object') incomingModules = data.modules;
   } catch {
-    return tell('That file is not a Vermil Tasks backup.');
+    return tell('That file is not a Vermil backup.');
   }
   // an older backup keeps a task's notes as text on the task: turn that text into notes first
   try {

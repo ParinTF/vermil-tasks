@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "Vermil Tasks",
+  "productName": "Vermil",
   "version": "../package.json",
   "identifier": "com.vermil.tasks",
   "build": { "frontendDist": "../ui" },
@@ -9,7 +9,7 @@
     "windows": [
       {
         "label": "main",
-        "title": "Vermil Tasks",
+        "title": "Vermil",
         "decorations": false,
         "visible": false,
         "width": 1120,
@@ -35,7 +35,7 @@
     ],
     "security": { "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost" }
   },
-  "bundle": { "active": true, "targets": ["nsis"], "icon": ["icons/icon.ico"], "createUpdaterArtifacts": true },
+  "bundle": { "active": true, "targets": ["nsis"], "icon": ["icons/icon.ico"], "createUpdaterArtifacts": true, "windows": { "nsis": { "installerHooks": "installer-hooks.nsh" } } },
   "plugins": {
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhGMjdDMTE3MzA5MkM1OUIKUldTYnhaSXdGOEVuajlNUlhOZnY4a3JUSkp4dS9BNnIwR05MWldzODk1L3Vvc3k5RWpNK004Z2EK",

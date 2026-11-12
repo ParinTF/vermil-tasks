@@ -498,7 +498,13 @@ fn backup_folder(app: &AppHandle, data: &Data) -> PathBuf {
     match data.backup_dir.as_deref().map(str::trim).filter(|d| !d.is_empty()) {
         Some(d) => PathBuf::from(d),
         // named after the product, so a test copy ("Vermil Tasks Test") never writes into the real app's folder
-        None => app.path().document_dir().unwrap_or_else(|_| PathBuf::from(".")).join(format!("{} Backups", app.config().product_name.clone().unwrap_or_else(|| "Vermil".into()))),
+        None => {
+            let docs = app.path().document_dir().unwrap_or_else(|_| PathBuf::from("."));
+            let name = app.config().product_name.clone().unwrap_or_else(|| "Vermil".into());
+            let dir = docs.join(format!("{name} Backups"));
+            let before_the_rename = docs.join("Vermil Tasks Backups"); // 2.0.0 wrote here; keep using it if that is where the backups are
+            if !dir.exists() && name == "Vermil" && before_the_rename.exists() { before_the_rename } else { dir }
+        }
     }
 }
 
@@ -906,7 +912,7 @@ fn main() {
             let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
             TrayIconBuilder::new()
                 .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("Vermil Tasks")
+                .tooltip("Vermil")
                 .menu(&Menu::with_items(app, &[&open, &quick, &quick_note, &quit])?)
                 .show_menu_on_left_click(false)
                 .on_menu_event(|app, event| match event.id.as_ref() {
@@ -931,7 +937,7 @@ fn main() {
             Ok(())
         })
         .run(tauri::generate_context!())
-        .expect("error while running Vermil Tasks");
+        .expect("error while running Vermil");
 }
 
 #[cfg(test)]
