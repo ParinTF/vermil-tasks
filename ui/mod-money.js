@@ -171,6 +171,13 @@
     $('mo-cats').replaceChildren(...used.map((c) => el('option', { value: c })));
   }
 
+  const metricsFn = () => {
+    const m = () => moneyMonth(data.entries, localDay(new Date()).slice(0, 7));
+    return [
+      { id: 'money.saved', label: 'Saved this month (income minus spending)', unit: data.cur, get: () => m().balance },
+      { id: 'money.spent', label: 'Spent this month', unit: data.cur, get: () => m().out },
+    ];
+  };
   const group = { module: 'money', title: 'Money', items: [['N', 'New entry'], [['←', '→'], 'Previous or next month'], ['T', 'This month']] };
   const commandFn = () => [{ label: 'Add expense', hint: 'Money', kind: 'Command', run: async () => { await setView('money'); $('mo-amount').focus(); } }];
 
@@ -190,10 +197,12 @@
       paint();
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
+      metricHooks.push(metricsFn);
     },
     stop() {
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
+      metricHooks.splice(metricHooks.indexOf(metricsFn), 1);
     },
     show() { paint(); },
     keys(e) {

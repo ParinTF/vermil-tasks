@@ -100,6 +100,7 @@
     paintChart();
   }
 
+  const metricsFn = () => [{ id: 'journal.month', label: 'Days written this month', unit: 'days', get: () => Object.keys(data.entries).filter((d) => d.startsWith(today().slice(0, 7)) && data.entries[d].text.trim()).length }];
   const group = { module: 'journal', title: 'Journal', items: [[['←', '→'], 'Previous or next day'], ['T', 'Today'], ['N', 'Write'], [['1', '…', '5'], 'Set the mood']] };
   const commandFn = () => [{ label: 'Write in the journal', hint: 'Journal', kind: 'Command', run: async () => { await setView('journal'); open(today()); $('jr-text').focus(); } }];
 
@@ -117,11 +118,13 @@
       paint();
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
+      metricHooks.push(metricsFn);
     },
     stop() {
       flush();
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
+      metricHooks.splice(metricHooks.indexOf(metricsFn), 1);
     },
     show() { if (day > today()) day = today(); paint(); },
     flush,

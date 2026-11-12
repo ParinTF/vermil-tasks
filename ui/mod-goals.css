@@ -1,0 +1,38 @@
+/* Goals module: loaded only while it is switched on */
+.goals-page { display: grid; gap: 32px; padding-top: 24px; }
+.gl-main, .gl-side { min-width: 0; }
+.gl-head { margin-bottom: 14px; }
+.gl-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.gl-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--ink); }
+.gl-list li { display: grid; gap: 8px; padding: 16px 0 18px; border-bottom: 1px solid var(--line); }
+.gl-top { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.gl-top b { font-size: 18px; }
+.gl-track { display: block; height: 6px; border-radius: 3px; background: color-mix(in srgb, var(--ink) 8%, transparent); }
+.gl-track i { display: block; height: 100%; border-radius: 3px; background: var(--ink); }
+.gl-list li.over .gl-track i { background: var(--accent); }
+.gl-list li.done .gl-track i { background: var(--ink); }
+.gl-line { display: flex; justify-content: space-between; gap: 12px; font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.gl-state { font-weight: 600; }
+.gl-list li.over .gl-state { color: var(--accent-text); }
+.gl-list small { color: var(--mute); font-size: 12px; }
+.gl-hand { display: flex; align-items: center; gap: 10px; }
+.gl-hand button { width: 28px; height: 28px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 50%; background: none; font: inherit; font-size: 16px; line-height: 1; color: var(--ink); cursor: pointer; }
+.gl-hand button:hover { border-color: var(--ink); }
+.gl-set { width: 8em; padding: 4px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); background: none; font: inherit; font-size: 14px; color: var(--ink); }
+.gl-set:focus { outline: 0; border-color: var(--accent); }
+.gl-del { padding: 0; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; opacity: 0; }
+.gl-list li:hover .gl-del, .gl-del:focus-visible { opacity: 1; }
+.gl-del:hover { color: var(--accent-text); }
+.gl-side form { display: grid; gap: 16px; }
+.gl-two { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr); gap: 18px; }
+.gl-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.gl-field input, .gl-field select { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.gl-field input:focus, .gl-field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.gl-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
+
+@media (min-width: 860px) {
+  .goals-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .gl-main { display: flex; flex-direction: column; min-height: 0; }
+  .gl-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .gl-side { min-height: 0; overflow-y: auto; }
+}

@@ -119,6 +119,10 @@
     }));
   }
 
+  const metricsFn = () => [{
+    id: 'habits.week', label: 'Habits done in the last 7 days', unit: '%',
+    get: () => { let done = 0, total = 0; for (let i = 0, d = today(); i < 7; i++, d = shiftDay(d, -1)) { const r = habitDay(data.habits, data.log, d); done += r.done; total += r.total; } return total ? Math.round(done / total * 100) : 0; },
+  }];
   const group = { module: 'habits', title: 'Habits', items: [[['←', '→'], 'Previous or next day'], ['T', 'Today'], ['N', 'New habit'], [['1', '2', '…'], 'Tick the numbered habit']] };
   const commandFn = () => [{ label: 'Add a habit', hint: 'Habits', kind: 'Command', run: async () => { await setView('habits'); $('hb-name').focus(); } }];
 
@@ -137,10 +141,12 @@
       paint();
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
+      metricHooks.push(metricsFn);
     },
     stop() {
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
+      metricHooks.splice(metricHooks.indexOf(metricsFn), 1);
     },
     show() { if (day > today()) day = today(); paint(); },
     keys(e) {

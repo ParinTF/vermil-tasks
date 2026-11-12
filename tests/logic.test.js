@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -395,4 +395,14 @@ test('journal: mood average over the days that have a mood', () => {
   assert.equal(moodAverage(e, '2026-11-12', 30), 3.7); // (4 + 2 + 5) / 3
   assert.equal(moodAverage({}, '2026-11-12', 7), null);
   assert.equal(MOODS[3], 'Okay');
+});
+
+test('goals: reaching a target and staying under a limit', () => {
+  assert.deepEqual(goalProgress('atleast', 40, 100), { pct: 40, state: 'ok' });
+  assert.deepEqual(goalProgress('atleast', 100, 100), { pct: 100, state: 'done' });
+  assert.deepEqual(goalProgress('atleast', 130, 100), { pct: 130, state: 'done' });
+  assert.deepEqual(goalProgress('atmost', 80, 100), { pct: 80, state: 'ok' });
+  assert.deepEqual(goalProgress('atmost', 100, 100), { pct: 100, state: 'ok' }); // exactly at the limit is still fine
+  assert.deepEqual(goalProgress('atmost', 101, 100), { pct: 101, state: 'over' });
+  assert.deepEqual(goalProgress('atleast', 5, 0), { pct: 0, state: 'done' });
 });

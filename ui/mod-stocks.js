@@ -179,6 +179,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     paint();
   }
 
+  const metricsFn = () => [{ id: 'stocks.value', label: 'Portfolio value (saved prices)', unit: '', get: () => portfolio(data.items, data.quotes).totals[0]?.value || 0 }];
   const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices']] };
   const commandFn = () => [{ label: 'Look up a stock', hint: 'Stocks', kind: 'Command', run: async () => { await setView('stocks'); $('st-q').focus(); } }];
   const wake = () => { if (view === 'stocks') refresh(); };
@@ -199,6 +200,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
       paint();
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
+      metricHooks.push(metricsFn);
       timer = setInterval(() => { if (view === 'stocks' && !document.hidden) refresh(); }, 60000);
       addEventListener('online', goOnline);
       addEventListener('offline', goOffline);
@@ -209,6 +211,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
       removeEventListener('offline', goOffline);
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
+      metricHooks.splice(metricHooks.indexOf(metricsFn), 1);
     },
     show() { paint(); refresh(); },
     keys(e) {

@@ -129,6 +129,11 @@
     b.onclick = () => openFocus(t.id);
     return b;
   };
+  const sumMin = (since) => data.sessions.filter((s) => s.day >= since).reduce((n, s) => n + s.min, 0);
+  const metricsFn = () => [
+    { id: 'focus.week', label: 'Focus minutes in the last 7 days', unit: 'min', get: () => sumMin(shiftDay(localDay(new Date()), -6)) },
+    { id: 'focus.month', label: 'Focus minutes this month', unit: 'min', get: () => sumMin(localDay(new Date()).slice(0, 8) + '01') },
+  ];
   const group = { module: 'pomodoro', title: 'Focus timer', items: [['F', 'Focus timer on the selected task (in Tasks)']] };
   const commandFn = () => [{ label: 'Focus timer…', hint: 'F on a task', kind: 'Command', run: () => openFocus(selectedId || '') }];
 
@@ -144,6 +149,7 @@
       rowTools.push(rowToolFn);
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
+      metricHooks.push(metricsFn);
       const r = data.run;
       if (r && r.end && r.end <= Date.now()) data.run = null; // it ended while the app was closed
       ticker = setInterval(tick, 1000);
@@ -152,7 +158,7 @@
     },
     stop() {
       clearInterval(ticker);
-      for (const [list, fn] of [[rowInfo, rowInfoFn], [rowTools, rowToolFn], [commandHooks, commandFn], [shortcutGroups, group]]) list.splice(list.indexOf(fn), 1);
+      for (const [list, fn] of [[rowInfo, rowInfoFn], [rowTools, rowToolFn], [commandHooks, commandFn], [shortcutGroups, group], [metricHooks, metricsFn]]) list.splice(list.indexOf(fn), 1);
       chip?.remove();
       dlg?.remove();
       if (view === 'tasks') render();

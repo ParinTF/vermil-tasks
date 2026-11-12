@@ -70,6 +70,7 @@ async function commit(next, { undo = true } = {}) {
 const rowInfo = [];
 const rowTools = [];
 const commandHooks = [];
+const metricHooks = []; // () => [{ id, label, unit, get() }]: numbers a module offers to Goals
 
 window.__TAURI__.app.getVersion().then((v) => { $('version').textContent = 'v' + v; });
 

@@ -443,6 +443,13 @@ new ResizeObserver(fitSide).observe(document.querySelector('.side')); // the win
 addEventListener('resize', fitSide);
 
 
+// numbers Goals can watch: tasks finished this week (last 7 days) and this calendar month
+const doneSince = (day) => todos.filter((t) => t.done && t.completedAt && localDay(new Date(t.completedAt)) >= day).length;
+const tasksMetrics = () => [
+  { id: 'tasks.week', label: 'Tasks done in the last 7 days', unit: 'tasks', get: () => doneSince(shiftDay(localDay(new Date()), -6)) },
+  { id: 'tasks.month', label: 'Tasks done this month', unit: 'tasks', get: () => doneSince(localDay(new Date()).slice(0, 8) + '01') },
+];
+
 defineModule('tasks', {
   summary() {
     const now = new Date();
@@ -455,6 +462,7 @@ defineModule('tasks', {
   },
   start() {
     shortcutGroups.push(tasksGroup);
+    metricHooks.push(tasksMetrics);
     document.querySelector('.marquee').hidden = false;
     refreshTimer = setInterval(refreshTick, 60000); // overdue colouring, and repeating tasks coming back after their wait
     renderTasks(true);
@@ -463,6 +471,7 @@ defineModule('tasks', {
   stop() {
     clearInterval(refreshTimer);
     shortcutGroups.splice(shortcutGroups.indexOf(tasksGroup), 1);
+    metricHooks.splice(metricHooks.indexOf(tasksMetrics), 1);
     document.querySelector('.marquee').hidden = true;
   },
   show() { renderTasks(); fitSide(); }, // a note may have changed while the list was hidden
