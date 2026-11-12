@@ -432,4 +432,47 @@ function goalProgress(direction, value, target) {
   return { pct, state: value >= target ? 'done' : 'ok' };
 }
 
-if (typeof module !== 'undefined') module.exports = { goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── converter: "5 km to mi", "30 c to f", "100 usd to thb" ──
+// every unit is a factor to its category's base unit (m, kg, l, m/s); temperature is handled apart
+const UNITS = {
+  length: { m: 1, km: 1000, cm: 0.01, mm: 0.001, mi: 1609.344, ft: 0.3048, in: 0.0254, yd: 0.9144 },
+  mass: { kg: 1, g: 0.001, mg: 0.000001, lb: 0.45359237, oz: 0.028349523125 },
+  volume: { l: 1, ml: 0.001, gal: 3.785411784, cup: 0.2365882365, tbsp: 0.01478676478, tsp: 0.00492892159 },
+  speed: { kmh: 1 / 3.6, mph: 0.44704, ms: 1, knot: 0.514444 },
+  temperature: { c: 1, f: 1, k: 1 },
+};
+const UNIT_ALIASES = {
+  km: 'km', kilometer: 'km', kilometers: 'km', kilometre: 'km', kilometres: 'km', m: 'm', meter: 'm', meters: 'm', metre: 'm', metres: 'm', cm: 'cm', mm: 'mm',
+  mi: 'mi', mile: 'mi', miles: 'mi', ft: 'ft', foot: 'ft', feet: 'ft', in: 'in', inch: 'in', inches: 'in', yd: 'yd', yard: 'yd', yards: 'yd',
+  kg: 'kg', kilo: 'kg', kilos: 'kg', g: 'g', gram: 'g', grams: 'g', mg: 'mg', lb: 'lb', lbs: 'lb', pound: 'lb', pounds: 'lb', oz: 'oz', ounce: 'oz', ounces: 'oz',
+  l: 'l', liter: 'l', liters: 'l', litre: 'l', litres: 'l', ml: 'ml', gal: 'gal', gallon: 'gal', gallons: 'gal', cup: 'cup', cups: 'cup', tbsp: 'tbsp', tsp: 'tsp',
+  kmh: 'kmh', 'km/h': 'kmh', kph: 'kmh', mph: 'mph', 'm/s': 'ms', ms: 'ms', knot: 'knot', knots: 'knot',
+  c: 'c', '°c': 'c', celsius: 'c', f: 'f', '°f': 'f', fahrenheit: 'f', k: 'k', kelvin: 'k',
+};
+const unitKind = (u) => Object.keys(UNITS).find((k) => u in UNITS[k]);
+
+// → { amount, from, to, currency } or null. Units are normalised; two three-letter codes that are not units are a currency pair.
+function parseConvert(text) {
+  const m = /^\s*(-?\d[\d,]*(?:\.\d+)?|-?\.\d+)\s*([a-z°/]+)\s*(?:to|in|into|=|>|->|as)\s*([a-z°/]+)\s*$/i.exec(text);
+  if (!m) return null;
+  const amount = Number(m[1].replace(/,/g, ''));
+  const [a, b] = [m[2].toLowerCase(), m[3].toLowerCase()];
+  const [ua, ub] = [UNIT_ALIASES[a], UNIT_ALIASES[b]];
+  if (ua && ub) return unitKind(ua) === unitKind(ub) ? { amount, from: ua, to: ub, currency: false } : null;
+  if (!ua && !ub && /^[a-z]{3}$/.test(a) && /^[a-z]{3}$/.test(b) && a !== b) return { amount, from: a.toUpperCase(), to: b.toUpperCase(), currency: true };
+  return null;
+}
+
+function convertUnit(amount, from, to) {
+  if (unitKind(from) === 'temperature') {
+    const c = from === 'c' ? amount : from === 'f' ? (amount - 32) * 5 / 9 : amount - 273.15;
+    return to === 'c' ? c : to === 'f' ? c * 9 / 5 + 32 : c + 273.15;
+  }
+  const k = unitKind(from);
+  return amount * UNITS[k][from] / UNITS[k][to];
+}
+
+// up to 4 decimals, no trailing zeros, thousands separated
+const convertLabel = (n) => (Math.abs(n) < 1e-9 ? 0 : n).toLocaleString('en-US', { maximumFractionDigits: Math.abs(n) >= 1000 ? 2 : 4 });
+
+if (typeof module !== 'undefined') module.exports = { parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

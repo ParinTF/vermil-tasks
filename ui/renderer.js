@@ -226,6 +226,39 @@ async function setView(next) {
 let palItems = [];
 let palIndex = 0;
 
+// Converter: typed "5 km to mi" answers at once; a currency pair asks the quote service (checking the connection first).
+const rates = new Map(); // "USDTHB" -> { rate, at } | { offline: true, at } | { pending: true }
+const copyText = (t) => navigator.clipboard.writeText(t).catch(() => {});
+function convertItems(q) {
+  const c = parseConvert(q);
+  if (!c) return [];
+  const shown = (n) => `${convertLabel(c.amount)} ${c.currency ? c.from : c.from.toUpperCase()} = ${convertLabel(n)} ${c.currency ? c.to : c.to.toUpperCase()}`;
+  if (!c.currency) {
+    const text = shown(convertUnit(c.amount, c.from, c.to));
+    return [{ label: text, hint: 'Enter copies', kind: 'Convert', run: () => copyText(text.split(' = ')[1]) }];
+  }
+  const key = c.from + c.to;
+  const hit = rates.get(key);
+  if (hit && !hit.pending && Date.now() - hit.at < 10 * 60000) {
+    if (hit.offline) return [{ label: 'Currencies need the internet', hint: '', kind: 'Convert', run: () => {} }];
+    if (hit.unknown) return [{ label: `No rate for ${c.from} to ${c.to}`, hint: '', kind: 'Convert', run: () => {} }];
+    const text = shown(c.amount * hit.rate);
+    return [{ label: text, hint: 'Enter copies', kind: 'Convert', run: () => copyText(text.split(' = ')[1]) }];
+  }
+  if (!hit || !hit.pending) {
+    rates.set(key, { pending: true });
+    (async () => {
+      try {
+        if (!(await invoke('net_online'))) throw new Error('offline');
+        const r = await invoke('stock_quotes', { symbols: [key + '=X'] });
+        rates.set(key, r.quotes[0] ? { rate: r.quotes[0].price, at: Date.now() } : { unknown: true, at: Date.now() });
+      } catch { rates.set(key, { offline: true, at: Date.now() - 9 * 60000 }); } // asked again soon
+      if ($('pal').open) paletteRender();
+    })();
+  }
+  return [{ label: `Converting ${convertLabel(c.amount)} ${c.from} to ${c.to}…`, hint: '', kind: 'Convert', run: () => {} }];
+}
+
 function paletteResults(q) {
   const go = (label, hint, run) => ({ label, hint, kind: 'Command', run });
   const has = (id) => started.has(id);
@@ -250,9 +283,11 @@ function paletteResults(q) {
       run: async () => { await setView('notes'); await registry.notes.open(n.id, 'body'); },
     })),
   ];
+  const conv = convertItems(q); // a typed conversion comes first
   const when = parseQuick('go ' + q, new Date()); // a date or time typed as words opens that day
   const day = when.due && when.title === 'go' ? when.due.slice(0, 10) : null;
   return [
+    ...conv,
     ...(day && has('calendar') ? [{ label: 'Open calendar on ' + fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), hint: '', kind: 'Day', run: async () => { await setView('calendar'); registry.calendar.goto(day); } }] : []),
     ...rankItems(found, q),
   ];
