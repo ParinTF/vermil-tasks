@@ -204,4 +204,10 @@ function colorKey(value) {
   return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : '';
 }
 
-if (typeof module !== 'undefined') module.exports = { plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// "2 of 3 done" for a note's plain text, where a checklist item is a line starting "[ ] " or "[x] ".
+function checkProgress(body) {
+  const items = String(body || '').split('\n').filter((line) => /^\[[ x]\] /.test(line));
+  return { done: items.filter((line) => line.startsWith('[x]')).length, total: items.length };
+}
+
+if (typeof module !== 'undefined') module.exports = { checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

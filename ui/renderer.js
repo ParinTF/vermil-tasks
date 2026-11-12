@@ -271,9 +271,9 @@ function renderHero(open, done) {
     ...(best > 1 ? [' · ', el('b', {}, best + '-day streak')] : []));
 }
 
-function renderMarquee(done) {
-  const words = done.length
-    ? done.slice(0, 12).map((t) => (t.title.length > 40 ? t.title.slice(0, 40) + '…' : t.title))
+function renderMarquee(open) { // the banner runs the tasks still to do
+  const words = open.length
+    ? open.slice(0, 12).map((t) => (t.title.length > 40 ? t.title.slice(0, 40) + '…' : t.title))
     : ['One thing at a time', 'Done beats perfect', 'No rush', "Just don't forget"];
   const key = words.join('|');
   if (key === marqueeKey) return; // rebuilding would restart the animation on every render
@@ -298,7 +298,7 @@ function render(enter = false) {
   streaks = seriesStreaks();
   renderHero(open, done);
   fitSide(); // the headline text may have changed
-  renderMarquee(done);
+  renderMarquee(open);
 
   const now = new Date();
   for (const name of TABS) $('tab-' + name).ariaSelected = String(tab === name);
@@ -504,7 +504,7 @@ let noteDirty = false; // typed since the last save
 let noteTimer;
 const newNoteId = () => 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const currentNote = () => notes.find((n) => n.id === selectedNoteId);
-const noteLine = (n) => (n.body || '').split('\n').map((l) => l.trim()).find(Boolean) || 'No text';
+const noteLine = (n) => (n.body || '').split('\n').map((l) => l.replace(/^\[[ x]\] /, '').trim()).find(Boolean) || 'No text'; // a checklist line without its box
 const visibleNotes = () => {
   const q = $('note-search').value.trim().toLowerCase();
   return [...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')) // newest edit first
@@ -540,8 +540,9 @@ function renderNoteList() {
   for (const t of todos) if (t.noteId) uses.set(t.noteId, (uses.get(t.noteId) || 0) + 1);
   $('note-items').replaceChildren(...items.map((n) => {
     const count = uses.get(n.id);
+    const progress = checkProgress(n.body);
     const row = el('button', { type: 'button', className: 'note' + (n.id === selectedNoteId ? ' sel' : ''), id: 'note-' + n.id },
-      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n) + (count ? ` · ${count} ${count === 1 ? 'task' : 'tasks'}` : '')));
+      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n) + (progress.total ? ` · ${progress.done}/${progress.total} done` : '') + (count ? ` · ${count} ${count === 1 ? 'task' : 'tasks'}` : '')));
     row.onclick = () => openNote(n.id, 'body');
     return el('li', {}, row);
   }));
@@ -580,8 +581,17 @@ function cleanInto(source, target) {
     if (['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'NOSCRIPT'].includes(tag)) continue;
     if (tag === 'BR') { target.append(document.createElement('br')); continue; }
     let out = target;
-    if (NOTE_BLOCKS[tag]) {
-      if (/^(P|H1|H2|H4)$/.test(target.tagName)) { // a block inside a block cannot nest: it continues on a new line
+    const inBlock = /^(P|H1|H2|H4|LI)$/.test(target.tagName);
+    if (tag === 'UL' && node.classList.contains('check') && !inBlock && target.tagName !== 'UL') { // a checklist
+      out = document.createElement('ul');
+      out.className = 'check';
+      target.append(out);
+    } else if (tag === 'LI' && target.tagName === 'UL' && target.className === 'check') {
+      out = document.createElement('li');
+      if (node.getAttribute('data-done') === '1') out.setAttribute('data-done', '1');
+      target.append(out);
+    } else if (NOTE_BLOCKS[tag]) {
+      if (inBlock) { // a block inside a block cannot nest: it continues on a new line
         if (target.lastChild) target.append(document.createElement('br'));
       } else {
         out = document.createElement(NOTE_BLOCKS[tag]);
@@ -610,7 +620,11 @@ function cleaned(html) {
   const root = document.createElement('div');
   let run = null;
   for (const node of [...flat.childNodes]) {
-    if (node.nodeType === Node.ELEMENT_NODE && /^(P|H1|H2|H4)$/.test(node.tagName)) { run = null; root.append(node); continue; }
+    if (node.nodeType === Node.ELEMENT_NODE && /^(P|H1|H2|H4|UL)$/.test(node.tagName)) { // UL here is a checklist, the only list cleanInto keeps
+      run = null;
+      if (node.tagName !== 'UL' || node.firstChild) root.append(node);
+      continue;
+    }
     if (!run) { run = document.createElement('p'); root.append(run); }
     run.append(node);
   }
@@ -620,7 +634,7 @@ function cleaned(html) {
 
 // The plain text of the blocks, one line per block: what search, the list and Copy use.
 function plainFromContainer(root) {
-  const lines = [...root.children].map((block) => {
+  const blockText = (block) => {
     let s = '';
     (function walk(n) {
       for (const c of n.childNodes) {
@@ -630,7 +644,10 @@ function plainFromContainer(root) {
       }
     })(block);
     return s.replace(/\n$/, ''); // the <br> that keeps an empty paragraph open is not a line
-  });
+  };
+  const lines = [...root.children].flatMap((block) => (block.tagName === 'UL'
+    ? [...block.children].map((li) => (li.getAttribute('data-done') === '1' ? '[x] ' : '[ ] ') + blockText(li)) // a checklist item is a line with its box
+    : [blockText(block)]));
   return lines.join('\n').replace(/\s+$/, '');
 }
 
@@ -648,9 +665,16 @@ function caretToEnd(node) {
   sel.addRange(range);
 }
 
+function caretElement() {
+  const anchor = getSelection().anchorNode;
+  const at = anchor && (anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor);
+  return at && editor().contains(at) ? at : null;
+}
+
 function applyFormat(command, value) {
   if (!currentNote()) return;
   editor().focus();
+  if (command === 'formatBlock' && caretElement()?.closest('ul.check')) return; // a list item has no size of its own
   document.execCommand('styleWithCSS', false, false); // <b> and <font color>, not inline styles
   document.execCommand(command, false, value);
   touchNote();
@@ -664,6 +688,7 @@ function syncFormat() {
   const at = anchor && (anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor);
   if (!at || !editor().contains(at)) return;
   $('fmt-bold').setAttribute('aria-pressed', String(!!at.closest('b'))); // not queryCommandState: a heading is bold by its style and would light the button
+  $('fmt-check').setAttribute('aria-pressed', String(!!at.closest('ul.check')));
   const block = (at.closest('h1, h2, h4, p') || { localName: 'p' }).localName;
   for (const b of document.querySelectorAll('#note-fmt [data-size]')) b.setAttribute('aria-pressed', String(SIZE_TAG[b.dataset.size] === block));
   const key = colorKey(at.closest('font[color]')?.getAttribute('color')) || DEFAULT_COLOR;
@@ -681,6 +706,7 @@ $('note-fmt').addEventListener('click', (e) => {
   const b = e.target.closest('button');
   if (!b) return;
   if (b.id === 'fmt-bold') applyFormat('bold');
+  else if (b.id === 'fmt-check') toggleChecklist();
   else if (b.dataset.size) applyFormat('formatBlock', `<${SIZE_TAG[b.dataset.size]}>`);
   else if (b.dataset.color) applyFormat('foreColor', b.dataset.color);
 });
@@ -689,7 +715,49 @@ document.execCommand('defaultParagraphSeparator', false, 'p');
 // only plain text goes in from outside, so no foreign markup ever reaches a note
 editor().addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
 editor().addEventListener('drop', (e) => { e.preventDefault(); const text = e.dataTransfer.getData('text/plain'); if (text) document.execCommand('insertText', false, text); });
-editor().addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && ['KeyI', 'KeyU'].includes(e.code)) e.preventDefault(); }); // italic and underline are not kept
+
+// checklists: a list whose items carry a circle; ticking sets data-done on the item
+function toggleChecklist() {
+  if (!currentNote()) return;
+  editor().focus();
+  const sel = getSelection();
+  if (!sel.rangeCount) return;
+  const range = sel.getRangeAt(0);
+  const keep = [sel.anchorNode, sel.anchorOffset, sel.focusNode, sel.focusOffset];
+  const blocks = [...editor().children].filter((b) => range.intersectsNode(b));
+  if (!blocks.length) return;
+  const convert = (from, tag) => { const to = document.createElement(tag); to.append(...from.childNodes); return to; }; // moves the text, so the caret survives
+  if (blocks.every((b) => b.matches('ul.check'))) {
+    for (const ul of blocks) ul.replaceWith(...[...ul.children].map((li) => convert(li, 'p')));
+  } else {
+    let list = null;
+    for (const b of blocks) {
+      if (b.matches('ul.check')) { list = null; continue; }
+      if (!list) { list = document.createElement('ul'); list.className = 'check'; b.before(list); }
+      list.append(convert(b, 'li'));
+      b.remove();
+    }
+  }
+  if (editor().contains(keep[0]) && editor().contains(keep[2])) sel.setBaseAndExtent(...keep); else caretToEnd(editor());
+  touchNote();
+  syncFormat();
+}
+function toggleItem(li) {
+  if (li.getAttribute('data-done') === '1') li.removeAttribute('data-done'); else li.setAttribute('data-done', '1');
+  touchNote();
+}
+const inGutter = (e, li) => e.clientX - li.getBoundingClientRect().left < 32; // the column the circle sits in
+editor().addEventListener('mousedown', (e) => { const li = e.target.closest?.('ul.check > li'); if (li && inGutter(e, li)) e.preventDefault(); }); // the click ticks, it does not move the caret
+editor().addEventListener('click', (e) => { const li = e.target.closest?.('ul.check > li'); if (li && inGutter(e, li)) toggleItem(li); });
+editor().addEventListener('input', (e) => { // a new line after a ticked item starts unticked
+  if (e.inputType === 'insertParagraph') caretElement()?.closest('ul.check > li')?.removeAttribute('data-done');
+});
+editor().addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  if (mod && ['KeyI', 'KeyU'].includes(e.code)) e.preventDefault(); // italic and underline are not kept
+  if (mod && e.key === 'Enter') { const li = caretElement()?.closest('ul.check > li'); if (li) { e.preventDefault(); toggleItem(li); } }
+  if (mod && e.shiftKey && e.code === 'KeyL') { e.preventDefault(); toggleChecklist(); }
+});
 
 function showNote(id) {
   selectedNoteId = id;
@@ -913,6 +981,7 @@ const SHORTCUTS = [
   'T: switch theme (auto, light, dark)',
   'Ctrl+1, 2, 3: Tasks, Notes, Calendar',
   'Ctrl+N (in Notes): new note',
+  'In a note: Ctrl+B bold, Ctrl+Shift+L checklist, Ctrl+Enter tick an item',
   'In Calendar: arrows move a day, PageUp and PageDown a month, T today, Enter adds a task',
   '1 2 3 4: To do, Today, Week, History',
   'Ctrl+Alt+T (from anywhere): quick add',

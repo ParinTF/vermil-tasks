@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -193,4 +193,11 @@ test('note colours: six of them, the default first, all keys in the form colorKe
   assert.equal(keys.length, 6);
   assert.equal(keys[0], DEFAULT_COLOR);
   assert.ok(keys.every((k) => colorKey(k) === k));
+});
+
+test('checkProgress counts ticked and total checklist lines only', () => {
+  assert.deepEqual(checkProgress('[ ] a\n[x] b\nplain text\n[x] c\n[x]no space'), { done: 2, total: 3 });
+  assert.deepEqual(checkProgress('just text'), { done: 0, total: 0 });
+  assert.deepEqual(checkProgress(''), { done: 0, total: 0 });
+  assert.deepEqual(checkProgress(undefined), { done: 0, total: 0 });
 });
