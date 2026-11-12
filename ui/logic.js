@@ -332,4 +332,48 @@ function portfolio(items, quotes) {
   return { rows, totals: Object.values(totals) };
 }
 
-if (typeof module !== 'undefined') module.exports = { currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── habits: a habit is { id, name, days: [0..6] (Sunday = 0), created: "YYYY-MM-DD" }, the log is { "YYYY-MM-DD": [habit ids] } ──
+const habitDue = (h, day) => h.days.includes(parseDay(day).getDay()) && day >= h.created;
+
+// Days in a row it was done, counting only the days it was due. Today not done yet does not break it.
+function habitStreak(h, log, today) {
+  let n = 0;
+  for (let day = today, i = 0; i < 800 && day >= h.created; day = shiftDay(day, -1), i++) {
+    if (!habitDue(h, day)) continue;
+    if ((log[day] || []).includes(h.id)) n++;
+    else if (day !== today) break;
+  }
+  return n;
+}
+
+function habitBest(h, log, today) {
+  let best = 0, run = 0;
+  for (let day = h.created; day <= today; day = shiftDay(day, 1)) {
+    if (!habitDue(h, day)) continue;
+    run = (log[day] || []).includes(h.id) ? run + 1 : 0;
+    best = Math.max(best, run);
+  }
+  return best;
+}
+
+// how many of the habits due that day were done
+function habitDay(habits, log, day) {
+  const due = habits.filter((h) => habitDue(h, day));
+  return { done: due.filter((h) => (log[day] || []).includes(h.id)).length, total: due.length };
+}
+
+// 0 for nothing due or nothing done, then 1 to 4 by the share done
+const heatLevel = ({ done, total }) => (!total || !done ? 0 : Math.min(4, Math.ceil(done / total * 4)));
+
+// the share of due days this habit was done on, over the last `days` days up to today
+function habitRate(h, log, today, days) {
+  let due = 0, done = 0;
+  for (let i = 0, day = today; i < days; i++, day = shiftDay(day, -1)) {
+    if (!habitDue(h, day)) continue;
+    due++;
+    if ((log[day] || []).includes(h.id)) done++;
+  }
+  return due ? Math.round(done / due * 100) : null;
+}
+
+if (typeof module !== 'undefined') module.exports = { habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
