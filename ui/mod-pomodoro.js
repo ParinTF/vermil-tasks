@@ -129,6 +129,7 @@
     b.onclick = () => openFocus(t.id);
     return b;
   };
+  const group = { module: 'pomodoro', title: 'Focus timer', items: [['F', 'Focus timer on the selected task (in Tasks)']] };
   const commandFn = () => [{ label: 'Focus timer…', hint: 'F on a task', kind: 'Command', run: () => openFocus(selectedId || '') }];
 
   defineModule('pomodoro', {
@@ -138,6 +139,7 @@
       rowInfo.push(rowInfoFn);
       rowTools.push(rowToolFn);
       commandHooks.push(commandFn);
+      shortcutGroups.push(group);
       const r = data.run;
       if (r && r.end && r.end <= Date.now()) data.run = null; // it ended while the app was closed
       ticker = setInterval(tick, 1000);
@@ -146,7 +148,7 @@
     },
     stop() {
       clearInterval(ticker);
-      for (const [list, fn] of [[rowInfo, rowInfoFn], [rowTools, rowToolFn], [commandHooks, commandFn]]) list.splice(list.indexOf(fn), 1);
+      for (const [list, fn] of [[rowInfo, rowInfoFn], [rowTools, rowToolFn], [commandHooks, commandFn], [shortcutGroups, group]]) list.splice(list.indexOf(fn), 1);
       chip?.remove();
       dlg?.remove();
       if (view === 'tasks') render();

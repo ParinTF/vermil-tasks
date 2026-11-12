@@ -505,8 +505,8 @@ setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
 addEventListener('focus', () => { if (Date.now() - lastUpdateCheck > 5 * 60000) checkUpdate(); });
 
 // ── notes view: a list of notes and a plain-text editor that saves itself ──
-const VIEWS = ['tasks', 'notes', 'calendar'];
-let view = 'tasks';
+const VIEWS = ['home']; // kept in step with what is switched on by syncViews() in modules.js
+let view = 'home'; // the app always opens on Home
 let selectedNoteId = null;
 let draftNote = null; // a new note nothing has been typed into yet: not saved, and dropped when left empty
 let noteDirty = false; // typed since the last save
@@ -857,13 +857,12 @@ function touchNote() {
 }
 
 async function setView(next) {
-  if (next === view) return;
+  if (next === view || !VIEWS.includes(next)) return; // a view that is not switched on does not exist
   await leaveNote();
   view = next;
-  for (const v of VIEWS) {
-    $(v + '-view').hidden = view !== v;
-    $('view-' + v).ariaSelected = String(view === v);
-  }
+  for (const n of document.querySelectorAll('main[id$="-view"]')) n.hidden = n.id !== view + '-view';
+  for (const b of document.querySelectorAll('.views button')) b.ariaSelected = String(b.id === 'view-' + view);
+  if (view === 'home') return renderHome();
   if (view === 'tasks') { render(); return fitSide(); } // a note may have changed while the task list was hidden
   if (view === 'calendar') return renderCalendar();
   if (view !== 'notes') return registry[view]?.show?.(); // a module's own view
@@ -888,7 +887,6 @@ function notesKeys(e) {
   if (e.key === 'Delete' && t.classList.contains('note')) { e.preventDefault(); deleteNote(t.id.slice('note-'.length)); }
 }
 
-for (const v of VIEWS) $('view-' + v).onclick = () => setView(v); // every switch button, Calendar included
 $('note-new').onclick = newNote;
 $('note-delete').onclick = () => deleteNote();
 $('note-search').oninput = renderNoteList;
@@ -1177,15 +1175,12 @@ let palIndex = 0;
 
 function paletteResults(q) {
   const go = (label, hint, run) => ({ label, hint, kind: 'Command', run });
+  const has = (id) => started.has(id);
   const commands = [
-    go('Go to Tasks', 'Ctrl+1', () => setView('tasks')),
-    go('Go to Notes', 'Ctrl+2', () => setView('notes')),
-    go('Go to Calendar', 'Ctrl+3', () => setView('calendar')),
-    go('New task', 'N', async () => { await setView('tasks'); $('title').focus(); }),
-    go('New note', 'Ctrl+N', async () => { await setView('notes'); newNote(); }),
-    go('Calendar: today', 'T', async () => { await setView('calendar'); selectDay(localDay(new Date()), true); }),
-    ...MODULES.filter((m) => m.view && started.has(m.id)).map((m) => go('Go to ' + m.view, 'Ctrl+' + (VIEWS.indexOf(m.id) + 1), () => setView(m.id))),
-    go('Modules…', 'Ctrl+,', openModules),
+    ...VIEWS.map((id, i) => go(id === 'home' ? 'Go to Home' : 'Go to ' + byId(id).view, 'Ctrl+' + i, () => setView(id))),
+    ...(has('tasks') ? [go('New task', 'N', async () => { await setView('tasks'); $('title').focus(); })] : []),
+    ...(has('notes') ? [go('New note', 'Ctrl+N', async () => { await setView('notes'); newNote(); })] : []),
+    ...(has('calendar') ? [go('Calendar: today', 'T', async () => { await setView('calendar'); selectDay(localDay(new Date()), true); })] : []),
     ...commandHooks.flatMap((f) => f()),
     go('Switch theme', 'T', () => $('theme').click()),
     go('Keyboard shortcuts', '?', openShortcuts),
@@ -1193,11 +1188,11 @@ function paletteResults(q) {
   if (!q.trim()) return commands;
   const found = [
     ...commands,
-    ...todos.map((t) => ({
+    ...(has('tasks') ? todos : []).map((t) => ({
       label: t.title, kind: 'Task', run: () => showTask(t.id),
       hint: t.done ? 'Done' : t.due ? fmt(t.due, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : 'No date',
     })),
-    ...notes.map((n) => ({
+    ...(has('notes') ? notes : []).map((n) => ({
       label: n.title || 'Untitled', kind: 'Note', text: n.body, hint: noteLine(n),
       run: async () => { await setView('notes'); await openNote(n.id, 'body'); },
     })),
@@ -1205,7 +1200,7 @@ function paletteResults(q) {
   const when = parseQuick('go ' + q, new Date()); // a date or time typed as words opens that day
   const day = when.due && when.title === 'go' ? when.due.slice(0, 10) : null;
   return [
-    ...(day ? [{ label: 'Open calendar on ' + fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), hint: '', kind: 'Day', run: async () => { await setView('calendar'); selectDay(day, true); } }] : []),
+    ...(day && has('calendar') ? [{ label: 'Open calendar on ' + fmt(parseDay(day), { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' }), hint: '', kind: 'Day', run: async () => { await setView('calendar'); selectDay(day, true); } }] : []),
     ...rankItems(found, q),
   ];
 }
@@ -1251,23 +1246,22 @@ $('pal').onclick = (e) => { if (e.target === $('pal')) $('pal').close(); }; // t
 // A module adds its own group in start() and takes it out in stop().
 const shortcutGroups = [
   { title: 'Everywhere', items: [
-    ['Ctrl+1', 'Tasks'], ['Ctrl+2', 'Notes'], ['Ctrl+3', 'Calendar'],
+    [['Ctrl+0', 'Ctrl+,'], 'Home: add or remove modules'], ['Ctrl+1–9', 'Go to a tab, in the order shown'],
     ['Ctrl+K', 'Command palette: search, run a command'],
-    ['Ctrl+,', 'Modules: switch features on or off'],
     ['Ctrl+Alt+T', 'Quick add a task, from any app'],
     ['Ctrl+Alt+N', 'Quick note or link, from any app'],
     ['?', 'This list'],
   ] },
-  { title: 'Tasks', items: [
+  { module: 'tasks', title: 'Tasks', items: [
     [['↑', '↓'], 'Select a task'], ['Space', 'Mark done (in History: restore)'], ['E', 'Edit'], ['P', 'Pin or unpin'],
     ['O', "Open the task's note"], ['Delete', 'Delete'], ['N', 'New task'], ['1–4', 'To do, Today, Week, History'],
     ['Ctrl+F', 'Search'], ['Ctrl+Z', 'Undo'], ['T', 'Theme: auto, light, dark'], ['Esc', 'Leave a field, cancel editing'],
   ] },
-  { title: 'Notes', items: [
+  { module: 'notes', title: 'Notes', items: [
     ['Ctrl+N', 'New note'], ['Ctrl+F', 'Search notes'], [['↑', '↓'], 'Walk the list'], ['Delete', 'Delete the note'],
     ['Ctrl+B', 'Bold'], ['Ctrl+Shift+L', 'Checklist'], ['Ctrl+Enter', 'Tick a checklist item'],
   ] },
-  { title: 'Calendar', items: [
+  { module: 'calendar', title: 'Calendar', items: [
     [['←', '→'], 'Previous or next day'], [['↑', '↓'], 'Previous or next week'], [['PageUp', 'PageDown'], 'Previous or next month'],
     ['T', 'Today'], [['Enter', 'N'], 'Add a task on this day'], ['D', 'Hour-by-hour day view'], ['M', 'Month view'],
     ['Alt+←/→/↑/↓', 'Move the focused task a day or a week'], ['Alt+↑/↓', 'In day view: move a block 15 min (with Shift: resize)'],
@@ -1291,7 +1285,7 @@ function openShortcuts() {
   dlg.replaceChildren(
     el('h2', {}, 'Keyboard shortcuts'),
     ...(quickTaken ? [el('div', { className: 'keys-warn' }, 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.')] : []),
-    el('div', { className: 'keys-grid' }, ...shortcutGroups.map((g) => el('section', {}, el('h3', {}, g.title),
+    el('div', { className: 'keys-grid' }, ...shortcutGroups.filter((g) => !g.module || started.has(g.module)).map((g) => el('section', {}, el('h3', {}, g.title),
       el('ul', {}, ...g.items.map(([keys, what]) => el('li', {},
         el('span', { className: 'sk-keys' }, ...[].concat(keys).flatMap((k, i) => [...(i ? [el('i', { className: 'sk-or' }, 'or')] : []), keyChips(k)])),
         el('span', {}, what))))))),
@@ -1334,8 +1328,9 @@ addEventListener('keydown', (e) => {
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
   if (mod && !e.altKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); return; }
-  if (mod && !e.altKey && e.code === 'Comma') { e.preventDefault(); openModules(); return; }
-  if (mod && !e.altKey && /^Digit[1-9]$/.test(e.code) && VIEWS[+e.code.slice(5) - 1]) { e.preventDefault(); setView(VIEWS[+e.code.slice(5) - 1]); return; }
+  if (mod && !e.altKey && e.code === 'Comma') { e.preventDefault(); setView('home'); return; }
+  if (mod && !e.altKey && /^Digit[0-9]$/.test(e.code) && VIEWS[+e.code.slice(5)]) { e.preventDefault(); setView(VIEWS[+e.code.slice(5)]); return; } // Ctrl+0 is Home, then the tabs in order
+  if (!mod && !e.altKey && !field && e.code === 'Slash' && e.shiftKey) { e.preventDefault(); openShortcuts(); return; } // ? lists the shortcuts in every view
   if (view !== 'tasks') return view === 'notes' ? notesKeys(e) : view === 'calendar' ? calendarKeys(e) : registry[view]?.keys?.(e);
 
   if (e.key === 'Escape') {
@@ -1368,7 +1363,6 @@ addEventListener('keydown', (e) => {
   else if (e.key === 'Delete') press('.act-del');
   else if (e.code === 'KeyT') $('theme').click();
   else if (e.code === 'KeyN') { e.preventDefault(); $('title').focus(); }
-  else if (e.code === 'Slash' && e.shiftKey) { e.preventDefault(); openShortcuts(); }
 });
 $('shortcuts').onclick = openShortcuts;
 

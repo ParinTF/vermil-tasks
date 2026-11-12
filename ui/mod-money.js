@@ -103,6 +103,7 @@
     $('mo-cats').replaceChildren(...used.map((c) => el('option', { value: c })));
   }
 
+  const group = { module: 'money', title: 'Money', items: [['N', 'New entry'], [['←', '→'], 'Previous or next month'], ['T', 'This month']] };
   const commandFn = () => [{ label: 'Add expense', hint: 'Money', kind: 'Command', run: async () => { await setView('money'); $('mo-amount').focus(); } }];
 
   defineModule('money', {
@@ -111,9 +112,11 @@
       build();
       paint();
       commandHooks.push(commandFn);
+      shortcutGroups.push(group);
     },
     stop() {
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
+      shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
     },
     show() { paint(); },
     keys(e) {
