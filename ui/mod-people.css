@@ -1,0 +1,34 @@
+/* People module: loaded only while it is switched on */
+.people-page { display: grid; gap: 32px; padding-top: 24px; }
+.pp-main, .pp-side { min-width: 0; }
+.pp-head { margin-bottom: 14px; }
+.pp-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.pp-tabs { display: flex; flex-wrap: wrap; gap: 22px; border-top: 1px solid var(--ink); }
+.pp-tabs button { padding: 12px 0 8px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); cursor: pointer; }
+.pp-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.pp-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+.pp-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto 20px; align-items: start; gap: 18px; padding: 13px 0; border-bottom: 1px solid var(--line); }
+.pp-who { display: grid; gap: 2px; min-width: 0; }
+.pp-who b { font-size: 17px; }
+.pp-who small { color: var(--mute); font-size: 12.5px; overflow-wrap: anywhere; }
+.pp-list li.soon .pp-who small:first-of-type { color: var(--accent-text); font-weight: 600; }
+.pp-list li.reach .pp-who b::after { content: " · reach out"; font-size: 12px; font-weight: 500; color: var(--accent-text); }
+.pp-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px 16px; max-width: 280px; }
+.pp-acts .linkish { font-size: 13px; }
+.pp-del { padding: 0; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; opacity: 0; }
+.pp-list li:hover .pp-del, .pp-del:focus-visible { opacity: 1; }
+.pp-del:hover { color: var(--accent-text); }
+.pp-side form { display: grid; gap: 14px; }
+.pp-form-title { font-size: 18px; font-weight: 700; }
+.pp-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.pp-field input, .pp-field select, .pp-field textarea { min-width: 0; padding: 7px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); resize: vertical; }
+.pp-field input:focus, .pp-field select:focus, .pp-field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.pp-check { font-size: 14px; gap: 10px; }
+.pp-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
+
+@media (min-width: 860px) {
+  .people-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .pp-main { display: flex; flex-direction: column; min-height: 0; }
+  .pp-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .pp-side { min-height: 0; overflow-y: auto; }
+}

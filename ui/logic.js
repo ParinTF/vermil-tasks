@@ -533,4 +533,19 @@ function libraryYear(items, year) {
   return { total: done.length, byKind, average: rated.length ? Math.round(rated.reduce((n, i) => n + i.rating, 0) / rated.length * 10) / 10 : null };
 }
 
-if (typeof module !== 'undefined') module.exports = { filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── people: { name, birthday: "YYYY-MM-DD", showAge, every (days between catch-ups, 0 = never), last: "YYYY-MM-DD" } ──
+// days until the next birthday (0 = today), the day it falls on, and the age they turn (null when the year is not to be shown)
+function birthdayInfo(p, today) {
+  if (!p.birthday) return null;
+  const next = nextEventDay({ day: p.birthday, yearly: true }, today);
+  return { days: daysUntil(next, today), next, turning: p.showAge ? Number(next.slice(0, 4)) - Number(p.birthday.slice(0, 4)) : null };
+}
+
+// whether it is time to get in touch: they have an interval and the last contact (or having added them) is older than it
+function touchState(p, today) {
+  if (!p.every) return { due: false, since: p.last ? daysUntil(today, p.last) : null };
+  const since = p.last ? daysUntil(today, p.last) : null;
+  return { due: since === null || since >= p.every, since };
+}
+
+if (typeof module !== 'undefined') module.exports = { birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

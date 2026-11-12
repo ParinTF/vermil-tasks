@@ -20,6 +20,7 @@ const MODULES = [
   { id: 'shopping', name: 'Shopping & Meals', about: 'A shopping list that remembers what you usually buy, and a meal plan for the week that can fill the list.', script: 'mod-shopping.js', style: 'mod-shopping.css', view: 'Shopping' },
   { id: 'health', name: 'Health', about: 'Water, sleep, weight, workouts and medicine reminders, with a day-by-day look back.', script: 'mod-health.js', style: 'mod-health.css', view: 'Health' },
   { id: 'library', name: 'Library', about: 'Books, films, series and games: what you want, what you are in the middle of, what you finished and how you rated it.', script: 'mod-library.js', style: 'mod-library.css', view: 'Library' },
+  { id: 'people', name: 'People', about: 'Birthdays with a reminder, gift ideas, and a nudge when it has been too long since you were in touch.', script: 'mod-people.js', style: 'mod-people.css', view: 'People' },
   { id: 'countdown', name: 'Countdown', about: 'Days until what matters: a trip, an exam, a birthday that comes back every year.', script: 'mod-countdown.js', style: 'mod-countdown.css', view: 'Countdown' },
   { id: 'journal', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
   { id: 'goals', name: 'Goals', about: 'Targets that watch your other modules: tasks done, focus time, money saved, habits kept. Or track anything by hand.', script: 'mod-goals.js', style: 'mod-goals.css', view: 'Goals' },

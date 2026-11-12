@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -486,4 +486,16 @@ test('library: filtering and the year in numbers', () => {
   assert.deepEqual(libraryYear(items, 2026), { total: 2, byKind: { Book: 1, Movie: 1 }, average: 4.5 });
   assert.deepEqual(libraryYear(items, 2025), { total: 1, byKind: { Book: 1 }, average: null }); // unrated: no average
   assert.deepEqual(libraryYear([], 2026), { total: 0, byKind: {}, average: null });
+});
+
+test('people: birthdays and staying in touch', () => {
+  assert.deepEqual(birthdayInfo({ birthday: '1990-11-20', showAge: true }, '2026-11-12'), { days: 8, next: '2026-11-20', turning: 36 });
+  assert.deepEqual(birthdayInfo({ birthday: '1990-11-12', showAge: true }, '2026-11-12'), { days: 0, next: '2026-11-12', turning: 36 }); // today
+  assert.deepEqual(birthdayInfo({ birthday: '1990-03-05', showAge: false }, '2026-11-12'), { days: 113, next: '2027-03-05', turning: null }); // next year, age hidden
+  assert.equal(birthdayInfo({ birthday: '' }, '2026-11-12'), null);
+  assert.deepEqual(touchState({ every: 30, last: '2026-10-01' }, '2026-11-12'), { due: true, since: 42 });
+  assert.deepEqual(touchState({ every: 30, last: '2026-11-01' }, '2026-11-12'), { due: false, since: 11 });
+  assert.deepEqual(touchState({ every: 30, last: '2026-10-13' }, '2026-11-12'), { due: true, since: 30 }); // exactly the interval
+  assert.deepEqual(touchState({ every: 14 }, '2026-11-12'), { due: true, since: null }); // never contacted
+  assert.deepEqual(touchState({ every: 0, last: '2026-01-01' }, '2026-11-12'), { due: false, since: 315 }); // no interval: never due
 });
