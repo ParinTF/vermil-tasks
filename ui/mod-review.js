@@ -24,13 +24,17 @@
             el('button', { id: 'rv-before', type: 'button', ariaPressed: 'false', textContent: 'The 7 before', onclick: () => { back = 1; paint(); } }))),
         el('p', { id: 'rv-range', className: 'rv-range' }),
         el('div', { id: 'rv-body', className: 'rv-body' }),
-        el('div', { className: 'rv-foot' }, el('button', { id: 'rv-copy', type: 'button', className: 'linkish', textContent: 'Copy as text', onclick: copy }), el('span', { id: 'rv-msg', className: 'rv-msg', role: 'status' }))));
+        el('div', { className: 'rv-foot' }, el('button', { id: 'rv-copy', type: 'button', className: 'linkish', textContent: 'Copy as text', onclick: copy }), el('button', { id: 'rv-save', type: 'button', className: 'linkish', textContent: 'Save as file', onclick: saveFile }), el('button', { id: 'rv-print', type: 'button', className: 'linkish', textContent: 'Print or PDF', onclick: () => window.print() }), el('span', { id: 'rv-msg', className: 'rv-msg', role: 'status' }))));
   }
 
   function copy() {
     // the clipboard only answers a focused window, so do not wait for it forever
     const gave = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500));
     Promise.race([navigator.clipboard.writeText(reviewText(rangeLabel(), sections())), gave]).then(() => { $('rv-msg').textContent = 'Copied'; }, () => { $('rv-msg').textContent = 'Could not copy'; });
+  }
+
+  function saveFile() {
+    invoke('export_text', { name: 'Vermil review', text: reviewText(rangeLabel(), sections()) }).then((p) => { $('rv-msg').textContent = 'Saved ' + p; }, (e) => { $('rv-msg').textContent = 'Could not save: ' + e; });
   }
 
   function paint() {
@@ -42,7 +46,7 @@
     $('rv-body').replaceChildren(...(list.length
       ? list.map((s) => el('section', {}, el('h3', {}, s.title), el('ul', {}, ...s.lines.map((l) => el('li', {}, l)))))
       : [el('div', { className: 'empty' }, 'Nothing to sum up yet. The review reads from the modules you switch on.')]));
-    $('rv-copy').hidden = !list.length;
+    $('rv-copy').hidden = $('rv-save').hidden = $('rv-print').hidden = !list.length;
   }
 
   defineModule('review', {

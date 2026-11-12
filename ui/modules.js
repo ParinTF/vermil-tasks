@@ -128,8 +128,10 @@ function renderHome() {
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
     ...todayStrip(),
     el('div', { className: 'mod-grid' }, ...MODULES.map(card)),
-    el('section', { className: 'bk', id: 'backup', ariaLabel: 'Backup' }, el('h3', {}, 'Backup'), el('div', { id: 'bk-body' })));
+    el('section', { className: 'bk', id: 'backup', ariaLabel: 'Backup' }, el('h3', {}, 'Backup'), el('div', { id: 'bk-body' })),
+    el('section', { className: 'bk', id: 'sync', ariaLabel: 'Sync' }, el('h3', {}, 'Sync between computers'), el('div', { id: 'sy-body' })));
   paintBackup();
+  paintSync();
   if (focused) document.querySelector('#' + focused + ' button')?.focus();
 }
 
@@ -180,6 +182,34 @@ async function paintBackup() {
     el('label', { className: 'bk-dir' }, 'Folder', dir),
     el('div', { className: 'bk-row' }, now, msg));
 }
+
+// Sync: the same data on two computers through a folder both can see (OneDrive, Dropbox, a USB drive). No account, no server.
+async function paintSync() {
+  const body = $('sy-body');
+  if (!body) return;
+  let info;
+  try { info = await invoke('get_sync'); } catch { return; }
+  const dir = el('input', { id: 'sy-dir', type: 'text', value: info.dir, placeholder: 'Pick a shared folder, e.g. C:\\Users\\you\\OneDrive\\Vermil', ariaLabel: 'Sync folder', autocomplete: 'off', maxLength: 260 });
+  const msg = el('span', { id: 'sy-msg', className: 'bk-msg', role: 'status' });
+  const stateText = { off: 'Off. Type a folder on both computers to start.', waiting: 'Starting…', synced: info.pending ? 'Changes waiting to be saved to the folder.' : 'In step.', pulled: 'Took the other computer’s changes.', conflict: 'Both computers changed things. Choose which to keep.', error: 'Could not sync.' };
+  msg.textContent = `${stateText[info.state] || info.state}${info.message && info.state !== 'synced' ? ' ' + info.message : info.message && info.state === 'synced' ? ' ' + info.message : ''}`;
+  let t;
+  dir.oninput = () => { clearTimeout(t); t = setTimeout(async () => { await invoke('set_sync', { dir: dir.value }).catch((e) => { msg.textContent = 'Could not save: ' + e; }); paintSync(); }, 800); };
+  const run = (resolve) => async () => {
+    msg.textContent = 'Syncing…';
+    try { await invoke('sync_now', { resolve: resolve || null }); } catch (e) { msg.textContent = String(e); return; }
+    paintSync();
+  };
+  body.replaceChildren(
+    el('label', { className: 'bk-dir' }, 'Folder', dir),
+    el('div', { className: 'bk-row' },
+      ...(info.on ? [el('button', { id: 'sy-now', type: 'button', className: 'linkish', textContent: 'Sync now', onclick: run() })] : []),
+      ...(info.state === 'conflict' ? [el('button', { id: 'sy-mine', type: 'button', className: 'linkish', textContent: 'Keep this computer’s', onclick: run('mine') }), el('button', { id: 'sy-theirs', type: 'button', className: 'linkish', textContent: 'Take the other’s', onclick: run('theirs') })] : []),
+      msg));
+}
+
+// another computer's changes were taken: start again from the new data (typing in a note is saved first)
+window.__TAURI__.event.listen('synced', () => { registry.notes?.flush?.(); setTimeout(() => location.reload(), 300); });
 
 // at start: read what is saved, then start the modules that are on (one that fails to load is skipped, not fatal)
 invoke('get_modules').then(async (saved) => {

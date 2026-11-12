@@ -19,3 +19,13 @@
 @media (min-width: 860px) {
   .review-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-top: clamp(12px, 2.5vh, 32px); }
 }
+
+/* printed or saved as PDF: only the review, on white */
+@media print {
+  header.top, .marquee, footer.foot, .rv-pick, .rv-foot { display: none !important; }
+  main:not(#review-view) { display: none !important; }
+  html, body { height: auto !important; overflow: visible !important; background: #fff !important; color: #000 !important; }
+  #review-view { display: block !important; overflow: visible !important; padding: 0 !important; }
+  .rv-body { display: block; columns: 2; }
+  .rv-body section { break-inside: avoid; }
+}

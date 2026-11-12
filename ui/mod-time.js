@@ -35,7 +35,7 @@
         el('h3', {}, 'Report'),
         el('div', { className: 'tt-range', role: 'group', ariaLabel: 'Period' }, ...[['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month']].map(([k, l]) => el('button', { id: 'tt-r-' + k, type: 'button', textContent: l, onclick: () => { range = k; paintReport(); } }))),
         el('div', { id: 'tt-report', className: 'tt-report' }),
-        el('div', { className: 'tt-foot' }, el('button', { id: 'tt-copy', type: 'button', className: 'linkish', textContent: 'Copy summary', onclick: copy }), el('span', { id: 'tt-copy-msg', className: 'tt-msg', role: 'status' }))),
+        el('div', { className: 'tt-foot' }, el('button', { id: 'tt-copy', type: 'button', className: 'linkish', textContent: 'Copy summary', onclick: copy }), el('button', { id: 'tt-save', type: 'button', className: 'linkish', textContent: 'Save as file', onclick: saveSummary }), el('span', { id: 'tt-copy-msg', className: 'tt-msg', role: 'status' }))),
       el('aside', { className: 'tt-side', ariaLabel: 'Projects' },
         el('h3', {}, 'Projects'),
         el('ul', { id: 'tt-projects', className: 'tt-plist' }),
@@ -144,13 +144,21 @@
       ? [...r.rows.map((x) => el('div', { className: 'tt-row' }, el('span', {}, el('b', {}, x.name), x.client ? el('small', {}, x.client) : ''), el('span', {}, hoursLabel(x.seconds)), el('span', {}, x.amount ? money(x.amount) : '—'))),
         el('div', { className: 'tt-row tt-total' }, el('span', {}, 'Total'), el('span', {}, hoursLabel(r.seconds)), el('span', {}, showAmount ? money(r.amount) : ''))]
       : [el('div', { className: 'empty' }, 'No time recorded in this period.')]));
-    $('tt-copy').hidden = !r.rows.length;
+    $('tt-copy').hidden = $('tt-save').hidden = !r.rows.length;
+  }
+
+  const summaryText = () => {
+    const r = report();
+    const label = `${fmt(parseDay(r.since), { day: 'numeric', month: 'short' })} to ${fmt(parseDay(r.until), { day: 'numeric', month: 'short', year: 'numeric' })}`;
+    return reviewText(label, [{ title: 'Time', lines: [...r.rows.map((x) => `${x.name}${x.client ? ' (' + x.client + ')' : ''}: ${hoursLabel(x.seconds)}${x.amount ? ', ' + money(x.amount) : ''}`), `Total: ${hoursLabel(r.seconds)}${r.amount ? ', ' + money(r.amount) : ''}`] }]);
+  };
+
+  function saveSummary() {
+    invoke('export_text', { name: 'Vermil time', text: summaryText() }).then((p) => { $('tt-copy-msg').textContent = 'Saved ' + p; }, (e) => { $('tt-copy-msg').textContent = 'Could not save: ' + e; });
   }
 
   function copy() {
-    const r = report();
-    const label = `${fmt(parseDay(r.since), { day: 'numeric', month: 'short' })} to ${fmt(parseDay(r.until), { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    const text = reviewText(label, [{ title: 'Time', lines: [...r.rows.map((x) => `${x.name}${x.client ? ' (' + x.client + ')' : ''}: ${hoursLabel(x.seconds)}${x.amount ? ', ' + money(x.amount) : ''}`), `Total: ${hoursLabel(r.seconds)}${r.amount ? ', ' + money(r.amount) : ''}`] }]);
+    const text = summaryText();
     Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]).then(() => { $('tt-copy-msg').textContent = 'Copied'; }, () => { $('tt-copy-msg').textContent = 'Could not copy'; });
   }
 

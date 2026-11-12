@@ -74,6 +74,15 @@ struct Data {
     // optional modules keep their data here, one JSON value per module id; "_on" lists the ones switched on
     #[serde(default)]
     modules: serde_json::Map<String, serde_json::Value>,
+    // sync through a shared folder: where, which computer this is, the revision last pulled or pushed, and what the data looked like then
+    #[serde(default)]
+    sync_dir: Option<String>,
+    #[serde(default)]
+    sync_device: Option<String>,
+    #[serde(default)]
+    sync_rev: u64,
+    #[serde(default)]
+    sync_hash: Option<String>,
 }
 
 const YAHOO: &str = "https://query1.finance.yahoo.com";
@@ -600,6 +609,197 @@ fn write_backup(app: &AppHandle, data: &mut Data, today: &str) -> Result<PathBuf
     Ok(file)
 }
 
+// ── sync through a shared folder (OneDrive, Dropbox, a USB drive) ──
+// One file, Vermil-sync.json, holds everything plus a revision and the computer that wrote it. A computer pushes when its
+// data changed, pulls when the other one wrote a newer revision and this one has no changes of its own, and when both
+// changed it stops and asks (the data it would replace is first copied to todos.pre-sync.json).
+
+const SYNC_FILE: &str = "Vermil-sync.json";
+
+/// A hash that is the same in every build (the standard one is not promised to be).
+fn fnv1a(s: &str) -> String {
+    let mut h: u64 = 0xcbf29ce484222325;
+    for b in s.bytes() {
+        h ^= b as u64;
+        h = h.wrapping_mul(0x100000001b3);
+    }
+    format!("{h:016x}")
+}
+
+fn content_hash(data: &Data) -> String {
+    fnv1a(&serde_json::json!({ "todos": data.todos, "notes": data.notes, "modules": data.modules }).to_string())
+}
+
+#[derive(Debug, PartialEq)]
+enum SyncAction {
+    Nothing,
+    Push,
+    Pull,
+    Conflict,
+}
+
+/// `remote` is the (computer, revision) in the folder, `seen` the revision this computer last pulled or pushed.
+fn sync_decision(remote: Option<(&str, u64)>, me: &str, seen: u64, changed: bool) -> SyncAction {
+    match remote {
+        None => SyncAction::Push, // nothing there yet, or it was deleted: put ours back
+        Some((dev, _)) if dev == me => if changed { SyncAction::Push } else { SyncAction::Nothing },
+        Some((_, rev)) if rev > seen => if changed { SyncAction::Conflict } else { SyncAction::Pull },
+        Some(_) => if changed { SyncAction::Push } else { SyncAction::Nothing },
+    }
+}
+
+#[derive(Default)]
+struct SyncState {
+    last: Mutex<(String, String)>, // the state and message of the last run, for the screen
+}
+
+#[derive(Serialize)]
+struct SyncInfo {
+    dir: String,
+    on: bool,
+    state: String,
+    message: String,
+    rev: u64,
+    pending: bool,
+}
+
+fn new_device_id() -> String {
+    format!("{:x}-{:x}", chrono::Utc::now().timestamp_micros(), std::process::id())
+}
+
+fn data_is_empty(data: &Data) -> bool {
+    // nothing worth keeping: no tasks, no notes, and every module value is cleared or an empty list ("_on": [] is a fresh start)
+    data.todos.is_empty() && data.notes.is_empty() && data.modules.values().all(|v| v.is_null() || v.as_array().map_or(false, |a| a.is_empty()))
+}
+
+fn read_remote(dir: &std::path::Path) -> Result<Option<serde_json::Value>, String> {
+    let file = dir.join(SYNC_FILE);
+    if !file.exists() {
+        return Ok(None);
+    }
+    let text = fs::read_to_string(&file).map_err(|e| e.to_string())?;
+    let v: serde_json::Value = serde_json::from_str(&text).map_err(|_| "the sync file cannot be read (is it still syncing?)".to_string())?;
+    if !v["todos"].is_array() || v["sync"]["rev"].as_u64().is_none() {
+        return Err("that file in the folder is not a Vermil sync file".into());
+    }
+    Ok(Some(v))
+}
+
+/// One pass. Returns the state ("synced", "pulled", "conflict") and a message; `resolve` is "mine" or "theirs" after a conflict.
+fn run_sync(app: &AppHandle, file: &std::path::Path, data: &mut Data, resolve: Option<&str>) -> Result<(String, String), String> {
+    let dir = PathBuf::from(data.sync_dir.clone().ok_or("sync is off")?);
+    fs::create_dir_all(&dir).map_err(|e| format!("cannot use {}: {e}", dir.display()))?;
+    let me = data.sync_device.get_or_insert_with(new_device_id).clone();
+    let remote = read_remote(&dir)?;
+    let meta = remote.as_ref().map(|v| (v["sync"]["device"].as_str().unwrap_or("").to_string(), v["sync"]["rev"].as_u64().unwrap_or(0)));
+    let changed = !data_is_empty(data) && data.sync_hash.as_deref() != Some(content_hash(data).as_str()); // a fresh computer has nothing to lose
+    let action = match resolve {
+        Some("mine") => SyncAction::Push,
+        Some("theirs") if remote.is_some() => SyncAction::Pull,
+        _ => sync_decision(meta.as_ref().map(|(d, r)| (d.as_str(), *r)), &me, data.sync_rev, changed),
+    };
+    match action {
+        SyncAction::Nothing => Ok(("synced".into(), "Up to date".into())),
+        SyncAction::Conflict => Ok(("conflict".into(), "This computer and another both changed things since they last matched.".into())),
+        SyncAction::Push => {
+            let rev = meta.as_ref().map_or(0, |m| m.1).max(data.sync_rev) + 1;
+            let mut v = backup_value(&app.package_info().version.to_string(), data);
+            v["sync"] = serde_json::json!({ "device": me, "rev": rev, "savedAt": chrono::Utc::now().to_rfc3339() });
+            let tmp = dir.join("Vermil-sync.json.tmp");
+            fs::write(&tmp, serde_json::to_string_pretty(&v).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+            fs::rename(&tmp, dir.join(SYNC_FILE)).map_err(|e| e.to_string())?;
+            data.sync_rev = rev;
+            data.sync_hash = Some(content_hash(data));
+            Ok(("synced".into(), format!("Saved to the folder (revision {rev})")))
+        }
+        SyncAction::Pull => {
+            let v = remote.ok_or("nothing to pull")?;
+            let todos: Vec<Todo> = serde_json::from_value(v["todos"].clone()).map_err(|e| format!("cannot read the tasks in the folder: {e}"))?;
+            let notes: Vec<Note> = serde_json::from_value(v.get("notes").cloned().unwrap_or_else(|| serde_json::json!([]))).map_err(|e| format!("cannot read the notes in the folder: {e}"))?;
+            let modules = v["modules"].as_object().cloned().unwrap_or_default();
+            let _ = fs::copy(file, file.with_file_name("todos.pre-sync.json")); // the data about to be replaced, once
+            data.todos = todos;
+            data.notes = notes;
+            data.modules = modules;
+            data.notes_migrated = true;
+            data.sync_rev = meta.map_or(0, |m| m.1);
+            data.sync_hash = Some(content_hash(data));
+            Ok(("pulled".into(), format!("Took the changes from the other computer (revision {})", data.sync_rev)))
+        }
+    }
+}
+
+fn sync_info(data: &Data, state: &SyncState) -> SyncInfo {
+    let (st, msg) = state.last.lock().unwrap().clone();
+    SyncInfo {
+        dir: data.sync_dir.clone().unwrap_or_default(),
+        on: data.sync_dir.is_some(),
+        state: if data.sync_dir.is_none() { "off".into() } else if st.is_empty() { "waiting".into() } else { st },
+        message: msg,
+        rev: data.sync_rev,
+        pending: data.sync_dir.is_some() && !data_is_empty(data) && data.sync_hash.as_deref() != Some(content_hash(data).as_str()),
+    }
+}
+
+/// Runs a pass, keeps the result for the screen, saves, and tells the window when it took new data.
+fn sync_pass(app: &AppHandle, resolve: Option<&str>) -> Option<SyncInfo> {
+    let store = app.state::<Store>();
+    let state = app.state::<SyncState>();
+    let mut data = store.data.lock().unwrap();
+    data.sync_dir.as_ref()?;
+    let result = run_sync(app, &store.file, &mut data, resolve);
+    let pulled = matches!(&result, Ok((s, _)) if s == "pulled");
+    *state.last.lock().unwrap() = match result { Ok(r) => r, Err(e) => ("error".into(), e) };
+    let _ = save(&store.file, &data);
+    let info = sync_info(&data, &state);
+    drop(data);
+    if pulled {
+        let _ = app.emit("synced", ());
+    }
+    Some(info)
+}
+
+#[tauri::command]
+fn get_sync(store: State<Store>, state: State<SyncState>) -> SyncInfo {
+    sync_info(&store.data.lock().unwrap(), &state)
+}
+
+/// `dir` is a folder, or "" to switch sync off.
+#[tauri::command]
+fn set_sync(store: State<Store>, state: State<SyncState>, dir: String) -> Result<(), String> {
+    let dir = dir.trim();
+    if dir.chars().count() > 260 {
+        return Err("that folder path is too long".into());
+    }
+    let mut data = store.data.lock().unwrap();
+    data.sync_dir = if dir.is_empty() { None } else { Some(dir.to_string()) };
+    *state.last.lock().unwrap() = (String::new(), String::new());
+    save(&store.file, &data)
+}
+
+#[tauri::command]
+fn sync_now(app: AppHandle, resolve: Option<String>) -> Result<SyncInfo, String> {
+    sync_pass(&app, resolve.as_deref()).ok_or_else(|| "sync is off".to_string())
+}
+
+fn safe_file_name(s: &str) -> String {
+    let cleaned: String = s.chars().map(|c| if c.is_ascii_alphanumeric() || c == ' ' || c == '-' || c == '_' { c } else { '-' }).collect();
+    cleaned.trim().chars().take(60).collect()
+}
+
+/// Saves a report as a text (Markdown) file in Downloads and returns its path.
+#[tauri::command]
+fn export_text(app: AppHandle, name: String, text: String) -> Result<String, String> {
+    if text.len() > 400_000 {
+        return Err("that report is too large".into());
+    }
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    let base = safe_file_name(&name);
+    let file = dir.join(format!("{}-{}.md", if base.is_empty() { "Vermil" } else { &base }, Local::now().format("%Y-%m-%d-%H%M%S")));
+    fs::write(&file, text).map_err(|e| e.to_string())?;
+    Ok(file.display().to_string())
+}
+
 #[derive(Serialize)]
 struct BackupInfo {
     on: bool,
@@ -939,7 +1139,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -957,6 +1157,7 @@ fn main() {
             }
             app.manage(Store { data: Mutex::new(load(&file)), file });
             app.manage(Widget::default());
+            app.manage(SyncState::default());
 
             // reminders only fire while the app runs, so start with Windows by default;
             // done once, after that the checkbox in the footer decides
@@ -1015,6 +1216,7 @@ fn main() {
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
                 check_reminders(&handle); // first pass also catches reminders missed while the app was closed
+                sync_pass(&handle, None); // with a sync folder set: push our changes, pull theirs (a conflict waits for the user)
                 std::thread::sleep(Duration::from_secs(30));
             });
             Ok(())
@@ -1104,6 +1306,35 @@ mod tests {
     fn symbols_cannot_change_the_request() {
         for ok in ["AAPL", "BRK-B", "PTT.BK", "^GSPC", "EURUSD=X"] { assert!(valid_symbol(ok), "{ok}"); }
         for bad in ["", "a/b", "A B", "A?x=1", "..\\x", "WAYTOOLONGSYMBOLNAME12345"] { assert!(!valid_symbol(bad), "{bad}"); }
+    }
+
+    #[test]
+    fn the_hash_is_the_same_everywhere() {
+        assert_eq!(fnv1a(""), "cbf29ce484222325");
+        assert_eq!(fnv1a("a"), "af63dc4c8601ec8c");
+        assert_ne!(fnv1a("ab"), fnv1a("ba"));
+    }
+
+    #[test]
+    fn sync_decides_push_pull_or_ask() {
+        use SyncAction::*;
+        assert_eq!(sync_decision(None, "me", 0, true), Push); // nothing in the folder yet
+        assert_eq!(sync_decision(None, "me", 5, false), Push); // it was deleted: put ours back
+        assert_eq!(sync_decision(Some(("me", 3)), "me", 3, false), Nothing); // our own write is there
+        assert_eq!(sync_decision(Some(("me", 3)), "me", 3, true), Push);
+        assert_eq!(sync_decision(Some(("other", 4)), "me", 3, false), Pull); // newer from the other, nothing of ours
+        assert_eq!(sync_decision(Some(("other", 4)), "me", 3, true), Conflict); // both changed
+        assert_eq!(sync_decision(Some(("other", 3)), "me", 3, true), Push); // we pulled this one, then changed
+        assert_eq!(sync_decision(Some(("other", 3)), "me", 3, false), Nothing);
+        assert_eq!(sync_decision(Some(("other", 2)), "me", 3, false), Nothing); // an older file: ignore it
+    }
+
+    #[test]
+    fn report_file_names_are_safe() {
+        assert_eq!(safe_file_name("Vermil review"), "Vermil review");
+        assert_eq!(safe_file_name("..\\..\\evil/name"), "------evil-name");
+        assert_eq!(safe_file_name("").len(), 0);
+        assert_eq!(safe_file_name(&"x".repeat(100)).len(), 60);
     }
 
     #[test]
