@@ -291,6 +291,7 @@ function render(enter = false) {
   const done = todos.filter((t) => t.done).sort((a, b) => (b.completedAt || '').localeCompare(a.completedAt || ''));
   streaks = seriesStreaks();
   renderHero(open, done);
+  fitSide(); // the headline text may have changed
   renderMarquee(done);
 
   const now = new Date();
@@ -542,6 +543,27 @@ setTimeout(() => invoke('quick_shortcut').then((ok) => {
   $('shortcuts').classList.toggle('warn', quickTaken);
   $('shortcuts').title = quickTaken ? 'Ctrl+Alt+T is taken by another app' : '';
 }), 5000);
+
+// The left column (headline and form) must fit the window without scrolling, at any window height. Sizes in vh
+// cannot promise that, because the inputs and buttons do not scale with the window. So shrink the headline and the
+// spacing (--fit) until it fits. Below 0.55 the text would turn small, so the column scrolls instead.
+const fitSide = () => {
+  const side = document.querySelector('.side');
+  const root = document.documentElement.style;
+  const fits = () => side.scrollHeight <= side.clientHeight; // not even a 1px scrollbar
+  root.setProperty('--fit', 1);
+  if (!matchMedia('(min-width: 860px)').matches || fits()) return; // one scrolling column below 860px
+  let lo = 0.55;
+  let hi = 1;
+  for (let i = 0; i < 7; i++) {
+    const mid = (lo + hi) / 2;
+    root.setProperty('--fit', mid);
+    if (fits()) lo = mid; else hi = mid;
+  }
+  root.setProperty('--fit', lo);
+};
+new ResizeObserver(fitSide).observe(document.querySelector('.side')); // the window or the footer changed size
+addEventListener('resize', fitSide);
 
 const load = (enter) => invoke('get_todos').then((t) => { todos = t; render(enter); });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over

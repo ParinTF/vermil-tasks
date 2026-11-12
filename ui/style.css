@@ -316,9 +316,10 @@ dialog[open] { animation: rise-in .35s var(--ease) both; }
   .side { margin-inline: -4px; padding: 0 4px 12px; } /* room for focus rings inside the scroll box */
   .board { display: flex; flex-direction: column; min-height: 0; padding-top: clamp(16px, 3.5vh, 48px); }
   #list { flex: 1; min-height: 0; padding-right: 12px; margin-left: -14px; padding-left: 14px; } /* gutter for the selection bar */
-  .hero { padding-block: clamp(16px, 3.5vh, 48px) clamp(14px, 3vh, 36px); }
-  h1 { font-size: clamp(48px, min(8vw, 9.5vh), 150px); animation: none; }
-  form { gap: clamp(12px, 2.4vh, 22px); }
+  /* --fit (0.55 to 1) is set by fitSide() in renderer.js: the headline and spacing shrink until the column fits */
+  .hero { padding-block: calc(clamp(16px, 3.5vh, 48px) * var(--fit, 1)) calc(clamp(14px, 3vh, 36px) * var(--fit, 1)); }
+  h1 { font-size: calc(clamp(48px, min(8vw, 9.5vh), 150px) * var(--fit, 1)); animation: none; }
+  form { gap: calc(clamp(12px, 2.4vh, 22px) * var(--fit, 1)); }
   .compose h2 { position: absolute; clip-path: inset(50%); } /* visually hidden, still names the form */
   .foot { margin-top: 0; padding-block: 14px; }
 }
