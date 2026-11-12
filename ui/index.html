@@ -67,6 +67,12 @@
               <option value="monthly">Every month</option>
             </select>
           </label>
+          <label class="field">Linked note
+            <select id="note-link">
+              <option value="">None</option>
+              <option value="__new">New note…</option>
+            </select>
+          </label>
           </div>
           <div class="actions">
             <button class="primary"><span id="submit">Add task</span><span class="arrow" aria-hidden="true">→</span></button>
@@ -100,6 +106,7 @@
     <section class="note-editor" id="note-editor" aria-label="Note" hidden>
       <input id="note-title" maxlength="200" placeholder="Untitled" aria-label="Note title" autocomplete="off">
       <textarea id="note-body" spellcheck="false" placeholder="Write here" aria-label="Note text"></textarea>
+      <div class="note-links" id="note-links" hidden><span>Linked from</span><div id="note-link-list"></div></div>
       <div class="note-foot"><span id="note-meta"></span><button id="note-delete" class="linkish" type="button">Delete note</button></div>
     </section>
     <div id="note-hint" class="empty" hidden>No notes yet. Press Ctrl+N to write one.</div>

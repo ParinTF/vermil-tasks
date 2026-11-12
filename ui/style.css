@@ -209,6 +209,7 @@ input[type=checkbox]:checked { border-color: var(--accent); background: var(--ac
 }
 .notes button { padding: 0; border: 0; background: none; font-size: 13px; color: var(--mute); text-decoration: underline; text-underline-offset: 4px; }
 .notes button:hover { color: var(--ink); }
+.notes button + button { margin-left: 14px; }
 .tick { margin-top: 3px; font-weight: 700; color: var(--accent); text-align: center; }
 .tools { display: flex; opacity: 0; transition: opacity .3s var(--ease); }
 .item:hover .tools, .item:focus-within .tools { opacity: 1; }
@@ -301,6 +302,11 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 #note-title:focus { outline: 0; border-color: var(--accent); }
 #note-body { flex: 1; width: 100%; min-height: 260px; padding: 8px 0; border: 0; background: none; font-family: inherit; font-size: 15px; line-height: 1.7; color: var(--ink); resize: none; }
 #note-body:focus { outline: 0; }
+.note-links { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; font-size: 13px; color: var(--mute); }
+.note-links div { display: contents; }
+.chip { padding: 0; border: 0; background: none; font-size: 13px; color: var(--ink); text-decoration: underline; text-underline-offset: 4px; }
+.chip.done { color: var(--mute); }
+.chip:hover { color: var(--accent-text); }
 .note-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--mute); }
 
 /* ── in-app dialog (replaces the browser's confirm/alert boxes) ── */

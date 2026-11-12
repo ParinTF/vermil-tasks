@@ -109,12 +109,15 @@ function resetForm() {
 
 function notesBlock(t) {
   const note = noteOf(t);
-  if (!note || !note.body) return '';
+  if (!note) return '';
   const copy = el('button', { type: 'button', textContent: 'Copy' });
   copy.onclick = () => navigator.clipboard.writeText(note.body).then(
     () => { copy.textContent = 'Copied'; setTimeout(() => { copy.textContent = 'Copy'; }, 1500); },
     () => { copy.textContent = 'Copy failed'; });
-  const box = el('details', { className: 'notes', open: openNotes.has(t.id) }, el('summary', {}, 'Notes'), el('pre', {}, note.body), copy);
+  const open = el('button', { type: 'button', className: 'act-open', textContent: 'Open' });
+  open.onclick = async () => { await setView('notes'); await openNote(note.id, 'body'); };
+  const box = el('details', { className: 'notes', open: openNotes.has(t.id) },
+    el('summary', {}, note.title ? `Note: ${note.title}` : 'Note'), el('pre', {}, note.body || 'Nothing written yet.'), ...(note.body ? [copy] : []), open);
   box.ontoggle = () => (box.open ? openNotes.add(t.id) : openNotes.delete(t.id));
   return box;
 }
@@ -163,6 +166,7 @@ function pendingItem(t) {
     $('due').value = t.due || '';
     $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('repeat').value = t.repeat || '';
+    $('note-link').value = t.noteId || '';
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
     $('title').focus();
@@ -313,7 +317,7 @@ function render(enter = false) {
   const empty = (text) => list.append(el('div', { className: 'empty' }, text));
 
   const q = $('search').value.trim().toLowerCase();
-  const match = (t) => (t.title + '\n' + (noteOf(t)?.body || '')).toLowerCase().includes(q);
+  const match = (t) => { const note = noteOf(t); return (t.title + '\n' + (note ? note.title + '\n' + note.body : '')).toLowerCase().includes(q); };
   if (tab !== 'history') {
     const shown = (tab === 'pending' ? open : open.filter((t) => inView(tab, t.due, now))).filter(match);
     const shownLater = tab === 'pending' ? later.filter(match) : []; // waiting copies of finished repeating tasks live only in To do
@@ -344,23 +348,40 @@ function render(enter = false) {
   applySelection();
 }
 
-$('form').onsubmit = (e) => {
+$('form').onsubmit = async (e) => {
   e.preventDefault();
   const title = $('title').value.trim();
   if (!title) return;
+  const choice = $('note-link').value;
+  let created = null;
+  if (choice === NEW_NOTE) { // "New note…": a note named like the task, written in the Notes page right after
+    created = { id: newNoteId(), title, body: '', updatedAt: new Date().toISOString() };
+    try {
+      await invoke('save_notes', { notes: [created] });
+    } catch (err) {
+      return tell('Could not create the note: ' + err);
+    }
+    notes.push(created);
+    fillNoteLinks();
+  }
   // due stays in datetime-local form ("2026-11-12T09:00"): Date parses it as local time and it sorts as text
   const due = $('due').value || null;
   const fields = {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
     repeat: $('repeat').value || null,
+    noteId: created ? created.id : choice || null,
   };
   const next = editingId
     // a new due date cancels a pending snooze, so the reminder follows the new time
     ? todos.map((t) => (t.id === editingId ? { ...t, ...fields, snoozeUntil: t.due === due ? t.snoozeUntil : null } : t))
     : [...todos, { id: crypto.randomUUID(), ...fields, done: false, createdAt: new Date().toISOString(), completedAt: null }];
   resetForm();
-  commit(next);
+  await commit(next);
+  if (created) {
+    await setView('notes');
+    await openNote(created.id, 'body');
+  }
 };
 $('cancel').onclick = resetForm;
 for (const name of TABS) $('tab-' + name).onclick = () => { tab = name; render(true); };
@@ -428,6 +449,7 @@ $('import').onchange = async (e) => {
   try {
     if (incomingNotes.length) await invoke('save_notes', { notes: incomingNotes });
     notes = await invoke('get_notes');
+    fillNoteLinks();
   } catch (err) {
     return tell('Could not save the notes: ' + err);
   }
@@ -486,11 +508,37 @@ const visibleNotes = () => {
     .filter((n) => (n.title + '\n' + n.body).toLowerCase().includes(q));
 };
 
+const NEW_NOTE = '__new'; // the form's "New note…" choice
+// the form's Linked note menu: None, a new note, then every note, newest edit first
+function fillNoteLinks() {
+  const menu = $('note-link');
+  const keep = menu.value;
+  menu.replaceChildren(el('option', { value: '' }, 'None'), el('option', { value: NEW_NOTE }, 'New note…'),
+    ...[...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')).map((n) => el('option', { value: n.id }, (n.title || 'Untitled').slice(0, 48))));
+  menu.value = [...menu.options].some((o) => o.value === keep) ? keep : '';
+}
+
+// jump from a note to a task that links to it
+async function showTask(id) {
+  await setView('tasks');
+  const t = todos.find((x) => x.id === id);
+  if (!t) return;
+  tab = t.done ? 'history' : 'pending';
+  $('search').value = '';
+  render(true);
+  selectedId = id;
+  applySelection();
+  document.getElementById('r-' + id)?.scrollIntoView({ block: 'nearest' });
+}
+
 function renderNoteList() {
   const items = visibleNotes();
+  const uses = new Map();
+  for (const t of todos) if (t.noteId) uses.set(t.noteId, (uses.get(t.noteId) || 0) + 1);
   $('note-items').replaceChildren(...items.map((n) => {
+    const count = uses.get(n.id);
     const row = el('button', { type: 'button', className: 'note' + (n.id === selectedNoteId ? ' sel' : ''), id: 'note-' + n.id },
-      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n)));
+      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n) + (count ? ` · ${count} ${count === 1 ? 'task' : 'tasks'}` : '')));
     row.onclick = () => openNote(n.id, 'body');
     return el('li', {}, row);
   }));
@@ -503,6 +551,14 @@ function renderNoteList() {
     const when = cur.updatedAt ? fmt(cur.updatedAt, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
     $('note-meta').textContent = (when ? `Edited ${when} · ` : '') + `${cur.body.length} characters`;
   }
+  const linked = cur ? todos.filter((t) => t.noteId === cur.id) : [];
+  $('note-links').hidden = !linked.length;
+  $('note-link-list').replaceChildren(...linked.slice(0, 6).map((t) => {
+    const chip = el('button', { type: 'button', className: 'chip' + (t.done ? ' done' : '') }, t.title);
+    chip.onclick = () => showTask(t.id);
+    return chip;
+  }), ...(linked.length > 6 ? [el('span', {}, `+${linked.length - 6} more`)] : []));
+  fillNoteLinks();
 }
 
 function showNote(id) {
@@ -594,7 +650,7 @@ async function setView(next) {
   $('tasks-view').hidden = view !== 'tasks';
   $('notes-view').hidden = view !== 'notes';
   for (const v of VIEWS) $('view-' + v).ariaSelected = String(view === v);
-  if (view === 'tasks') return fitSide();
+  if (view === 'tasks') { render(); return fitSide(); } // a note may have changed while the task list was hidden
   if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList();
 }
 
@@ -630,6 +686,7 @@ const SHORTCUTS = [
   'Space: mark done (in History: restore)',
   'E: edit the selected task',
   'P: pin or unpin the selected task',
+  "O: open the selected task's note",
   'Delete: delete the selected task',
   'N: new task',
   'T: switch theme (auto, light, dark)',
@@ -703,6 +760,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'Space' && !t.matches('button, summary, input, a')) press('input[type=checkbox], .act-restore');
   else if (e.code === 'KeyE') press('.act-edit');
   else if (e.code === 'KeyP') press('.act-pin');
+  else if (e.code === 'KeyO') press('.act-open');
   else if (/^Digit[1-4]$/.test(e.code)) { e.preventDefault(); $('tab-' + TABS[+e.code.slice(5) - 1]).click(); }
   else if (e.key === 'Delete') press('.act-del');
   else if (e.code === 'KeyT') $('theme').click();
@@ -749,6 +807,7 @@ const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).
   if (typing && !notes.includes(typing)) notes.push(typing);
   if (draftNote && !notes.some((x) => x.id === draftNote.id)) notes.push(draftNote);
   render(enter);
+  fillNoteLinks();
   if (view === 'notes') renderNoteList();
 });
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
