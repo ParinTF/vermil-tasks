@@ -3,12 +3,24 @@ const { invoke } = window.__TAURI__.core;
 const win = window.__TAURI__.window.getCurrentWindow();
 const input = document.getElementById('t');
 const due = document.getElementById('d');
+const hint = document.getElementById('hint');
+const HINT = 'Ctrl+Alt+J due · Enter';
 const pad = (n) => String(n).padStart(2, '0');
+
+// While typing, show the due date the words will become ("Call supplier tomorrow 9am" → Fri 13 Nov, 09:00)
+function updateHint() {
+  const hit = due.hidden ? parseQuick(input.value, new Date()) : null;
+  hint.textContent = hit && hit.due
+    ? '→ ' + new Date(hit.due).toLocaleString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) + ' · Enter'
+    : HINT;
+}
+input.addEventListener('input', updateHint);
 
 function reset() {
   input.value = '';
   due.value = '';
   due.hidden = true;
+  updateHint();
 }
 const hide = () => { reset(); win.hide(); };
 
@@ -17,18 +29,22 @@ function toggleDue() {
   if (!due.hidden) {
     due.value = '';
     due.hidden = true;
+    updateHint();
     return input.focus();
   }
   const d = new Date(Date.now() + 3600000);
   due.value = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:00`;
   due.hidden = false;
+  updateHint();
   due.focus();
 }
 
 document.getElementById('q').onsubmit = async (e) => {
   e.preventDefault();
   try {
-    await invoke('quick_add', { title: input.value, due: due.value || null });
+    // an explicit due field wins and the title is sent as typed; otherwise the words are read for a day and time
+    const entry = due.hidden ? parseQuick(input.value, new Date()) : { title: input.value, due: due.value || null };
+    await invoke('quick_add', { title: entry.title, due: entry.due });
     hide();
   } catch (err) {
     input.value = '';
