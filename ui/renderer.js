@@ -564,11 +564,138 @@ function renderNoteList() {
   fillNoteLinks();
 }
 
+// ── rich text: a note keeps a few formats (bold, four sizes, six colours) and nothing else ──
+const SIZE_TAG = { small: 'h4', normal: 'p', large: 'h2', title: 'h1' };
+// block elements the editor knows how to keep, and what they become: a div, a list item or a quote is a paragraph
+const NOTE_BLOCKS = { P: 'p', DIV: 'p', LI: 'p', PRE: 'p', BLOCKQUOTE: 'p', H1: 'h1', H2: 'h2', H3: 'h2', H4: 'h4', H5: 'h4', H6: 'h4' };
+const editor = () => $('note-body');
+
+// Rebuilds untrusted HTML (typed, pasted, loaded from a backup) out of the few elements and attributes the editor
+// knows. Anything else is unwrapped and keeps its text; scripts and the like go with their content.
+function cleanInto(source, target) {
+  for (const node of [...source.childNodes]) {
+    if (node.nodeType === Node.TEXT_NODE) { target.append(node.textContent); continue; }
+    if (node.nodeType !== Node.ELEMENT_NODE) continue;
+    const tag = node.tagName;
+    if (['SCRIPT', 'STYLE', 'IFRAME', 'OBJECT', 'EMBED', 'TEMPLATE', 'NOSCRIPT'].includes(tag)) continue;
+    if (tag === 'BR') { target.append(document.createElement('br')); continue; }
+    let out = target;
+    if (NOTE_BLOCKS[tag]) {
+      if (/^(P|H1|H2|H4)$/.test(target.tagName)) { // a block inside a block cannot nest: it continues on a new line
+        if (target.lastChild) target.append(document.createElement('br'));
+      } else {
+        out = document.createElement(NOTE_BLOCKS[tag]);
+        target.append(out);
+      }
+    } else if (tag === 'B' || tag === 'STRONG') {
+      out = document.createElement('b');
+      target.append(out);
+    } else if (tag === 'FONT') {
+      const key = colorKey(node.getAttribute('color'));
+      if (NOTE_COLORS[key] && key !== DEFAULT_COLOR) { // the plain colour is no format at all
+        out = document.createElement('font');
+        out.setAttribute('color', key);
+        target.append(out);
+      }
+    }
+    cleanInto(node, out);
+  }
+}
+
+// → a detached <div> holding clean blocks only: loose text and inline runs at the top become paragraphs
+function cleaned(html) {
+  const inert = new DOMParser().parseFromString(html || '', 'text/html'); // nothing in it runs
+  const flat = document.createElement('div');
+  cleanInto(inert.body, flat);
+  const root = document.createElement('div');
+  let run = null;
+  for (const node of [...flat.childNodes]) {
+    if (node.nodeType === Node.ELEMENT_NODE && /^(P|H1|H2|H4)$/.test(node.tagName)) { run = null; root.append(node); continue; }
+    if (!run) { run = document.createElement('p'); root.append(run); }
+    run.append(node);
+  }
+  if (!root.firstChild) root.innerHTML = '<p><br></p>';
+  return root;
+}
+
+// The plain text of the blocks, one line per block: what search, the list and Copy use.
+function plainFromContainer(root) {
+  const lines = [...root.children].map((block) => {
+    let s = '';
+    (function walk(n) {
+      for (const c of n.childNodes) {
+        if (c.nodeType === Node.TEXT_NODE) s += c.textContent;
+        else if (c.tagName === 'BR') s += '\n';
+        else walk(c);
+      }
+    })(block);
+    return s.replace(/\n$/, ''); // the <br> that keeps an empty paragraph open is not a line
+  });
+  return lines.join('\n').replace(/\s+$/, '');
+}
+
+function setEditor(n) {
+  editor().innerHTML = n ? cleaned(n.html ?? plainToHtml(n.body)).innerHTML : '<p><br></p>';
+  editor().dataset.empty = n && n.body.trim() ? '' : '1';
+}
+
+function caretToEnd(node) {
+  const range = document.createRange();
+  range.selectNodeContents(node);
+  range.collapse(false);
+  const sel = getSelection();
+  sel.removeAllRanges();
+  sel.addRange(range);
+}
+
+function applyFormat(command, value) {
+  if (!currentNote()) return;
+  editor().focus();
+  document.execCommand('styleWithCSS', false, false); // <b> and <font color>, not inline styles
+  document.execCommand(command, false, value);
+  touchNote();
+  syncFormat();
+}
+
+// the toolbar shows the format at the caret
+function syncFormat() {
+  if (document.activeElement !== editor()) return;
+  const anchor = getSelection().anchorNode;
+  const at = anchor && (anchor.nodeType === Node.TEXT_NODE ? anchor.parentElement : anchor);
+  if (!at || !editor().contains(at)) return;
+  $('fmt-bold').setAttribute('aria-pressed', String(!!at.closest('b'))); // not queryCommandState: a heading is bold by its style and would light the button
+  const block = (at.closest('h1, h2, h4, p') || { localName: 'p' }).localName;
+  for (const b of document.querySelectorAll('#note-fmt [data-size]')) b.setAttribute('aria-pressed', String(SIZE_TAG[b.dataset.size] === block));
+  const key = colorKey(at.closest('font[color]')?.getAttribute('color')) || DEFAULT_COLOR;
+  for (const b of document.querySelectorAll('#note-fmt [data-color]')) b.setAttribute('aria-pressed', String(b.dataset.color === key));
+}
+
+$('fmt-colors').replaceChildren(...Object.entries(NOTE_COLORS).map(([hex, name]) => {
+  const b = el('button', { type: 'button', className: 'sw', ariaLabel: 'Colour: ' + name, title: name });
+  b.dataset.color = hex;
+  b.setAttribute('aria-pressed', 'false');
+  return b;
+}));
+$('note-fmt').addEventListener('mousedown', (e) => e.preventDefault()); // clicking a button must not move the selection out of the text
+$('note-fmt').addEventListener('click', (e) => {
+  const b = e.target.closest('button');
+  if (!b) return;
+  if (b.id === 'fmt-bold') applyFormat('bold');
+  else if (b.dataset.size) applyFormat('formatBlock', `<${SIZE_TAG[b.dataset.size]}>`);
+  else if (b.dataset.color) applyFormat('foreColor', b.dataset.color);
+});
+document.addEventListener('selectionchange', syncFormat);
+document.execCommand('defaultParagraphSeparator', false, 'p');
+// only plain text goes in from outside, so no foreign markup ever reaches a note
+editor().addEventListener('paste', (e) => { e.preventDefault(); document.execCommand('insertText', false, e.clipboardData.getData('text/plain')); });
+editor().addEventListener('drop', (e) => { e.preventDefault(); const text = e.dataTransfer.getData('text/plain'); if (text) document.execCommand('insertText', false, text); });
+editor().addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && ['KeyI', 'KeyU'].includes(e.code)) e.preventDefault(); }); // italic and underline are not kept
+
 function showNote(id) {
   selectedNoteId = id;
   const n = currentNote();
   $('note-title').value = n ? n.title : '';
-  $('note-body').value = n ? n.body : '';
+  setEditor(n);
   renderNoteList();
 }
 
@@ -602,7 +729,10 @@ async function openNote(id, focus) {
     await leaveNote();
     showNote(id);
   }
-  if (focus) $('note-' + focus).focus();
+  if (focus) {
+    $('note-' + focus).focus();
+    if (focus === 'body') caretToEnd($('note-body'));
+  }
 }
 
 async function newNote() {
@@ -637,8 +767,11 @@ async function deleteNote(id = selectedNoteId) {
 function touchNote() {
   const n = currentNote();
   if (!n) return;
+  const root = cleaned(editor().innerHTML); // what is stored is rebuilt from the known formats, never the raw editor markup
   n.title = $('note-title').value;
-  n.body = $('note-body').value;
+  n.html = root.innerHTML;
+  n.body = plainFromContainer(root);
+  editor().dataset.empty = n.body.trim() ? '' : '1';
   n.updatedAt = new Date().toISOString();
   noteDirty = true;
   renderNoteList();
@@ -790,7 +923,7 @@ const SHORTCUTS = [
   '?: show this list',
 ].join('\n');
 const shortcutText = () => (quickTaken ? 'Ctrl+Alt+T is taken by another app, so quick add from anywhere is off. Use "Quick add" in the tray menu.\n\n' : '') + SHORTCUTS;
-const isField = (n) => n.matches('textarea, select, input:not([type=checkbox]):not([type=button])');
+const isField = (n) => n.isContentEditable || n.matches('textarea, select, input:not([type=checkbox]):not([type=button])');
 const rowEls = () => [...$('list').querySelectorAll('.item')];
 
 function select(row, scroll) {

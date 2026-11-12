@@ -185,4 +185,23 @@ function groupByDay(todos) {
   return days;
 }
 
-if (typeof module !== 'undefined') module.exports = { monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };
+// ── note text ──
+const escapeHtml = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+// A note that only has plain text (made before formatting existed) as the editor's paragraphs, one per line.
+function plainToHtml(text) {
+  return String(text || '').split('\n').map((line) => `<p>${line ? escapeHtml(line) : '<br>'}</p>`).join('');
+}
+
+// The text colours a note can use, by the hex the editor stores. The first is the plain text colour.
+const DEFAULT_COLOR = '#12110f';
+const NOTE_COLORS = { '#12110f': 'Default', '#c93410': 'Vermilion', '#1d4ed8': 'Blue', '#166534': 'Green', '#7e22ce': 'Purple', '#6f6b63': 'Gray' };
+
+// "rgb(201, 52, 16)" or "#C93410" as "#c93410"; anything else (a colour name, nothing) as "".
+function colorKey(value) {
+  const m = /^rgba?\((\d+),\s*(\d+),\s*(\d+)/.exec(value || '');
+  if (m) return '#' + [m[1], m[2], m[3]].map((n) => (+n).toString(16).padStart(2, '0')).join('');
+  return /^#[0-9a-f]{6}$/i.test(value || '') ? value.toLowerCase() : '';
+}
+
+if (typeof module !== 'undefined') module.exports = { plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax };

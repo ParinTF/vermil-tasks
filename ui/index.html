@@ -106,7 +106,19 @@
     </section>
     <section class="note-editor" id="note-editor" aria-label="Note" hidden>
       <input id="note-title" maxlength="200" placeholder="Untitled" aria-label="Note title" autocomplete="off">
-      <textarea id="note-body" spellcheck="false" placeholder="Write here" aria-label="Note text"></textarea>
+      <div class="fmt" id="note-fmt" role="toolbar" aria-label="Text format">
+        <button type="button" id="fmt-bold" aria-pressed="false" aria-label="Bold" title="Bold (Ctrl+B)"><b>B</b></button>
+        <span class="fmt-sep" aria-hidden="true"></span>
+        <div class="fmt-group" role="group" aria-label="Text size">
+          <button type="button" class="s-small" data-size="small" aria-pressed="false" aria-label="Small text" title="Small">A</button>
+          <button type="button" class="s-normal" data-size="normal" aria-pressed="false" aria-label="Normal text" title="Normal">A</button>
+          <button type="button" class="s-large" data-size="large" aria-pressed="false" aria-label="Heading" title="Heading">A</button>
+          <button type="button" class="s-title" data-size="title" aria-pressed="false" aria-label="Title" title="Title">A</button>
+        </div>
+        <span class="fmt-sep" aria-hidden="true"></span>
+        <div class="fmt-group" id="fmt-colors" role="group" aria-label="Text colour"></div>
+      </div>
+      <div id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Note text" spellcheck="false" data-placeholder="Write here"></div>
       <div class="note-links" id="note-links" hidden><span>Linked from</span><div id="note-link-list"></div></div>
       <div class="note-foot"><span id="note-meta"></span><button id="note-delete" class="linkish" type="button">Delete note</button></div>
     </section>

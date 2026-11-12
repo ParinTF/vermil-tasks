@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -171,4 +171,26 @@ test('groupByDay: dated tasks only, earliest time first, ties by title', () => {
   const days = groupByDay([t('b', '2026-11-11T09:00'), t('a', '2026-11-11T09:00'), t('late', '2026-11-11T18:30'), t('early', '2026-11-11T07:15'), t('no date', null), t('other', '2026-11-12T10:00')]);
   assert.deepEqual(Object.keys(days).sort(), ['2026-11-11', '2026-11-12']);
   assert.deepEqual(days['2026-11-11'].map((x) => x.title), ['early', 'a', 'b', 'late']);
+});
+
+// ── note text ──
+test('plainToHtml: one paragraph per line, blank lines kept, markup escaped', () => {
+  assert.equal(plainToHtml('a\n\nb'), '<p>a</p><p><br></p><p>b</p>');
+  assert.equal(plainToHtml(''), '<p><br></p>');
+  assert.equal(plainToHtml(undefined), '<p><br></p>');
+  assert.equal(plainToHtml('1 < 2 & <b>x</b>'), '<p>1 &lt; 2 &amp; &lt;b&gt;x&lt;/b&gt;</p>');
+});
+test('colorKey reads rgb and hex, and rejects everything else', () => {
+  assert.equal(colorKey('rgb(201, 52, 16)'), '#c93410');
+  assert.equal(colorKey('rgba(29, 78, 216, 1)'), '#1d4ed8');
+  assert.equal(colorKey('#C93410'), '#c93410');
+  assert.equal(colorKey('red'), '');
+  assert.equal(colorKey('#fff'), '');
+  assert.equal(colorKey(undefined), '');
+});
+test('note colours: six of them, the default first, all keys in the form colorKey returns', () => {
+  const keys = Object.keys(NOTE_COLORS);
+  assert.equal(keys.length, 6);
+  assert.equal(keys[0], DEFAULT_COLOR);
+  assert.ok(keys.every((k) => colorKey(k) === k));
 });
