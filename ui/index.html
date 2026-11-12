@@ -10,8 +10,12 @@
   <!-- the window has no native title bar: this bar drags the window and holds its controls -->
   <header class="top" data-tauri-drag-region>
     <span class="brand">Vermil <span>Tasks</span><i></i><small id="version"></small></span>
+    <div class="views" role="tablist" aria-label="Views">
+      <button id="view-tasks" role="tab" type="button" aria-selected="true">Tasks</button>
+      <button id="view-notes" role="tab" type="button" aria-selected="false">Notes</button>
+    </div>
     <button id="update" class="update" type="button" hidden></button>
-    <button id="theme" class="theme" type="button">Theme: auto</button>
+    <button id="theme" class="theme" type="button" title="Theme: auto">◐ auto</button>
     <time id="today"></time>
     <div class="win">
       <button id="win-min" type="button" aria-label="Minimize"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M0 5h10"/></svg></button>
@@ -22,7 +26,7 @@
 
   <div class="marquee" aria-hidden="true"><div class="track" id="track"></div></div>
 
-  <main class="grid">
+  <main class="grid" id="tasks-view">
     <div class="side">
     <section class="hero">
       <p class="eyebrow">Open tasks</p>
@@ -82,6 +86,23 @@
         <input id="search" type="search" placeholder="Search (Ctrl+F)" aria-label="Search">
         <div id="list"></div>
       </section>
+  </main>
+
+  <main class="notes-page" id="notes-view" hidden>
+    <section class="note-list" aria-label="Notes">
+      <div class="note-tools">
+        <button id="note-new" class="primary" type="button"><span>New note</span><span class="arrow" aria-hidden="true">→</span></button>
+        <input id="note-search" type="search" placeholder="Search notes (Ctrl+F)" aria-label="Search notes">
+      </div>
+      <ul id="note-items"></ul>
+      <div id="note-none" class="empty" hidden>No matches</div>
+    </section>
+    <section class="note-editor" id="note-editor" aria-label="Note" hidden>
+      <input id="note-title" maxlength="200" placeholder="Untitled" aria-label="Note title" autocomplete="off">
+      <textarea id="note-body" spellcheck="false" placeholder="Write here" aria-label="Note text"></textarea>
+      <div class="note-foot"><span id="note-meta"></span><button id="note-delete" class="linkish" type="button">Delete note</button></div>
+    </section>
+    <div id="note-hint" class="empty" hidden>No notes yet. Press Ctrl+N to write one.</div>
   </main>
 
   <footer class="foot">

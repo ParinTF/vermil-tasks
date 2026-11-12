@@ -437,7 +437,7 @@ $('import').onchange = async (e) => {
 // Theme: auto follows Windows, light and dark force one. theme.js applies the stored choice before first paint.
 const THEMES = ['', 'light', 'dark'];
 let theme = document.documentElement.dataset.theme || '';
-const showTheme = () => { $('theme').textContent = 'Theme: ' + (theme || 'auto'); };
+const showTheme = () => { $('theme').textContent = '◐ ' + (theme || 'auto'); $('theme').title = 'Theme: ' + (theme || 'auto'); };
 showTheme();
 $('theme').onclick = () => {
   theme = THEMES[(THEMES.indexOf(theme) + 1) % THEMES.length];
@@ -449,7 +449,7 @@ $('theme').onclick = () => {
 const win = window.__TAURI__.window.getCurrentWindow();
 $('win-min').onclick = () => win.minimize();
 $('win-max').onclick = () => win.toggleMaximize();
-$('win-close').onclick = () => win.close(); // the backend turns this into "hide to tray"
+$('win-close').onclick = () => { flushNote(); win.close(); }; // the backend turns this into "hide to tray"
 
 // Offer new versions without interrupting: the button appears only when the release feed has one.
 const checkUpdate = () => invoke('check_update').then((v) => {
@@ -470,6 +470,160 @@ $('update').onclick = () => {
 checkUpdate();
 setInterval(checkUpdate, 6 * 3600000); // the app can sit in the tray for days
 
+// ── notes view: a list of notes and a plain-text editor that saves itself ──
+const VIEWS = ['tasks', 'notes'];
+let view = 'tasks';
+let selectedNoteId = null;
+let draftNote = null; // a new note nothing has been typed into yet: not saved, and dropped when left empty
+let noteDirty = false; // typed since the last save
+let noteTimer;
+const newNoteId = () => 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+const currentNote = () => notes.find((n) => n.id === selectedNoteId);
+const noteLine = (n) => (n.body || '').split('\n').map((l) => l.trim()).find(Boolean) || 'No text';
+const visibleNotes = () => {
+  const q = $('note-search').value.trim().toLowerCase();
+  return [...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')) // newest edit first
+    .filter((n) => (n.title + '\n' + n.body).toLowerCase().includes(q));
+};
+
+function renderNoteList() {
+  const items = visibleNotes();
+  $('note-items').replaceChildren(...items.map((n) => {
+    const row = el('button', { type: 'button', className: 'note' + (n.id === selectedNoteId ? ' sel' : ''), id: 'note-' + n.id },
+      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n)));
+    row.onclick = () => openNote(n.id, 'body');
+    return el('li', {}, row);
+  }));
+  $('note-none').hidden = items.length > 0 || !notes.length;
+  const cur = currentNote();
+  $('note-editor').hidden = !cur;
+  $('note-hint').hidden = !!cur;
+  $('note-hint').textContent = notes.length ? 'Pick a note.' : 'No notes yet. Press Ctrl+N to write one.';
+  if (cur) {
+    const when = cur.updatedAt ? fmt(cur.updatedAt, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
+    $('note-meta').textContent = (when ? `Edited ${when} · ` : '') + `${cur.body.length} characters`;
+  }
+}
+
+function showNote(id) {
+  selectedNoteId = id;
+  const n = currentNote();
+  $('note-title').value = n ? n.title : '';
+  $('note-body').value = n ? n.body : '';
+  renderNoteList();
+}
+
+async function flushNote() {
+  clearTimeout(noteTimer);
+  const n = currentNote();
+  if (!noteDirty || !n) return;
+  noteDirty = false;
+  try {
+    await invoke('save_notes', { notes: [n] });
+    if (draftNote && draftNote.id === n.id) draftNote = null; // now it is a real note
+  } catch (e) {
+    noteDirty = true;
+    tell('Could not save the note: ' + e);
+  }
+}
+
+// leaving a note saves what was typed, and drops a new note that nobody wrote in
+async function leaveNote() {
+  await flushNote();
+  const n = currentNote();
+  if (n && draftNote && n.id === draftNote.id && !n.title.trim() && !n.body.trim()) {
+    notes = notes.filter((x) => x.id !== n.id);
+    draftNote = null;
+    selectedNoteId = null;
+  }
+}
+
+async function openNote(id, focus) {
+  if (id !== selectedNoteId) {
+    await leaveNote();
+    showNote(id);
+  }
+  if (focus) $('note-' + focus).focus();
+}
+
+async function newNote() {
+  await leaveNote();
+  draftNote = { id: newNoteId(), title: '', body: '', updatedAt: new Date().toISOString() };
+  notes.push(draftNote);
+  $('note-search').value = '';
+  showNote(draftNote.id);
+  $('note-title').focus();
+}
+
+async function deleteNote(id = selectedNoteId) {
+  const n = notes.find((x) => x.id === id); // the Delete key on a list row means that row, even when it is not the open note
+  if (!n) return;
+  if (!(await ask(`Delete "${n.title || 'Untitled'}"?\nTasks that link to it keep going without it.`, 'Delete'))) return;
+  clearTimeout(noteTimer);
+  noteDirty = false;
+  const list = visibleNotes();
+  const i = list.findIndex((x) => x.id === n.id);
+  const next = list[i + 1] || list[i - 1];
+  try {
+    if (!(draftNote && draftNote.id === n.id)) await invoke('delete_note', { id: n.id });
+  } catch (e) {
+    return tell('Could not delete the note: ' + e);
+  }
+  if (draftNote && draftNote.id === n.id) draftNote = null;
+  notes = notes.filter((x) => x.id !== n.id);
+  if (n.id === selectedNoteId) showNote(next ? next.id : null); else renderNoteList();
+}
+
+// every keystroke updates the note in memory and the list; the file is written half a second after typing stops
+function touchNote() {
+  const n = currentNote();
+  if (!n) return;
+  n.title = $('note-title').value;
+  n.body = $('note-body').value;
+  n.updatedAt = new Date().toISOString();
+  noteDirty = true;
+  renderNoteList();
+  clearTimeout(noteTimer);
+  noteTimer = setTimeout(flushNote, 500);
+}
+
+async function setView(next) {
+  if (next === view) return;
+  await leaveNote();
+  view = next;
+  $('tasks-view').hidden = view !== 'tasks';
+  $('notes-view').hidden = view !== 'notes';
+  for (const v of VIEWS) $('view-' + v).ariaSelected = String(view === v);
+  if (view === 'tasks') return fitSide();
+  if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList();
+}
+
+// keys while the Notes view is showing: the Tasks shortcuts stay out of the way
+function notesKeys(e) {
+  const t = e.target.matches ? e.target : document.body;
+  const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;
+  if (ctrl && e.code === 'KeyN') { e.preventDefault(); newNote(); return; }
+  if (ctrl && e.code === 'KeyF') { e.preventDefault(); $('note-search').focus(); $('note-search').select(); return; }
+  if (e.key === 'Escape' && isField(t)) { t.blur(); return; }
+  if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && (t.id === 'note-search' || t.classList.contains('note'))) {
+    e.preventDefault();
+    const list = visibleNotes();
+    const i = list.findIndex((x) => x.id === selectedNoteId);
+    const next = list[Math.max(0, Math.min(list.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))];
+    if (next) openNote(next.id).then(() => { if (t.classList.contains('note')) $('note-' + next.id)?.focus(); });
+    return;
+  }
+  if (e.key === 'Delete' && t.classList.contains('note')) { e.preventDefault(); deleteNote(t.id.slice('note-'.length)); }
+}
+
+$('view-tasks').onclick = () => setView('tasks');
+$('view-notes').onclick = () => setView('notes');
+$('note-new').onclick = newNote;
+$('note-delete').onclick = () => deleteNote();
+$('note-search').oninput = renderNoteList;
+$('note-title').oninput = $('note-body').oninput = touchNote;
+addEventListener('blur', flushNote); // the window lost focus: do not leave typing unsaved
+
 // ── keyboard ──
 const SHORTCUTS = [
   '↑ ↓: select a task',
@@ -479,6 +633,8 @@ const SHORTCUTS = [
   'Delete: delete the selected task',
   'N: new task',
   'T: switch theme (auto, light, dark)',
+  'Ctrl+1, Ctrl+2: Tasks, Notes',
+  'Ctrl+N (in Notes): new note',
   '1 2 3 4: To do, Today, Week, History',
   'Ctrl+Alt+T (from anywhere): quick add',
   'Ctrl+Alt+J (in quick add): due date',
@@ -520,6 +676,8 @@ addEventListener('keydown', (e) => {
   const t = e.target.matches ? e.target : document.body;
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
+  if (mod && !e.altKey && (e.code === 'Digit1' || e.code === 'Digit2')) { e.preventDefault(); setView(e.code === 'Digit1' ? 'tasks' : 'notes'); return; }
+  if (view !== 'tasks') return notesKeys(e);
 
   if (e.key === 'Escape') {
     if (t.id === 'search' && t.value) { t.value = ''; render(); }
@@ -583,7 +741,16 @@ const fitSide = () => {
 new ResizeObserver(fitSide).observe(document.querySelector('.side')); // the window or the footer changed size
 addEventListener('resize', fitSide);
 
-const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).then(([t, n]) => { todos = t; notes = n; render(enter); });
+const load = (enter) => Promise.all([invoke('get_todos'), invoke('get_notes')]).then(([t, n]) => {
+  // typing that has not been saved yet, and a new empty note, must survive the reload
+  const typing = noteDirty ? currentNote() : null;
+  todos = t;
+  notes = n.map((x) => (typing && x.id === typing.id ? typing : x));
+  if (typing && !notes.includes(typing)) notes.push(typing);
+  if (draftNote && !notes.some((x) => x.id === draftNote.id)) notes.push(draftNote);
+  render(enter);
+  if (view === 'notes') renderNoteList();
+});
 // the backend changed tasks (quick add, snooze): older states would overwrite that change, so undo starts over
 window.__TAURI__.event.listen('todos-changed', () => { undoStack.length = 0; load(); });
 load(true);
