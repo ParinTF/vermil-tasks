@@ -18,6 +18,8 @@
   --mute: light-dark(#6f6b63, #9a958b);
   --line: color-mix(in srgb, var(--ink) 12%, transparent);
   --accent: #ff4a1c;
+  --on-accent: #12110f; /* text on the accent; Settings recomputes it for another accent */
+  --font: Anuphan, "Leelawadee UI", "Segoe UI", sans-serif;
   --accent-text: light-dark(#c93410, #ff4a1c); /* the accent as small text needs a darker shade on light paper */
   --ease: cubic-bezier(.2, .8, .2, 1);
   --pad: clamp(20px, 4vw, 56px);
@@ -32,11 +34,11 @@ body {
   padding: 0 var(--pad) var(--pad);
   background: var(--paper);
   color: var(--ink);
-  font: 16px/1.5 Anuphan, "Leelawadee UI", "Segoe UI", sans-serif;
+  font: 16px/1.5 var(--font);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
 }
-::selection { background: var(--accent); color: var(--paper); }
+::selection { background: var(--accent); color: var(--on-accent); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 button, input, select { font: inherit; color: inherit; }
 /* the open list of a dropdown is drawn by Windows: without explicit colours it can come out light text on a light list in dark mode */
@@ -57,7 +59,7 @@ button { cursor: pointer; }
 .win { display: flex; align-self: stretch; margin-left: 20px; }
 .win button { width: 46px; border: 0; background: none; transition: background .2s var(--ease), color .2s var(--ease); }
 .win button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-.win #win-close:hover { background: var(--accent); color: var(--paper); }
+.win #win-close:hover { background: var(--accent); color: var(--on-accent); }
 .win svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; }
 .brand { font-weight: 700; text-transform: uppercase; letter-spacing: .14em; }
 .brand span { font-weight: 400; }
@@ -78,7 +80,7 @@ button { cursor: pointer; }
 #today { color: var(--mute); }
 .update {
   margin-right: 20px; padding: 6px 16px; border: 0; border-radius: 999px;
-  background: var(--accent); color: #12110f; font-size: 13px; font-weight: 600; /* dark text on the accent reads in both themes */
+  background: var(--accent); color: var(--on-accent); font-size: 13px; font-weight: 600;
   transition: background .35s var(--ease);
 }
 .update:hover { background: var(--ink); color: var(--paper); }
@@ -145,7 +147,7 @@ form { display: grid; gap: 22px; }
 #title::placeholder, #search::placeholder { color: color-mix(in srgb, var(--ink) 25%, transparent); }
 .field textarea {
   width: 100%; padding: 8px 0 10px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none;
-  font: 500 15px/1.5 Anuphan, "Leelawadee UI", "Segoe UI", sans-serif; letter-spacing: 0; text-transform: none; color: var(--ink);
+  font: 500 15px/1.5 var(--font); letter-spacing: 0; text-transform: none; color: var(--ink);
   resize: vertical; min-height: 41px; max-height: 30vh;
 }
 /* one line until it is used, so the form stays short */
@@ -158,7 +160,7 @@ form { display: grid; gap: 22px; }
   background: var(--ink); color: var(--paper); font-weight: 600;
   transition: background .35s var(--ease);
 }
-.primary:hover { background: var(--accent); color: #12110f; }
+.primary:hover { background: var(--accent); color: var(--on-accent); }
 .arrow { transition: transform .35s var(--ease); }
 .primary:hover .arrow { transform: translateX(6px); }
 .ghost { padding: 6px 0; border: 0; background: none; color: var(--mute); text-decoration: underline; text-underline-offset: 4px; }
@@ -368,7 +370,7 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 .cal-cell.sel { box-shadow: inset 0 0 0 2px var(--accent); }
 .cal-cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
 .cal-d { display: inline-grid; place-items: center; min-width: 24px; height: 24px; margin: 0 0 4px -2px; border-radius: 12px; font-size: 13px; font-weight: 600; }
-.cal-cell.today .cal-d { background: var(--accent); color: #12110f; }
+.cal-cell.today .cal-d { background: var(--accent); color: var(--on-accent); }
 .cal-line, .cal-more { display: block; overflow: hidden; font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
 .cal-line.late { color: var(--accent-text); font-weight: 600; }
 .cal-line.done { color: var(--mute); text-decoration: line-through; }

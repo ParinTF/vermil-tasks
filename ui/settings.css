@@ -1,0 +1,36 @@
+/* The Settings page */
+.settings-page { padding-top: 24px; }
+.st-wrap { max-width: 760px; }
+.st-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.st-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.st-sec { display: grid; gap: 14px; padding: 18px 0 26px; border-top: 1px solid var(--ink); }
+.st-sec h3 { margin: 0; font-size: 12px; font-weight: 600; letter-spacing: .14em; text-transform: uppercase; color: var(--mute); }
+.st-row { display: grid; grid-template-columns: 9em minmax(0, 1fr); align-items: center; gap: 16px; }
+.st-label { font-size: 15px; font-weight: 600; }
+.st-opts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.st-opt { padding: 6px 14px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 999px; background: none; font: inherit; font-size: 14px; color: var(--ink); cursor: pointer; }
+.st-opt:hover { border-color: var(--ink); }
+.st-opt[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.st-swatch { width: 28px; height: 28px; padding: 0; border: 2px solid var(--paper); border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--ink) 25%, transparent); cursor: pointer; }
+.st-swatch[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--ink); }
+.st-custom { display: flex; align-items: center; gap: 8px; margin-left: 8px; font-size: 13px; color: var(--mute); }
+.st-color { width: 34px; height: 28px; padding: 0; border: 0; background: none; cursor: pointer; }
+.st-note { margin: 0; min-height: 1.2em; padding-left: calc(9em + 16px); font-size: 12.5px; color: var(--mute); }
+#st-font { width: 100%; max-width: 420px; margin-left: calc(9em + 16px); padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); }
+#st-font:focus { outline: 0; border-color: var(--accent); }
+.st-preview { margin: 6px 0 0; padding: 14px 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); font-size: 15px; }
+.st-preview b { display: block; font-size: 24px; letter-spacing: -.01em; box-shadow: 0 3px 0 var(--accent); width: fit-content; margin-bottom: 8px; }
+#st-reset { justify-self: start; }
+.st-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.st-field input, .st-field select { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.st-field input:focus, .st-field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.st-fine { margin: 0; font-size: 12.5px; color: var(--mute); }
+.st-actions { display: flex; flex-wrap: wrap; align-items: baseline; gap: 16px; }
+
+@media (min-width: 860px) {
+  .settings-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-top: clamp(12px, 2.5vh, 32px); }
+}
+@media (max-width: 600px) {
+  .st-row { grid-template-columns: 1fr; gap: 6px; }
+  .st-note, #st-font { margin-left: 0; padding-left: 0; }
+}

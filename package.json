@@ -1,6 +1,6 @@
 {
   "name": "vermil-tasks",
-  "version": "2.10.0",
+  "version": "2.11.0",
   "description": "Vermil: tasks, notes, calendar and a set of optional modules, in one light Windows app",
   "private": true,
   "scripts": {

@@ -10,7 +10,7 @@
 .tt-form select, .tt-form input, .tt-add input, .tt-field input { min-width: 0; padding: 9px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; color: var(--ink); }
 .tt-form select:focus, .tt-form input:focus, .tt-add input:focus, .tt-field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
 .tt-form input:disabled, .tt-form select:disabled { opacity: .55; }
-.tt-form .primary.running { background: var(--accent); color: #12110f; }
+.tt-form .primary.running { background: var(--accent); color: var(--on-accent); }
 .tt-manual { margin: 4px 0; font-size: 14px; }
 .tt-manual summary { cursor: pointer; color: var(--mute); }
 .tt-add { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; padding-top: 10px; }

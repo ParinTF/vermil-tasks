@@ -46,7 +46,7 @@ Needs Windows 10 or 11 with WebView2 (already part of Windows 11).
 
 - **Fast to use without a mouse.** `Ctrl+K` is a command palette that searches everything and runs commands; `?` lists every shortcut. Shortcuts work with a Thai keyboard layout too.
 - **From anywhere in Windows:** `Ctrl+Alt+T` adds a task, `Ctrl+Alt+N` jots a note or a link, `Ctrl+Alt+W` shows the Today widget.
-- **Light and dark** follow Windows; the button in the top bar forces one.
+- **Make it yours:** [Settings](docs/Settings.md) (`Ctrl+,`) changes the theme, the accent colour and the font. Light and dark follow Windows unless you force one.
 - **Your data** is one JSON file in `%APPDATA%\com.vermil.tasks`, written safely (a crash cannot half-write it). A weekly backup goes to `Documents\Vermil Backups` (or a folder you choose), and Home can keep two computers in step through a shared folder such as OneDrive.
 - **Privacy:** nothing leaves your computer except the update check and, only when you use the Stocks module or a currency conversion, a price lookup. There is no account and no analytics.
 

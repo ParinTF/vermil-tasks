@@ -72,6 +72,7 @@ const rowInfo = [];
 const rowTools = [];
 const commandHooks = [];
 const metricHooks = []; // () => [{ id, label, unit, get() }]: numbers a module offers to Goals
+const settingsHooks = []; // () => element: a section a module adds to the Settings page
 const eventHooks = []; // (type, data) => void: what happened ('task-done', 'bill-paid', 'over-budget'); Automations listens
 const emit = (type, data = {}) => { for (const f of [...eventHooks]) try { f(type, data); } catch (e) { console.error('event', type, e); } };
 
@@ -216,13 +217,15 @@ async function showTask(id) {
 }
 
 async function setView(next) {
-  if (next === view || !VIEWS.includes(next)) return; // a view that is not switched on does not exist
+  if (next === view || !(VIEWS.includes(next) || next === 'settings')) return; // a view that is not switched on does not exist
+  if (next === 'settings') lastView = view;
   await registry.notes?.leave?.(); // typing in a note is saved before the view changes
   view = next;
   for (const n of document.querySelectorAll('main[id$="-view"]')) n.hidden = n.id !== view + '-view';
   for (const b of document.querySelectorAll('.views button[role=tab]')) b.ariaSelected = String(b.id === 'view-' + view);
   if (typeof layoutTabs === 'function') layoutTabs(); // the tab you are on is always in the bar
   if (view === 'home') return renderHome();
+  if (view === 'settings') return renderSettings();
   return registry[view]?.show?.(); // any other view belongs to its module
 }
 
@@ -272,6 +275,7 @@ function paletteResults(q) {
     ...(has('notes') ? [go('New note', 'Ctrl+N', async () => { await setView('notes'); registry.notes.newNote(); })] : []),
     ...(has('calendar') ? [go('Calendar: today', 'T', async () => { await setView('calendar'); registry.calendar.today(); })] : []),
     ...commandHooks.flatMap((f) => f()),
+    go('Open settings', 'Ctrl+,', () => setView('settings')),
     go('Switch theme', 'T', () => $('theme').click()),
     go('Keyboard shortcuts', '?', openShortcuts),
   ];
@@ -338,7 +342,7 @@ $('pal').onclick = (e) => { if (e.target === $('pal')) $('pal').close(); }; // t
 // A module adds its own group in start() and takes it out in stop().
 const shortcutGroups = [
   { title: 'Everywhere', items: [
-    [['Ctrl+0', 'Ctrl+,'], 'Home: add or remove modules'], ['Ctrl+1–9', 'Go to a tab, in the order shown'],
+    ['Ctrl+0', 'Home: add or remove modules'], ['Ctrl+,', 'Settings: theme, accent colour, font'], ['Ctrl+1–9', 'Go to a tab, in the order shown'],
     ['Ctrl+K', 'Command palette: search, run a command'],
     ['Ctrl+Alt+T', 'Quick add a task, from any app'],
     ['Ctrl+Alt+N', 'Quick note or link, from any app'],
@@ -382,7 +386,8 @@ addEventListener('keydown', (e) => {
   const field = isField(t);
   const mod = e.ctrlKey || e.metaKey;
   if (mod && !e.altKey && e.code === 'KeyK') { e.preventDefault(); openPalette(); return; }
-  if (mod && !e.altKey && e.code === 'Comma') { e.preventDefault(); setView('home'); return; }
+  if (mod && !e.altKey && e.code === 'Comma') { e.preventDefault(); setView(view === 'settings' ? lastView : 'settings'); return; }
+  if (view === 'settings' && e.key === 'Escape' && !field) { setView(lastView); return; }
   if (mod && !e.altKey && /^Digit[0-9]$/.test(e.code) && VIEWS[+e.code.slice(5)]) { e.preventDefault(); setView(VIEWS[+e.code.slice(5)]); return; } // Ctrl+0 is Home, then the tabs in order
   if (!mod && !e.altKey && !field && e.code === 'Slash' && e.shiftKey) { e.preventDefault(); openShortcuts(); return; } // ? lists the shortcuts in every view
   return registry[view]?.keys?.(e); // each module handles its own keys
