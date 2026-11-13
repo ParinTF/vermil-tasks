@@ -32,7 +32,7 @@ const MODULES = [
   { id: 'auto', name: 'Automations', about: 'Rules that do things for you: every morning add a task, when a bill is paid open Expenses, when a budget runs out send a notification.', script: 'mod-auto.js', style: 'mod-auto.css', view: 'Automations' },
   { id: 'insights', name: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
   { id: 'assistant', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
-  { id: 'review', name: 'Weekly Review', about: 'One page that sums up your week from every module you use, ready to copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
+  { id: 'review', name: 'Review', about: 'A dashboard of your day, week, month or year from every module you use: numbers, charts and a summary you can copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
 ];
 
 const moduleData = {}; // id -> saved value; "_on" lists the ids that are switched on

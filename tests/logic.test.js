@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -791,4 +791,36 @@ test('calendar: the days a countdown event or a renewal falls on', () => {
   assert.deepEqual(renewalsIn(sub('month', '2026-01-31', 31), '2026-02-01', '2026-04-30'), ['2026-02-28', '2026-03-31', '2026-04-30']);
   assert.deepEqual(renewalsIn(sub('year', '2026-06-01'), '2026-11-01', '2027-07-01'), ['2027-06-01']);
   assert.deepEqual(renewalsIn(sub('month', '2026-12-10'), '2026-11-01', '2026-11-30'), []); // its next charge is later
+});
+
+test('review: the span for a day, a week, a month and a year, and how far back they go', () => {
+  const t = '2026-11-12';
+  assert.deepEqual(reviewRange('day', 0, t), { since: t, until: t });
+  assert.deepEqual(reviewRange('day', 2, t), { since: '2026-11-10', until: '2026-11-10' });
+  assert.deepEqual(reviewRange('week', 0, t), { since: '2026-11-06', until: t });
+  assert.deepEqual(reviewRange('week', 1, t), { since: '2026-10-30', until: '2026-11-05' });
+  assert.deepEqual(reviewRange('month', 0, t), { since: '2026-11-01', until: t }); // this month stops at today
+  assert.deepEqual(reviewRange('month', 1, t), { since: '2026-10-01', until: '2026-10-31' });
+  assert.deepEqual(reviewRange('month', 12, t), { since: '2025-11-01', until: '2025-11-30' });
+  assert.deepEqual(reviewRange('year', 0, t), { since: '2026-01-01', until: t });
+  assert.deepEqual(reviewRange('year', 1, t), { since: '2025-01-01', until: '2025-12-31' });
+});
+
+test('review: a count adds up with zeros, a rating averages with gaps, a year goes by month', () => {
+  const count = { zero: true, byDay: { '2026-11-02': 3, '2026-11-04': 2 } };
+  const w = reviewBuckets(count, '2026-11-01', '2026-11-07');
+  assert.deepEqual(w.buckets.map((b) => b.value), [0, 3, 0, 2, 0, 0, 0]);
+  assert.deepEqual([w.total, w.monthly, w.has], [5, false, true]);
+  const rating = { zero: false, byDay: { '2026-11-02': 4, '2026-11-03': 2 } };
+  const r = reviewBuckets(rating, '2026-11-01', '2026-11-04');
+  assert.deepEqual(r.buckets.map((b) => b.value), [null, 4, 2, null]); // days without an entry are gaps, not zeros
+  assert.equal(r.total, 3);
+  const none = reviewBuckets({ zero: false, byDay: {} }, '2026-11-01', '2026-11-04');
+  assert.deepEqual([none.total, none.has], [null, false]);
+  assert.equal(reviewBuckets({ zero: true, byDay: {} }, '2026-11-01', '2026-11-04').has, false);
+  const year = reviewBuckets({ zero: true, byDay: { '2026-01-05': 1, '2026-01-20': 2, '2026-03-01': 4 } }, '2026-01-01', '2026-11-12');
+  assert.deepEqual([year.monthly, year.buckets.length, year.buckets[0], year.buckets[2]], [true, 11, { key: '2026-01', value: 3 }, { key: '2026-03', value: 4 }]);
+  assert.equal(year.total, 7);
+  const avgYear = reviewBuckets({ zero: false, byDay: { '2026-01-05': 2, '2026-01-06': 4 } }, '2026-01-01', '2026-11-12');
+  assert.equal(avgYear.buckets[0].value, 3);
 });

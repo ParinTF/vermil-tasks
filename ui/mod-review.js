@@ -1,28 +1,70 @@
-// Weekly Review module: one page that sums up the last 7 days (or the 7 before) from every switched-on module,
-// each through its weekly(since, until). Nothing is stored here; the page is built fresh every time.
+// Review module: a dashboard of a day, a week, a month or a year, from every switched-on module. Each module adds a card:
+// its weekly(since, until) gives the lines, its daily() gives numbers and a chart. Nothing is stored here; the page is built fresh every time.
 (() => {
-  let back = 0; // 0 = the last 7 days up to today, 1 = the 7 days before that
+  let kind = 'week'; // day | week | month | year
+  let back = 0; // how many periods before the current one
   const root = () => $('review-view');
   const today = () => localDay(new Date());
-  const range = () => { const until = shiftDay(today(), -7 * back); return { since: shiftDay(until, -6), until }; };
+  const range = () => reviewRange(kind, back, today());
   const fmtDay = (d) => fmt(parseDay(d), { day: 'numeric', month: 'short' });
-  const rangeLabel = () => { const { since, until } = range(); return `${fmtDay(since)} to ${fmtDay(until)}`; };
+  const KINDS = [['day', 'Day'], ['week', 'Week'], ['month', 'Month'], ['year', 'Year']];
+  const rangeLabel = () => {
+    const { since, until } = range();
+    if (kind === 'day') return back === 0 ? 'Today' : back === 1 ? 'Yesterday' : fmt(parseDay(since), { weekday: 'long', day: 'numeric', month: 'long' });
+    if (kind === 'week') return back === 0 ? 'Last 7 days' : `${fmtDay(since)} to ${fmtDay(until)}`;
+    if (kind === 'month') return fmt(parseDay(since), { month: 'long', year: 'numeric' });
+    return since.slice(0, 4);
+  };
+  const fig = (v) => (v == null ? '—' : (Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('en-US'));
 
-  function sections() {
+  // one card per module: its lines (weekly) and its numbers (daily); a module that fails to report is skipped
+  function cards() {
     const { since, until } = range();
     return MODULES.filter((m) => started.has(m.id) && m.id !== 'review').flatMap((m) => {
-      try { const s = registry[m.id]?.weekly?.(since, until); return s ? [s] : []; } catch (e) { console.error(m.id, 'weekly', e); return []; }
+      try {
+        const lines = registry[m.id]?.weekly?.(since, until) || null;
+        const series = (registry[m.id]?.daily?.() || []).map((s) => ({ s, b: reviewBuckets(s, since, until) }));
+        return lines || series.length ? [{ title: lines?.title || m.name, lines: lines?.lines || [], series, view: m.view ? m.id : '' }] : [];
+      } catch (e) { console.error(m.id, 'review', e); return []; }
     });
+  }
+  const sections = () => cards().filter((c) => c.lines.length).map((c) => ({ title: c.title, lines: c.lines }));
+
+  function chart({ s, b }, until) {
+    const max = Math.max(...b.buckets.map((x) => x.value ?? 0), 0.0001);
+    const label = (x) => (b.monthly ? fmt(parseDay(x.key + '-01'), { month: 'short', year: 'numeric' }) : fmtDay(x.key));
+    const bars = b.buckets.map((x, i) => {
+      const bar = el('i', { className: i === b.buckets.length - 1 && until === today() ? 'now' : '' });
+      bar.style.height = x.value == null ? '0' : Math.max(x.value > 0 ? 4 : 2, x.value / max * 100) + '%';
+      const col = el('span', { className: 'rv-col', title: `${label(x)}: ${fig(x.value)}` }, bar);
+      return col;
+    });
+    const first = b.buckets[0], last = b.buckets[b.buckets.length - 1];
+    return el('div', { className: 'rv-chart' },
+      el('div', { className: 'rv-bars', role: 'img', ariaLabel: `${s.label}, ${s.zero ? 'total' : 'average'} ${fig(b.total)}, ${b.buckets.length} ${b.monthly ? 'months' : 'days'}` }, ...bars),
+      el('div', { className: 'rv-axis', ariaHidden: 'true' }, el('span', {}, label(first)), el('span', {}, label(last))));
+  }
+
+  function card(c, until) {
+    const shown = c.series.filter((x) => x.b.has).slice(0, 3);
+    return el('section', { className: 'rv-card' },
+      el('h3', {}, c.title),
+      ...shown.map((x) => el('div', { className: 'rv-stat' },
+        el('div', { className: 'rv-big' }, el('b', {}, fig(x.b.total)), el('small', {}, `${x.s.label} · ${x.s.zero ? 'total' : 'average'}`)),
+        ...(kind === 'day' ? [] : [chart(x, until)]))),
+      ...(c.lines.length ? [el('ul', {}, ...c.lines.map((l) => el('li', {}, l)))] : []));
   }
 
   function build() {
     root().replaceChildren(
-      el('section', { className: 'rv-main', ariaLabel: 'Weekly review' },
-        el('div', { className: 'rv-head' }, el('h2', {}, 'Weekly review'),
-          el('div', { className: 'rv-pick', role: 'group', ariaLabel: 'Which week' },
-            el('button', { id: 'rv-now', type: 'button', ariaPressed: 'true', textContent: 'Last 7 days', onclick: () => { back = 0; paint(); } }),
-            el('button', { id: 'rv-before', type: 'button', ariaPressed: 'false', textContent: 'The 7 before', onclick: () => { back = 1; paint(); } }))),
-        el('p', { id: 'rv-range', className: 'rv-range' }),
+      el('section', { className: 'rv-main', ariaLabel: 'Review' },
+        el('div', { className: 'rv-head' }, el('h2', {}, 'Review'),
+          el('div', { className: 'rv-pick', role: 'group', ariaLabel: 'Period' },
+            ...KINDS.map(([k, l]) => el('button', { id: 'rv-k-' + k, type: 'button', ariaPressed: String(k === kind), textContent: l, onclick: () => { kind = k; back = 0; paint(); } })))),
+        el('div', { className: 'rv-nav' },
+          el('button', { id: 'rv-prev', type: 'button', className: 'linkish', ariaLabel: 'Earlier', textContent: '‹', onclick: () => { back++; paint(); } }),
+          el('p', { id: 'rv-range', className: 'rv-range' }),
+          el('button', { id: 'rv-next', type: 'button', className: 'linkish', ariaLabel: 'Later', textContent: '›', onclick: () => { back = Math.max(0, back - 1); paint(); } })),
         el('div', { id: 'rv-body', className: 'rv-body' }),
         el('div', { className: 'rv-foot' }, el('button', { id: 'rv-copy', type: 'button', className: 'linkish', textContent: 'Copy as text', onclick: copy }), el('button', { id: 'rv-save', type: 'button', className: 'linkish', textContent: 'Save as file', onclick: saveFile }), el('button', { id: 'rv-print', type: 'button', className: 'linkish', textContent: 'Print or PDF', onclick: () => window.print() }), el('span', { id: 'rv-msg', className: 'rv-msg', role: 'status' }))));
   }
@@ -38,26 +80,30 @@
   }
 
   function paint() {
-    $('rv-now').ariaPressed = String(back === 0);
-    $('rv-before').ariaPressed = String(back === 1);
+    for (const [k] of KINDS) $('rv-k-' + k).ariaPressed = String(k === kind);
     $('rv-range').textContent = rangeLabel();
+    $('rv-next').disabled = back === 0;
     $('rv-msg').textContent = '';
-    const list = sections();
+    const list = cards();
+    const { until } = range();
     $('rv-body').replaceChildren(...(list.length
-      ? list.map((s) => el('section', {}, el('h3', {}, s.title), el('ul', {}, ...s.lines.map((l) => el('li', {}, l)))))
+      ? list.map((c) => card(c, until))
       : [el('div', { className: 'empty' }, 'Nothing to sum up yet. The review reads from the modules you switch on.')]));
     $('rv-copy').hidden = $('rv-save').hidden = $('rv-print').hidden = !list.length;
   }
 
   defineModule('review', {
-    start() { back = 0; build(); paint(); },
+    start() { kind = 'week'; back = 0; build(); paint(); },
     stop() {},
     show() { paint(); },
     refresh: paint,
     keys(e) {
       if ((e.ctrlKey || e.metaKey) && !e.altKey) return;
-      if (e.key === 'ArrowLeft') { back = 1; paint(); }
-      else if (e.key === 'ArrowRight') { back = 0; paint(); }
+      if (isField(e.target.matches ? e.target : document.body)) return;
+      const k = { KeyD: 'day', KeyW: 'week', KeyM: 'month', KeyY: 'year' }[e.code];
+      if (k) { kind = k; back = 0; paint(); }
+      else if (e.key === 'ArrowLeft') { back++; paint(); }
+      else if (e.key === 'ArrowRight') { back = Math.max(0, back - 1); paint(); }
       else if (e.code === 'KeyC') copy();
     },
   });

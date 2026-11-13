@@ -32,7 +32,7 @@ The app opens on **Home**: a strip of today's numbers and one card per module. A
 | [Automations](docs/Automations.md) | Rules: when something happens, add a task, record an expense or notify you |
 | [Insights](docs/Insights.md) | Patterns across your modules, like sleep against mood or spending (needs a few weeks of data) |
 | [Assistant](docs/Assistant.md) | Ask about your week or say what to add; Gemini with your own key, sees only what you tick, acts only when you confirm |
-| [Weekly Review](docs/Weekly-Review.md) | One page summing up your week from every module |
+| [Review](docs/Weekly-Review.md) | A dashboard of your day, week, month or year from every module, with charts |
 
 Everything else is in [Settings](docs/Settings.md), [Home, backup and sync](docs/Home.md), the [command palette](docs/Command-palette.md), the [quick bar](docs/Quick-bar.md) and the [keyboard shortcuts](docs/Shortcuts.md).
 

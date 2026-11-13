@@ -1,23 +1,26 @@
-# Weekly Review
+# Review
 
-One page that sums up your week from every module you have on.
+A dashboard of your day, week, month or year, built from every module you have on. (The file is still called Weekly-Review so old links work.)
 
 ## Read it
 
-Open the **Review** tab. Choose **Last 7 days** or **The 7 before** (`←` `→`). You get one section per module that has something to say, in the order of the modules, for example:
+Open the **Review** tab and choose **Day**, **Week**, **Month** or **Year**. `‹` and `›` (or `←` `→`) move to the period before or after; `›` is off on the current one. Keys: `D` `W` `M` `Y` pick the period and `C` copies.
 
-- **Tasks**: done and added, what is overdue now, what you finished.
-- **Focus**, **Time**: minutes or hours, per task or project.
-- **Money**: spent and earned, the top categories. **Bills**, **Subscriptions**: what was paid, what is due.
-- **Habits**: percent kept and the longest streak. **Journal**: days written and average mood. **Health**, **Library**, **Shopping & Meals**, **Notes**.
-- **Goals**: each goal's progress. **People**, **Coming up** (Countdown) and **Travel**: what is near. **Stocks**: the portfolio.
+- **Day**: today, yesterday and so on, one number for the day.
+- **Week**: the last 7 days (or the 7 before, and so on).
+- **Month**: a calendar month, up to today for the current one.
+- **Year**: a calendar year, with a bar for each month.
 
-Switching a module off removes its section; a module that fails to report is skipped.
+You get one **card** per module that has something to say, in the order of the modules. A card has up to three **big numbers**, each with a small **chart** (one thin bar per day, or per month in a year; today is in the accent colour; hover a bar for its value), and under them the module's summary lines:
+
+- **Counts add up**: tasks done, focus time, money spent, workout minutes, hours tracked. A day with nothing counts as 0.
+- **Ratings average**: mood, sleep, water, habits kept. A day with no entry is a gap, not a zero.
+- Other modules (Notes, Library, People, Goals, Stocks, Travel…) show their lines only.
+
+Switching a module off removes its card; a module that fails to report is skipped.
 
 ## Take it with you
 
-- **Copy as text** puts it on the clipboard.
+- **Copy as text** puts the summary lines on the clipboard.
 - **Save as file** writes a Markdown file in Downloads (`Vermil review-<date>.md`).
-- **Print or PDF** opens the print dialog with only the review on a white page; choose **Save as PDF** there if you want a PDF.
-
-Key: `C` copies.
+- **Print or PDF** opens the print dialog with only the review, cards and charts, on a white page; choose **Save as PDF** there if you want a PDF.

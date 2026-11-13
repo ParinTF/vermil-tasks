@@ -502,6 +502,38 @@ function reviewText(range, sections) {
   return [`Review: ${range}`, '', ...sections.flatMap((s) => [s.title, ...s.lines.map((l) => '- ' + l), ''])].join('\n').trim() + '\n';
 }
 
+// ── Review: the span it covers and the numbers behind its charts ──
+// a day, the last 7 days, a calendar month or a calendar year, `back` periods before this one, never reaching past today
+function reviewRange(kind, back, today) {
+  if (kind === 'day') { const d = shiftDay(today, -back); return { since: d, until: d }; }
+  if (kind === 'week') { const until = shiftDay(today, -7 * back); return { since: shiftDay(until, -6), until }; }
+  const cap = (last) => (last > today ? today : last);
+  if (kind === 'month') {
+    const [y, m] = today.split('-').map(Number);
+    return { since: localDay(new Date(y, m - 1 - back, 1)), until: cap(localDay(new Date(y, m - back, 0))) };
+  }
+  const y = Number(today.slice(0, 4)) - back;
+  return { since: `${y}-01-01`, until: cap(`${y}-12-31`) };
+}
+
+// One series ({ byDay, zero }) over [since, until] as bars: a bar a day, or a bar a month for a span over two months.
+// A count (zero) is a sum and 0 on quiet days; a rating is an average and has gaps. `total` is the figure for the whole span.
+function reviewBuckets(series, since, until) {
+  const days = [];
+  for (let d = since; d <= until; d = shiftDay(d, 1)) days.push(d);
+  const monthly = days.length > 62;
+  const groups = new Map();
+  for (const d of days) { const k = monthly ? d.slice(0, 7) : d; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(d); }
+  const of = (list) => {
+    const vals = list.map((d) => series.byDay[d]).filter((v) => v != null);
+    if (series.zero) return Math.round(vals.reduce((n, v) => n + v, 0) * 100) / 100;
+    return vals.length ? Math.round(vals.reduce((n, v) => n + v, 0) / vals.length * 100) / 100 : null;
+  };
+  const buckets = [...groups].map(([key, list]) => ({ key, value: of(list) }));
+  const total = of(days);
+  return { buckets, total, monthly, has: series.zero ? total > 0 : total !== null };
+}
+
 // ── shopping and meals ──
 // "Pad thai: noodles, shrimp, egg" or "Omelette (egg, cheese)" -> the ingredients; text without a list gives none
 function parseIngredients(text) {
@@ -898,4 +930,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

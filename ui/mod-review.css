@@ -1,17 +1,31 @@
-/* Weekly Review module: loaded only while it is switched on */
+/* Review module: loaded only while it is switched on */
 .review-page { display: block; padding-top: 24px; }
-.rv-main { max-width: 860px; }
+.rv-main { max-width: 1100px; }
 .rv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .rv-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
 .rv-pick { display: flex; gap: 22px; }
 .rv-pick button { padding: 0 0 4px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); cursor: pointer; }
 .rv-pick button[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
-.rv-range { margin: 8px 0 20px; font-size: 14px; color: var(--mute); }
-.rv-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 0 44px; }
-.rv-body section { padding: 14px 0 22px; border-top: 1px solid var(--ink); }
-.rv-body h3 { margin: 0 0 8px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
-.rv-body ul { margin: 0; padding: 0; list-style: none; }
-.rv-body li { padding: 5px 0; font-size: 15px; line-height: 1.45; }
+.rv-nav { display: flex; align-items: baseline; gap: 14px; margin: 10px 0 20px; }
+.rv-nav .linkish { padding: 0 10px; font-size: 28px; line-height: 1; text-decoration: none; }
+.rv-nav .linkish:disabled { opacity: .3; cursor: default; }
+.rv-range { margin: 0; min-width: 9em; font-size: 15px; font-weight: 600; text-align: center; }
+.rv-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 22px 28px; }
+.rv-card { display: grid; align-content: start; gap: 14px; padding: 16px 18px 18px; border: 1px solid var(--line); border-top: 2px solid var(--ink); border-radius: 2px; }
+.rv-card h3 { margin: 0; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.rv-stat { display: grid; gap: 8px; }
+.rv-big { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.rv-big b { font-size: clamp(28px, 3vw, 40px); font-weight: 700; letter-spacing: -.02em; line-height: 1; font-variant-numeric: tabular-nums; }
+.rv-big small { font-size: 12px; color: var(--mute); }
+.rv-chart { display: grid; gap: 4px; }
+.rv-bars { display: flex; align-items: flex-end; gap: 3px; height: 54px; border-bottom: 1px solid var(--line); }
+.rv-col { flex: 1; min-width: 2px; max-width: 18px; height: 100%; display: flex; align-items: flex-end; }
+.rv-col i { display: block; width: 100%; min-height: 0; border-radius: 4px 4px 0 0; background: var(--ink); }
+.rv-col i.now { background: var(--accent); }
+.rv-col:hover i { background: var(--accent); }
+.rv-axis { display: flex; justify-content: space-between; font-size: 11px; color: var(--mute); }
+.rv-card ul { margin: 0; padding: 10px 0 0; border-top: 1px solid var(--line); list-style: none; }
+.rv-card li { padding: 3px 0; font-size: 14px; line-height: 1.45; color: var(--mute); }
 .rv-foot { display: flex; align-items: baseline; gap: 18px; margin-top: 6px; }
 .rv-foot .linkish { font-size: 14px; }
 .rv-msg { font-size: 13px; color: var(--mute); }
@@ -22,10 +36,12 @@
 
 /* printed or saved as PDF: only the review, on white */
 @media print {
-  header.top, .marquee, footer.foot, .rv-pick, .rv-foot { display: none !important; }
+  header.top, .marquee, footer.foot, .rv-pick, .rv-nav, .rv-foot { display: none !important; }
   main:not(#review-view) { display: none !important; }
   html, body { height: auto !important; overflow: visible !important; background: #fff !important; color: #000 !important; }
   #review-view { display: block !important; overflow: visible !important; padding: 0 !important; }
   .rv-body { display: block; columns: 2; }
-  .rv-body section { break-inside: avoid; }
+  .rv-card { break-inside: avoid; border-color: #999; }
+  .rv-col i { background: #000 !important; }
+  .rv-col i.now { background: #c93410 !important; }
 }
