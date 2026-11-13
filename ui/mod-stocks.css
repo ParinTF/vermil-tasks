@@ -10,6 +10,30 @@
 .st-dot.off { background: var(--accent); }
 .st-offline, .st-note-err { margin-bottom: 14px; padding: 12px 0; border-top: 1px solid var(--accent); border-bottom: 1px solid var(--accent); font-size: 14px; line-height: 1.5; color: var(--accent-text); }
 .st-offline .linkish { font-size: 14px; color: var(--accent-text); }
+.st-pages { display: flex; gap: 20px; margin: 0 0 12px; }
+.st-page-btn { padding: 0 0 4px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); cursor: pointer; }
+.st-page-btn[aria-pressed="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+.st-pane { display: block; }
+/* Watch: one slim line a stock, the same columns under a small header */
+.sw-head, .st-list.sw-list li { display: grid; grid-template-columns: minmax(80px, 1.1fr) 70px minmax(140px, 1fr) minmax(136px, 1.1fr) 72px minmax(118px, 1fr) 32px; align-items: center; gap: 8px; }
+.sw-head span, .sw-list li > span { min-width: 0; white-space: nowrap; }
+.sw-head { padding: 6px 0; border-top: 1px solid var(--ink); font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.sw-list { border-top: 1px solid var(--line); overflow-x: hidden; }
+.st-list.sw-list li { padding: 5px 0; font-size: 13px; }
+.sw-list .st-name { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.sw-list .st-name small { min-width: 0; }
+.sw-list .st-name b { font-size: 14px; }
+.sw-list .st-name small { font-size: 12px; }
+.sw-price { font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.sw-change { display: flex; align-items: center; gap: 8px; }
+.sw-change small { font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.sw-ext { display: flex; gap: 8px; font-size: 11.5px; color: var(--mute); }
+.sw-pct { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sw-pct.up { color: var(--up); }
+.sw-pct.down { color: var(--down); }
+.sw-pct.flat { color: var(--mute); }
+.sw-prev, .sw-state { font-size: 12px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.sw-list .st-wait { grid-column: 2 / -2; font-weight: 400; }
 .st-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px 24px; padding: 16px 0 20px; border-top: 1px solid var(--ink); }
 .st-sum:empty { display: none; }
 .st-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
@@ -59,12 +83,22 @@
 .st-pos-title { font-size: 16px; font-weight: 700; }
 
 @media (min-width: 860px) {
-  .stocks-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .stocks-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(240px, 22vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .st-main { display: flex; flex-direction: column; min-height: 0; }
+  .st-pane { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .st-pane[hidden] { display: none; }
   .st-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
   .st-side { min-height: 0; overflow-y: auto; }
 }
 @media (max-width: 1100px) {
   .st-list li { grid-template-columns: minmax(100px, 1fr) minmax(100px, 1fr) auto; }
   .st-ext { display: none; }
+}
+@media (max-width: 1100px) {
+  .sw-head, .st-list.sw-list li { grid-template-columns: minmax(80px, 1.1fr) 70px minmax(140px, 1fr) 72px minmax(118px, 1fr) 32px; }
+  .sw-head span:nth-child(4), .sw-ext { display: none; }
+}
+@media (min-width: 860px) and (max-width: 1000px) {
+  .sw-head, .st-list.sw-list li { grid-template-columns: minmax(90px, 1.2fr) 70px minmax(130px, 1fr) 32px; }
+  .sw-head span:nth-child(5), .sw-head span:nth-child(6), .sw-prev, .sw-state { display: none; }
 }

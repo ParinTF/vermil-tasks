@@ -1,6 +1,7 @@
 // Stocks module: look up a stock, watch it, and track what your positions are worth. It needs the internet, so every
 // use starts with a connection check; offline it shows the last saved prices and says so.
-// Data: { items: [{ symbol, name, shares, cost }], quotes: { SYMBOL: quote }, at: ms }. Prices come from the backend
+// Two pages on one list: Watch (a compact table to glance at each stock) and Portfolio (the positions, with value and profit or loss).
+// Data: { items: [{ symbol, name, shares, cost }], quotes: { SYMBOL: quote }, at: ms, page: 'watch' | 'portfolio' }. Prices come from the backend
 // (Yahoo Finance's public endpoints: free, may be delayed, and can change without notice).
 const stocksApi = { // one place for the network calls, so a test can replace them
   online: () => invoke('net_online'),
@@ -30,8 +31,14 @@ const stocksApi = { // one place for the network calls, so a test can replace th
           el('b', {}, 'No internet connection. '), 'Stocks needs it to load prices, so search and updates are off. The last saved prices are shown. ',
           el('button', { className: 'linkish', type: 'button', textContent: 'Try again', onclick: () => refresh() })),
         el('div', { id: 'st-note', className: 'st-note-err', hidden: true }),
-        el('div', { id: 'st-sum', className: 'st-sum' }),
-        el('ul', { id: 'st-list', className: 'st-list', ariaLabel: 'Your stocks' }),
+        el('div', { className: 'st-pages', role: 'group', ariaLabel: 'Stocks page' },
+          ...[['watch', 'Watch'], ['portfolio', 'Portfolio']].map(([id, label]) => { const b = el('button', { type: 'button', className: 'st-page-btn', textContent: label, onclick: () => setPage(id) }); b.dataset.page = id; return b; })),
+        el('div', { id: 'st-watch', className: 'st-pane' },
+          el('div', { className: 'sw-head', ariaHidden: 'true' }, ...['Symbol', 'Price', 'Change', 'Pre / post', 'Prev close', 'Status', ''].map((t) => el('span', {}, t))),
+          el('ul', { id: 'sw-list', className: 'st-list sw-list', ariaLabel: 'Watched stocks' })),
+        el('div', { id: 'st-port', className: 'st-pane' },
+          el('div', { id: 'st-sum', className: 'st-sum' }),
+          el('ul', { id: 'st-list', className: 'st-list', ariaLabel: 'Your positions' })),
         el('div', { id: 'st-none', className: 'empty', hidden: true }, 'Nothing here yet. Search for a stock on the right, then add it to watch or to track a position.'),
         el('p', { className: 'st-fine' }, 'Prices come from Yahoo Finance, update every 15 seconds while this tab is open, and may be delayed (some exchanges by 15 minutes). The big price is the latest trade, even before the open or after the close, and its move is against the previous close. Under it: the close, and the pre-market and after-hours moves. This is information, not advice.')),
       el('aside', { className: 'st-side', ariaLabel: 'Find and add a stock' },
@@ -68,8 +75,45 @@ const stocksApi = { // one place for the network calls, so a test can replace th
   const move = (n) => el('span', { className: 'st-move ' + (n > 0 ? 'up' : n < 0 ? 'down' : 'flat') }, (n > 0 ? '▲ ' : n < 0 ? '▼ ' : '') + pctLabel(n));
   const clock = (sec) => new Date(sec * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
+  // the page on show: the one chosen last, else Portfolio when something is held and Watch otherwise
+  const pageNow = () => (data.page === 'watch' || data.page === 'portfolio' ? data.page : data.items.some((i) => i.shares > 0) ? 'portfolio' : 'watch');
+  function setPage(p) {
+    data.page = p;
+    save();
+    paint();
+    document.querySelector(`.st-page-btn[data-page="${p}"]`)?.focus();
+  }
+
+  // one stock on the Watch page: a single line with everything the Portfolio page shows about its price, and no money
+  function watchRow(r) {
+    const q = r.q;
+    const now = q ? stockNow(q) : null;
+    const pct = (label, n) => el('span', { className: 'sw-pct ' + (n > 0 ? 'up' : n < 0 ? 'down' : 'flat') }, `${label} ${pctLabel(n)}`);
+    const ext = !q ? [] : now.label === 'Pre-market' || now.label === 'After-hours' ? [pct('Close', q.changePct)]
+      : [...(q.prePct !== null && q.prePct !== undefined ? [pct('Pre', q.prePct)] : []), ...(q.postPct !== null && q.postPct !== undefined ? [pct('Post', q.postPct)] : [])];
+    const edit = el('button', { type: 'button', className: 'st-act', ariaLabel: 'Edit ' + r.symbol, textContent: '✎', onclick: () => openPosition(r) });
+    const del = el('button', { type: 'button', className: 'st-act', ariaLabel: 'Remove ' + r.symbol, textContent: '✕', onclick: () => remove(r) });
+    const li = el('li', { tabIndex: 0, title: 'Drag to reorder', ariaLabel: `${r.symbol}. Alt and the up or down arrow move it.` },
+      el('span', { className: 'st-name' }, el('b', {}, r.symbol), el('small', {}, r.name || (q && q.name) || '')),
+      q ? el('b', { className: 'sw-price' }, priceLabel(now.price, q.currency)) : el('span', { className: 'sw-price st-wait' }, online === false ? 'no price saved' : 'loading…'),
+      el('span', { className: 'sw-change' }, ...(q ? [move(now.pct), el('small', {}, signedLabel(now.change, q.currency))] : [])),
+      el('span', { className: 'sw-ext' }, ...ext),
+      el('span', { className: 'sw-prev' }, q ? (q.prevClose ? priceLabel(q.prevClose, q.currency) : '—') : ''),
+      el('span', { className: 'sw-state' }, q ? now.label + (now.time ? ' · ' + clock(now.time) : '') : ''),
+      el('span', { className: 'st-acts' }, edit, del));
+    li.dataset.symbol = r.symbol;
+    li.onpointerdown = (e) => { if (e.button === 0 && !e.target.closest('button')) dragRow(li, e); };
+    li.onkeydown = (e) => { if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.target === li) { e.preventDefault(); e.stopPropagation(); moveRow(r.symbol, e.key === 'ArrowUp' ? -1 : 1); } };
+    return li;
+  }
+
   function paint() {
     const { rows, totals } = portfolio(data.items, data.quotes);
+    const page = pageNow();
+    $('st-watch').hidden = page !== 'watch';
+    $('st-port').hidden = page !== 'portfolio';
+    for (const b of document.querySelectorAll('.st-page-btn')) b.ariaPressed = String(b.dataset.page === page);
+    $('sw-list').replaceChildren(...rows.map(watchRow));
     $('st-sum').replaceChildren(...totals.flatMap((t) => {
       const fig = (label, value, cls = '') => el('div', { className: cls }, el('small', {}, label), el('b', {}, value));
       return [fig('Value' + (totals.length > 1 ? ' · ' + t.currency : ''), priceLabel(t.value, t.currency)),
@@ -115,7 +159,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     if (i + d < 0 || i + d >= order.length) return;
     [order[i], order[i + d]] = [order[i + d], order[i]];
     keepOrder(order);
-    document.querySelector(`#st-list li[data-symbol="${symbol}"]`)?.focus();
+    document.querySelector(`.st-pane:not([hidden]) li[data-symbol="${symbol}"]`)?.focus();
   }
   function dragRow(li, e) {
     const list = li.parentNode;
@@ -222,7 +266,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
   }
 
   const metricsFn = () => [{ id: 'stocks.value', label: 'Portfolio value (saved prices)', unit: '', get: () => portfolio(data.items, data.quotes).totals[0]?.value || 0 }];
-  const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices'], ['Alt+↑/↓', 'Move the focused stock up or down']] };
+  const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices'], ['1 / 2', 'Watch or Portfolio'], ['Alt+↑/↓', 'Move the focused stock up or down']] };
   const commandFn = () => [{ label: 'Look up a stock', hint: 'Stocks', kind: 'Command', run: async () => { await setView('stocks'); $('st-q').focus(); } }];
   const wake = () => { if (view === 'stocks') refresh(); };
   const goOnline = () => wake();
@@ -269,6 +313,8 @@ const stocksApi = { // one place for the network calls, so a test can replace th
       if (isField(t)) return;
       if (e.key === '/' || e.code === 'KeyN') { e.preventDefault(); $('st-q').focus(); }
       else if (e.code === 'KeyR') refresh();
+      else if (e.code === 'Digit1') setPage('watch');
+      else if (e.code === 'Digit2') setPage('portfolio');
     },
   });
 })();
