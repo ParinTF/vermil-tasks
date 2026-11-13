@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -884,4 +884,30 @@ test('entry-by-entry lines: newest first, inside the span, capped', () => {
   const t = [{ id: 'e1', project: 'p', desc: 'Fix bug', notes: 'found it\nfixed', start: '2026-11-05T07:40:00', end: '2026-11-05T09:00:00' }];
   assert.deepEqual(timeDetail(t, [{ id: 'p', name: 'Web', client: '' }], '2026-11-01', '2026-11-30'), ['2026-11-05 07:40-09:00 · Web · 1 h 20 min · Fix bug — found it / fixed']);
   assert.deepEqual(timeDetail(t, [], '2026-12-01', '2026-12-31'), []);
+});
+
+test('planWeek: the days of the week with their tasks, and what has no day yet', () => {
+  const days = ['2026-11-09', '2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15'];
+  const todos = [
+    { id: 'a', title: 'A', due: '2026-11-10T14:00', minutes: 60, done: false },
+    { id: 'b', title: 'B', due: '2026-11-10T09:00', minutes: 30, done: false },
+    { id: 'c', title: 'C', due: '2026-11-10T10:00', minutes: 45, done: true },
+    { id: 'd', title: 'D', due: null, done: false, createdAt: '2026-11-02' },
+    { id: 'e', title: 'E', due: '2026-11-05T09:00', done: false },       // overdue: back in the pool
+    { id: 'f', title: 'F', due: '2026-11-20T09:00', done: false },       // a later week: nowhere yet
+    { id: 'g', title: 'G', due: null, pinned: true, done: false },
+    { id: 'r', title: 'R', due: '2026-11-09T08:00', repeat: 'daily', done: false },
+  ];
+  const { cols, pool } = planWeek(todos, { '2026-11-12': [{ title: 'Rent' }] }, days, '2026-11-09');
+  assert.deepEqual(cols[1].tasks.map((t) => t.id), ['r@2026-11-10', 'b', 'c', 'a']); // by time of day, the daily task's turn included
+  assert.equal(cols[1].minutes, 90);                                         // the done one does not count
+  assert.deepEqual(cols[3].marks, [{ title: 'Rent' }]);
+  assert.ok(cols[4].tasks.some((t) => t.ghost && t.ghostOf === 'r'));       // a repeating task shows each day it comes back
+  assert.deepEqual(pool.map((t) => t.id), ['g', 'e', 'd']);                 // pinned, then the overdue, then undated
+});
+
+test('placeDue: a day for a task', () => {
+  assert.deepEqual(placeDue({ due: '2026-11-05T15:30' }, '2026-11-12'), { due: '2026-11-12T15:30', snoozeUntil: null });
+  assert.deepEqual(placeDue({ due: null }, '2026-11-12', '10'), { due: '2026-11-12T09:00', snoozeUntil: null, remindBefore: 10 });
+  assert.deepEqual(placeDue({ due: null }, '2026-11-12', ''), { due: '2026-11-12T09:00', snoozeUntil: null, remindBefore: null });
 });

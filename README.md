@@ -25,6 +25,7 @@ The app opens on **Home**: a strip of today's numbers and five packages (Work, M
 | [Travel](docs/Travel.md) | Trips with packing list, daily plan and costs against a budget |
 | [Time Tracker](docs/Time-Tracker.md) | Time by project, hours and earnings for an invoice |
 | [Projects](docs/Projects.md) | One page per project: tasks, progress, time and earnings |
+| [Week plan](docs/Week-plan.md) | Seven days on one page and the tasks still without a day; press 1 to 7 to place one |
 | [Today widget](docs/Today-widget.md) | A small always-on-top window with today's numbers |
 | [Countdown](docs/Countdown.md) | Days until what matters, yearly events too |
 | [Journal](docs/Journal.md) | A few lines a day and a mood, with a two-week chart |

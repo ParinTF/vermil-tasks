@@ -532,6 +532,31 @@ function timeDetail(entries, projects, since, until, max = 60) {
   return capLines(timeLog(entries, projects, since, until).map((x) => timeLogLine({ ...x, notes: x.notes.slice(0, 120) }, x.day)), max);
 }
 
+// ── Week plan: seven days of tasks, and the tasks that still have no day ──
+// days: the seven 'YYYY-MM-DD' of the week; marks: { day: [dated things from other modules] }.
+// pool = open tasks with no day or a day already gone (a repeating task keeps its own rhythm, so it is never in it).
+function planWeek(todos, marks, days, today) {
+  const cols = days.map((day) => ({ day, tasks: [], marks: marks[day] || [], minutes: 0 }));
+  const at = new Map(cols.map((c) => [c.day, c]));
+  for (const t of withRepeats(todos, days[0], days[6], today)) {
+    const c = t.due && at.get(t.due.slice(0, 10));
+    if (c) c.tasks.push(t);
+  }
+  for (const c of cols) {
+    c.tasks.sort((a, b) => a.due.localeCompare(b.due));
+    c.minutes = c.tasks.filter((t) => !t.done).reduce((n, t) => n + (t.minutes || 0), 0);
+  }
+  const pool = todos.filter((t) => !t.done && !t.repeat && (!t.due || t.due.slice(0, 10) < today))
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (a.due || '￿').localeCompare(b.due || '￿') || (a.createdAt || '').localeCompare(b.createdAt || ''));
+  return { cols, pool };
+}
+// the change that puts a task on a day: it keeps its time of day (09:00 when it had none, with the usual reminder), a snooze starts over
+function placeDue(t, day, defaultRemind = '0') {
+  const patch = { due: day + (t.due ? t.due.slice(10) : 'T09:00'), snoozeUntil: null };
+  if (!t.due) patch.remindBefore = defaultRemind === '' ? null : Number(defaultRemind);
+  return patch;
+}
+
 // ── Review: the span it covers and the numbers behind its charts ──
 // a day, the last 7 days, a calendar month or a calendar year, `back` periods before this one, never reaching past today
 function reviewRange(kind, back, today) {
@@ -985,4 +1010,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
