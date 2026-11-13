@@ -582,10 +582,46 @@ function xpLevel(total) {
   const into = t - xpStart(level), need = xpStart(level + 1) - xpStart(level);
   return { level, into, need, pct: Math.round(into / need * 100), title: [...XP_TITLES].reverse().find(([from]) => level >= from)[1] };
 }
-// one event -> the new state and what it paid; state: { total, day, today: { source: xp }, keys: { key: day }, log: [{ day, label, pts }] }
+// Badges: a goal each, counted from what has been paid (counts per source, minutes of work, the best streak, the level).
+// value(s) is where you are, goal where it unlocks; a badge once unlocked stays (state.badges keeps the day).
+const XP_BADGES = [
+  { id: 'first', name: 'First step', about: 'Earn your first XP', value: (s) => Math.min(1, s.total), goal: 1 },
+  { id: 'tasks10', name: 'Getting things done', about: 'Finish 10 tasks', value: (s) => s.counts.tasks || 0, goal: 10 },
+  { id: 'tasks100', name: 'Task machine', about: 'Finish 100 tasks', value: (s) => s.counts.tasks || 0, goal: 100 },
+  { id: 'tasks500', name: 'Unstoppable', about: 'Finish 500 tasks', value: (s) => s.counts.tasks || 0, goal: 500 },
+  { id: 'habits30', name: 'Creature of habit', about: 'Keep a habit 30 times', value: (s) => s.counts.habits || 0, goal: 30 },
+  { id: 'habits200', name: 'Routine master', about: 'Keep a habit 200 times', value: (s) => s.counts.habits || 0, goal: 200 },
+  { id: 'focus10', name: 'In the zone', about: 'Finish 10 focus sessions', value: (s) => s.counts.focus || 0, goal: 10 },
+  { id: 'time10h', name: 'Ten hours in', about: 'Track 10 hours of work', value: (s) => Math.floor((s.minutes || 0) / 60), goal: 10 },
+  { id: 'time100h', name: 'Hundred-hour club', about: 'Track 100 hours of work', value: (s) => Math.floor((s.minutes || 0) / 60), goal: 100 },
+  { id: 'journal7', name: 'Dear diary', about: 'Write your journal on 7 days', value: (s) => s.counts.journal || 0, goal: 7 },
+  { id: 'journal30', name: 'Chronicler', about: 'Write your journal on 30 days', value: (s) => s.counts.journal || 0, goal: 30 },
+  { id: 'workout10', name: 'On the move', about: 'Log 10 workouts', value: (s) => s.counts.workout || 0, goal: 10 },
+  { id: 'bills10', name: 'Paid on time', about: 'Pay 10 bills', value: (s) => s.counts.bills || 0, goal: 10 },
+  { id: 'streak3', name: 'Three in a row', about: 'Earn XP 3 days in a row', value: (s) => s.streak.best || 0, goal: 3 },
+  { id: 'streak7', name: 'A full week', about: 'Earn XP 7 days in a row', value: (s) => s.streak.best || 0, goal: 7 },
+  { id: 'streak30', name: 'A whole month', about: 'Earn XP 30 days in a row', value: (s) => s.streak.best || 0, goal: 30 },
+  { id: 'level5', name: 'Level 5', about: 'Reach level 5', value: (s) => xpLevel(s.total).level, goal: 5 },
+  { id: 'level10', name: 'Level 10', about: 'Reach level 10', value: (s) => xpLevel(s.total).level, goal: 10 },
+];
+// every badge with where you are: { id, name, about, value, goal, done, day }
+function xpBadges(state) {
+  const s = { ...state, counts: state.counts || {}, minutes: state.minutes || 0, streak: state.streak || {}, badges: state.badges || {} };
+  return XP_BADGES.map((b) => { const value = Math.min(b.goal, b.value(s)); return { id: b.id, name: b.name, about: b.about, value, goal: b.goal, done: value >= b.goal, day: s.badges[b.id] || '' }; });
+}
+// days in a row with XP, counting today only if something was earned today (yesterday keeps it alive until the day is over)
+function xpStreak(state, today) {
+  const st = state.streak || {};
+  return st.day === today || st.day === shiftDay(today, -1) ? st.len || 0 : 0;
+}
+// the first XP of a day after at least two days in a row pays a bonus: the streak length, at most 10
+const xpBonus = (len) => (len >= 3 ? Math.min(10, len) : 0);
+
+// one event -> { state, gained, label, bonus, badges: [names unlocked now] }
+// state: { total, day, today: { source: xp }, keys: { key: day }, log: [{ day, label, pts }], counts: { source: n }, minutes, streak: { day, len, best }, badges: { id: day } }
 function xpAward(state, type, data, today) {
   const rule = XP_RULES[type];
-  const none = { state, gained: 0, label: '' };
+  const none = { state, gained: 0, label: '', bonus: 0, badges: [] };
   if (!rule || !data || typeof data.key !== 'string' || !data.key || state.keys[data.key]) return none;
   const spent = state.day === today ? state.today : {};
   const pts = Math.min(Math.max(0, Math.round(rule.pts(data))), rule.cap - (spent[rule.src] || 0));
@@ -593,10 +629,26 @@ function xpAward(state, type, data, today) {
   const keys = { ...state.keys, [data.key]: today };
   const names = Object.keys(keys);
   if (names.length > 3000) for (const k of names) if (keys[k] < shiftDay(today, -120)) delete keys[k]; // old things are never done again
-  return {
-    gained: pts, label: rule.label,
-    state: { total: state.total + pts, day: today, today: { ...spent, [rule.src]: (spent[rule.src] || 0) + pts }, keys, log: [...state.log, { day: today, label: rule.label, pts }].slice(-60) },
+  // the streak moves once a day, on the first XP of that day
+  const old = state.streak || {};
+  let streak = old;
+  let bonus = 0;
+  if (old.day !== today) {
+    const len = old.day === shiftDay(today, -1) ? (old.len || 0) + 1 : 1;
+    streak = { day: today, len, best: Math.max(old.best || 0, len) };
+    bonus = xpBonus(len);
+  }
+  const log = [...state.log, { day: today, label: rule.label, pts }];
+  if (bonus) log.push({ day: today, label: `Streak bonus: ${streak.len} days`, pts: bonus });
+  const next = {
+    ...state, total: state.total + pts + bonus, day: today, today: { ...spent, [rule.src]: (spent[rule.src] || 0) + pts }, keys, log: log.slice(-60),
+    counts: { ...(state.counts || {}), [rule.src]: ((state.counts || {})[rule.src] || 0) + 1 },
+    minutes: (state.minutes || 0) + (type === 'time-logged' ? Math.max(0, Math.round(data.minutes) || 0) : 0),
+    streak,
   };
+  const fresh = xpBadges({ ...next, badges: state.badges }).filter((b) => b.done && !b.day);
+  next.badges = { ...(state.badges || {}), ...Object.fromEntries(fresh.map((b) => [b.id, today])) };
+  return { state: next, gained: pts, label: rule.label, bonus, badges: fresh.map((b) => b.name) };
 }
 
 // ── Review: the span it covers and the numbers behind its charts ──
@@ -1052,4 +1104,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, xpLevel, xpAward, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

@@ -26,6 +26,14 @@ When you reach a level, a message appears for a few seconds ("Level 4 · Apprent
 
 Only modules that are switched on can pay. **Each thing counts once**: undoing a task and doing it again, or ticking a habit twice, pays nothing more. **Each source has a daily limit**, so a hundred small entries cannot run the level up. While Levels is off nothing is counted; what you earned is kept.
 
+## Streak
+
+Earn XP on days in a row and the band says "5-day streak". The first XP of each day, once the streak is 3 days or more, adds a **streak bonus** equal to the streak length (at most 10). A day without XP ends the streak, but yesterday's streak stays alive until today is over, so you can still save it. The longest streak is kept for the badges.
+
+## Badges
+
+Under **Badges** on Home, 18 goals along the way: first XP, 10 / 100 / 500 tasks, 30 / 200 habits kept, 10 focus sessions, 10 and 100 hours of tracked work, 7 and 30 journal days, 10 workouts, 10 bills paid, streaks of 3, 7 and 30 days, and levels 5 and 10. A locked badge shows how far you are ("9 / 10"); an unlocked one shows the day you got it. A new badge shows a short message like a level does. Counting starts when you update: what you did before Levels learned about badges is not counted.
+
 ## Settings
 
 Settings has a **Levels** section with your level and XP, and **Start again from level 1** (it asks first).

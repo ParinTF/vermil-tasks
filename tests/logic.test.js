@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, xpLevel, xpAward, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, xpLevel, xpAward, xpBadges, xpStreak, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -944,4 +944,42 @@ test('xpAward: pays once per thing, with a daily cap per source', () => {
   assert.equal(xpAward(fresh, 'time-logged', { key: 't2', minutes: 90 }, day).gained, 9);
   assert.equal(xpAward(fresh, 'time-logged', { key: 't3', minutes: 600 }, day).gained, 30);
   assert.equal(r.state.log.length, 1);
+});
+
+test('xp streak: a bonus on the first XP of a day after two in a row, a gap starts again', () => {
+  let s = { total: 0, day: '', today: {}, keys: {}, log: [] };
+  const earn = (day, key) => { const r = xpAward(s, 'task-done', { key }, day); s = r.state; return r; };
+  assert.equal(earn('2026-11-10', 'a').bonus, 0);                 // day 1
+  assert.equal(earn('2026-11-10', 'b').bonus, 0);                 // the same day: the streak does not move
+  assert.equal(earn('2026-11-11', 'c').bonus, 0);                 // day 2
+  const third = earn('2026-11-12', 'd');                          // day 3
+  assert.equal(third.bonus, 3);
+  assert.equal(third.state.total, 10 * 4 + 3);
+  assert.equal(third.state.streak.len, 3);
+  assert.equal(xpStreak(s, '2026-11-12'), 3);
+  assert.equal(xpStreak(s, '2026-11-13'), 3);                      // still alive until the day is over
+  assert.equal(xpStreak(s, '2026-11-14'), 0);                      // a day was missed
+  const again = earn('2026-11-15', 'e');
+  assert.equal(again.state.streak.len, 1);                         // starts again
+  assert.equal(again.state.streak.best, 3);                        // the best is kept
+  assert.equal(again.bonus, 0);
+});
+
+test('xp badges: progress, unlocking once, and what is announced', () => {
+  let s = { total: 0, day: '', today: {}, keys: {}, log: [] };
+  const first = xpAward(s, 'task-done', { key: 't0' }, '2026-11-01');
+  assert.deepEqual(first.badges, ['First step']);
+  s = first.state;
+  assert.equal(s.badges.first, '2026-11-01');
+  const announced = [];
+  for (let i = 1; i < 10; i++) { const r = xpAward(s, 'task-done', { key: 't' + i }, '2026-11-01'); s = r.state; announced.push(...r.badges); }
+  assert.ok(announced.includes('Getting things done'));           // the 10th task
+  assert.ok(!xpAward(s, 'task-done', { key: 'again' }, '2026-11-01').badges.includes('Getting things done')); // announced once
+  const list = xpBadges(s);
+  assert.equal(list.find((b) => b.id === 'tasks10').done, true);
+  assert.equal(list.find((b) => b.id === 'tasks100').value, 10);
+  assert.equal(list.find((b) => b.id === 'tasks100').done, false);
+  assert.equal(xpBadges({ total: 0, log: [], keys: {}, today: {} }).filter((b) => b.done).length, 0); // an old saved state without counters works
+  const t = xpAward({ total: 0, day: '', today: {}, keys: {}, log: [] }, 'time-logged', { key: 'x', minutes: 90 }, '2026-11-01').state;
+  assert.equal(t.minutes, 90);
 });
