@@ -1,5 +1,5 @@
 // Time Tracker module: time your work by project, add it by hand, and report hours and earnings. Loaded only while it is on.
-// Data: { projects: [{ id, name, client, rate }], entries: [{ id, project, desc, start, end }], running: { project, desc, start } | null }.
+// Data: { projects: [{ id, name, client, rate }], entries: [{ id, project, desc, notes (what you did, up to 2000 characters), start, end }], running: { project, desc, notes, start } | null }.
 (() => {
   let data = { projects: [], entries: [], running: null };
   let range = 'week';
@@ -24,8 +24,9 @@
           el('div', { id: 'tt-clock', className: 'tt-clock', role: 'timer' }, '0:00:00'),
           el('form', { id: 'tt-form', className: 'tt-form', onsubmit: startStop },
             el('select', { id: 'tt-project', ariaLabel: 'Project' }),
-            el('input', { id: 'tt-desc', maxLength: 120, autocomplete: 'off', placeholder: 'What are you working on?', ariaLabel: 'What you are working on' }),
-            el('button', { id: 'tt-go', className: 'primary', type: 'submit' }, el('span', { id: 'tt-go-text' }, 'Start'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')))),
+            el('input', { id: 'tt-desc', maxLength: 120, autocomplete: 'off', placeholder: 'What are you working on?', ariaLabel: 'What you are working on', oninput: typing }),
+            el('button', { id: 'tt-go', className: 'primary', type: 'submit' }, el('span', { id: 'tt-go-text' }, 'Start'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))),
+          el('textarea', { id: 'tt-notes', className: 'tt-notes-in', rows: 2, maxLength: 2000, placeholder: 'Details: what you did (optional). You can write while the timer runs.', ariaLabel: 'Details of what you did', oninput: typing })),
         el('details', { className: 'tt-manual' }, el('summary', {}, 'Add time by hand'),
           el('form', { id: 'tt-add', className: 'tt-add', onsubmit: addManual },
             el('select', { id: 'tt-m-project', ariaLabel: 'Project' }),
@@ -36,6 +37,8 @@
         el('h3', {}, 'Report'),
         el('div', { className: 'tt-range', role: 'group', ariaLabel: 'Period' }, ...[['week', 'This week'], ['month', 'This month'], ['lastmonth', 'Last month']].map(([k, l]) => el('button', { id: 'tt-r-' + k, type: 'button', textContent: l, onclick: () => { range = k; paintReport(); } }))),
         el('div', { id: 'tt-report', className: 'tt-report' }),
+        el('h3', { id: 'tt-log-h' }, 'Work log'),
+        el('ul', { id: 'tt-log', className: 'tt-list', ariaLabel: 'Work log' }),
         el('div', { className: 'tt-foot' }, el('button', { id: 'tt-copy', type: 'button', className: 'linkish', textContent: 'Copy summary', onclick: copy }), el('button', { id: 'tt-save', type: 'button', className: 'linkish', textContent: 'Save as file', onclick: saveSummary }), el('span', { id: 'tt-copy-msg', className: 'tt-msg', role: 'status' }))),
       el('aside', { className: 'tt-side', ariaLabel: 'Projects' },
         el('h3', {}, 'Projects'),
@@ -74,16 +77,25 @@
     paint();
   }
 
+  // while the timer runs, what is typed in the two boxes goes into the running entry (saved a moment after typing stops)
+  let typeTimer;
+  function typing() {
+    if (!data.running) return;
+    clearTimeout(typeTimer);
+    typeTimer = setTimeout(() => { data.running.desc = $('tt-desc').value.trim(); data.running.notes = $('tt-notes').value.trim(); save(); }, 500);
+  }
+
   function startStop(e) {
     e.preventDefault();
     if (data.running) {
       const r = data.running;
-      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, start: r.start, end: iso(new Date()) });
+      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()) });
       data.running = null;
+      $('tt-notes').value = ''; // the next one starts with an empty box
     } else {
       const project = $('tt-project').value;
       if (!project) { $('tt-m-msg').textContent = 'Add a project first (right).'; return; }
-      data.running = { project, desc: $('tt-desc').value.trim(), start: iso(new Date()) };
+      data.running = { project, desc: $('tt-desc').value.trim(), notes: $('tt-notes').value.trim(), start: iso(new Date()) };
     }
     save();
     paint();
@@ -102,6 +114,31 @@
     paint();
   }
 
+  // One entry, in Today and in the Work log: its project, what it was, when, how long, and the details of what you did.
+  // The pencil opens a box for the details (saved as you type; Esc or leaving it closes it).
+  const editing = new Set();
+  function entryRow(e, dayLabel, list) {
+    const key = list + e.id; // the same entry can be open in Today and in the log at once, so each list has its own state
+    const del = el('button', { type: 'button', className: 'tt-x', ariaLabel: 'Remove this entry', textContent: '✕' });
+    del.onclick = () => { data.entries = data.entries.filter((x) => x.id !== e.id); save(); paint(); };
+    const open = editing.has(key);
+    const pen = el('button', { type: 'button', className: 'tt-pen' + (e.notes ? ' has' : ''), ariaLabel: e.notes ? 'Edit the details of this entry' : 'Write what you did in this entry', ariaExpanded: String(open), title: e.notes ? 'Edit the details' : 'Write what you did', textContent: '✎' });
+    pen.onclick = () => { if (open) editing.delete(key); else editing.add(key); paint(); if (!open) document.querySelector(`#${list} [data-entry="${e.id}"] textarea`)?.focus(); };
+    const line = el('div', { className: 'tt-line' }, el('span', {}, el('b', {}, nameOf(e.project)), el('small', {}, e.desc || 'No description')), el('time', {}, `${dayLabel ? dayLabel + ' ' : ''}${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`), el('b', { className: 'tt-dur' }, hoursLabel(secondsBetween(e.start, e.end))), pen, del);
+    let more = [];
+    if (open) {
+      const box = el('textarea', { className: 'tt-notes-in', rows: 3, maxLength: 2000, value: e.notes || '', placeholder: 'What did you do?', ariaLabel: 'Details of this entry' });
+      let t;
+      box.oninput = () => { e.notes = box.value.trim(); clearTimeout(t); t = setTimeout(save, 500); };
+      box.onblur = () => { clearTimeout(t); save(); editing.delete(key); paint(); };
+      box.onkeydown = (k) => { if (k.key === 'Escape') { k.preventDefault(); k.stopPropagation(); box.blur(); } };
+      more = [box];
+    } else if (e.notes) more = [el('p', { className: 'tt-notes' }, e.notes)];
+    const li = el('li', {}, line, ...more);
+    li.dataset.entry = e.id;
+    return li;
+  }
+
   function paint() {
     const keep = $('tt-project').value;
     $('tt-project').replaceChildren(...data.projects.map((p) => el('option', { value: p.id }, p.name + (p.client ? ' · ' + p.client : ''))));
@@ -113,8 +150,7 @@
     $('tt-m-project').value = data.projects.some((p) => p.id === keepManual) ? keepManual : $('tt-project').value;
     $('tt-go-text').textContent = data.running ? 'Stop' : 'Start';
     $('tt-go').classList.toggle('running', !!data.running);
-    if (data.running) $('tt-desc').value = data.running.desc;
-    $('tt-desc').disabled = !!data.running;
+    if (data.running && document.activeElement !== $('tt-desc') && document.activeElement !== $('tt-notes')) { $('tt-desc').value = data.running.desc; $('tt-notes').value = data.running.notes || ''; }
     // open tasks to pick from, when Tasks is on
     let list = $('tt-tasks');
     if (!list) { list = el('datalist', { id: 'tt-tasks' }); root().append(list); $('tt-desc').setAttribute('list', 'tt-tasks'); }
@@ -126,11 +162,7 @@
     }));
     const t = today();
     const mine = data.entries.filter((e) => localDay(new Date(e.start)) === t).sort((a, b) => b.start.localeCompare(a.start));
-    $('tt-today').replaceChildren(...mine.map((e) => {
-      const del = el('button', { type: 'button', className: 'tt-x', ariaLabel: 'Remove this entry', textContent: '✕' });
-      del.onclick = () => { data.entries = data.entries.filter((x) => x.id !== e.id); save(); paint(); };
-      return el('li', {}, el('span', {}, el('b', {}, nameOf(e.project)), el('small', {}, e.desc || 'No description')), el('time', {}, `${e.start.slice(11, 16)}–${e.end.slice(11, 16)}`), el('b', { className: 'tt-dur' }, hoursLabel(secondsBetween(e.start, e.end))), del);
-    }));
+    $('tt-today').replaceChildren(...mine.map((e) => entryRow(e, '', 'tt-today')));
     paintClock();
     paintReport();
   }
@@ -153,12 +185,16 @@
         el('div', { className: 'tt-row tt-total' }, el('span', {}, 'Total'), el('span', {}, hoursLabel(r.seconds)), el('span', {}, showAmount ? money(r.amount) : ''))]
       : [el('div', { className: 'empty' }, 'No time recorded in this period.')]));
     $('tt-copy').hidden = $('tt-save').hidden = !r.rows.length;
+    const log = timeLog(data.entries, data.projects, r.since, r.until);
+    $('tt-log-h').hidden = !log.length;
+    $('tt-log').replaceChildren(...log.map((x) => entryRow(data.entries.find((e) => e.id === x.id), fmt(parseDay(x.day), { day: 'numeric', month: 'short' }), 'tt-log')));
   }
 
   const summaryText = () => {
     const r = report();
     const label = `${fmt(parseDay(r.since), { day: 'numeric', month: 'short' })} to ${fmt(parseDay(r.until), { day: 'numeric', month: 'short', year: 'numeric' })}`;
-    return reviewText(label, [{ title: 'Time', lines: [...r.rows.map((x) => `${x.name}${x.client ? ' (' + x.client + ')' : ''}: ${hoursLabel(x.seconds)}${x.amount ? ', ' + money(x.amount) : ''}`), `Total: ${hoursLabel(r.seconds)}${r.amount ? ', ' + money(r.amount) : ''}`] }]);
+    return reviewText(label, [{ title: 'Time', lines: [...r.rows.map((x) => `${x.name}${x.client ? ' (' + x.client + ')' : ''}: ${hoursLabel(x.seconds)}${x.amount ? ', ' + money(x.amount) : ''}`), `Total: ${hoursLabel(r.seconds)}${r.amount ? ', ' + money(r.amount) : ''}`] },
+      { title: 'Work log', lines: timeLog(data.entries, data.projects, r.since, r.until).map((x) => timeLogLine(x, fmt(parseDay(x.day), { day: 'numeric', month: 'short' }))) }]);
   };
 
   function saveSummary() {

@@ -12,6 +12,12 @@ On the right, add a **project**: a name, an optional **client** and an optional 
 2. A chip in the top bar and the big clock show the running time; click the chip to come back. The timer **keeps running** if you close the window, switch the module off or restart Vermil.
 3. Press **Stop**. The entry lands in **Today** with its length.
 
+## What you did
+
+Next to the timer there is a **Details** box: write what you did, in as many lines as you like (up to 2,000 characters). You can type in it, and in the description box, **while the timer runs**; it is saved as you type and goes with the entry when you stop. Every entry has a **✎** pencil (orange when it has details): press it to write or change the details afterwards; it saves as you type, and `Esc` or leaving the box closes it. Emptying the box removes the details.
+
+Under the report there is a **Work log**: the period's entries, newest first, with the day, the time, how long, the description and the details, which you can edit there too. **Copy summary** and **Save as file** include the Work log after the totals, one line per entry ("13 Nov 07:40-09:00 · Website · 1 h 20 min · Fix bug — what you did"), ready to paste into an invoice.
+
 Forgot to start? **Add time by hand** takes its own **project** (choose it in the form; it starts on the one above and can differ), a day, a from and a to time (the end must be after the start) and a note. If something is missing it says exactly what: add a project first, pick the day, fill in the times, or the end must be after the start.
 
 ## Report

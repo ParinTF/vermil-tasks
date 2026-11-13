@@ -17,8 +17,17 @@
 .tt-add .dd { flex: 1 1 220px; max-width: 280px; }
 .tt-msg { font-size: 13px; color: var(--mute); }
 .tt-list, .tt-plist { margin: 0; padding: 0; list-style: none; }
-.tt-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 18px; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
-.tt-list li > span, .tt-plist li > span { display: grid; min-width: 0; }
+.tt-list li { padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }
+.tt-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto auto 18px; align-items: center; gap: 14px; }
+.tt-pen { padding: 0 2px; border: 0; background: none; font-size: 14px; color: var(--mute); cursor: pointer; opacity: .45; }
+.tt-pen.has { opacity: 1; color: var(--accent-text); }
+.tt-list li:hover .tt-pen, .tt-pen:focus-visible { opacity: 1; }
+.tt-pen:hover { color: var(--accent-text); }
+.tt-notes { margin: 6px 0 2px; padding-left: 10px; border-left: 2px solid var(--line); font-size: 13.5px; line-height: 1.5; color: var(--mute); white-space: pre-wrap; overflow-wrap: anywhere; }
+.tt-notes-in { width: 100%; margin-top: 8px; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 14px; color: var(--ink); resize: vertical; }
+.tt-notes-in:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+#tt-log-h { margin: 22px 0 6px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.tt-line > span, .tt-plist li > span { display: grid; min-width: 0; }
 .tt-list small, .tt-plist small { color: var(--mute); font-size: 12.5px; }
 .tt-list time { color: var(--mute); font-variant-numeric: tabular-nums; }
 .tt-dur { font-variant-numeric: tabular-nums; }

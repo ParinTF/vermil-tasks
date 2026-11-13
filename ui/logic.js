@@ -502,6 +502,20 @@ function reviewText(range, sections) {
   return [`Review: ${range}`, '', ...sections.flatMap((s) => [s.title, ...s.lines.map((l) => '- ' + l), ''])].join('\n').trim() + '\n';
 }
 
+// the entries that started within [since, until], newest first, each with its project, length and what was written (at most 300)
+function timeLog(entries, projects, since, until) {
+  return entries
+    .filter((e) => { const d = localDay(new Date(e.start)); return d >= since && d <= until; })
+    .sort((a, b) => b.start.localeCompare(a.start))
+    .slice(0, 300)
+    .map((e) => { const p = projects.find((x) => x.id === e.project); return { id: e.id, day: localDay(new Date(e.start)), from: e.start.slice(11, 16), to: e.end.slice(11, 16), name: p ? p.name : 'Deleted project', client: p ? p.client : '', desc: e.desc || '', notes: e.notes || '', seconds: secondsBetween(e.start, e.end) }; });
+}
+
+// one line of the work log for the copied summary: "13 Nov 07:40-09:00 · Website · 1 h 20 min · Fix bug — what was done"
+function timeLogLine(x, dayLabel) {
+  return [`${dayLabel} ${x.from}-${x.to}`, x.name, hoursLabel(x.seconds), x.desc].filter(Boolean).join(' · ') + (x.notes ? ' — ' + x.notes.replace(/\s*\n\s*/g, ' / ') : '');
+}
+
 // ── Review: the span it covers and the numbers behind its charts ──
 // a day, the last 7 days, a calendar month or a calendar year, `back` periods before this one, never reaching past today
 function reviewRange(kind, back, today) {
@@ -930,4 +944,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

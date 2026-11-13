@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -823,4 +823,20 @@ test('review: a count adds up with zeros, a rating averages with gaps, a year go
   assert.equal(year.total, 7);
   const avgYear = reviewBuckets({ zero: false, byDay: { '2026-01-05': 2, '2026-01-06': 4 } }, '2026-01-01', '2026-11-12');
   assert.equal(avgYear.buckets[0].value, 3);
+});
+
+test('time: the work log lists what was done, newest first, with what was written', () => {
+  const projects = [{ id: 'p', name: 'Website', client: 'Acme' }];
+  const entries = [
+    { id: 'a', project: 'p', desc: 'Fix bug', notes: 'Found the cause\nin the form', start: '2026-11-13T07:40:00', end: '2026-11-13T09:00:00' },
+    { id: 'b', project: 'p', desc: '', start: '2026-11-14T10:00:00', end: '2026-11-14T10:30:00' },
+    { id: 'c', project: 'gone', desc: 'Old', start: '2026-11-13T12:00:00', end: '2026-11-13T12:10:00' },
+    { id: 'd', project: 'p', desc: 'Outside', start: '2026-10-01T10:00:00', end: '2026-10-01T11:00:00' },
+  ];
+  const log = timeLog(entries, projects, '2026-11-01', '2026-11-30');
+  assert.deepEqual(log.map((x) => x.id), ['b', 'c', 'a']);
+  assert.deepEqual(log[2], { id: 'a', day: '2026-11-13', from: '07:40', to: '09:00', name: 'Website', client: 'Acme', desc: 'Fix bug', notes: 'Found the cause\nin the form', seconds: 4800 });
+  assert.equal(log[1].name, 'Deleted project');
+  assert.equal(timeLogLine(log[2], '13 Nov'), '13 Nov 07:40-09:00 · Website · 1 h 20 min · Fix bug — Found the cause / in the form');
+  assert.equal(timeLogLine(log[0], '14 Nov'), '14 Nov 10:00-10:30 · Website · 30 min');
 });
