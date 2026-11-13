@@ -30,3 +30,9 @@ Each suggestion is a line you can untick. **Nothing runs until you press Do the 
 - The conversation (your messages and its answers, the last 40) is saved with your data, so it is in backups and sync. **Clear the conversation** empties it.
 - It can be wrong. It only knows what you ticked, and it is told to say so when it cannot see something, but check anything that matters.
 - Needs the internet; an error (no connection, a wrong key, the free quota used up) shows in the conversation and nothing else changes.
+
+## Daily briefing
+
+Tick **Write a briefing on Home each day** (under "What it can see") and the first time Home is shown each day the Assistant writes a short briefing: what is due or overdue, what to prepare for tomorrow, one suggestion, in at most five lines and in the language of your task titles. It appears as a band at the top of Home with **Write again**.
+
+It is **off until you tick it**, and it uses only what you have ticked under "What it can see" (and the span chosen in "Summaries cover"); with nothing ticked it says so instead of sending anything. It sends that text and one fixed request to Gemini, never starts while the window is hidden (so not when Vermil starts with Windows), and cannot suggest or do anything: it only writes text. If it cannot reach Gemini, the band keeps the last briefing and says why; **Write again** tries again.

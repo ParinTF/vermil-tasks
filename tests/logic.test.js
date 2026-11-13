@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, xpLevel, xpAward, xpBadges, xpStreak, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -982,4 +982,15 @@ test('xp badges: progress, unlocking once, and what is announced', () => {
   assert.equal(xpBadges({ total: 0, log: [], keys: {}, today: {} }).filter((b) => b.done).length, 0); // an old saved state without counters works
   const t = xpAward({ total: 0, day: '', today: {}, keys: {}, log: [] }, 'time-logged', { key: 'x', minutes: 90 }, '2026-11-01').state;
   assert.equal(t.minutes, 90);
+});
+
+test('briefingDue: once a day, only when it is on, there is a key and something is shared', () => {
+  const base = { on: true, day: '2026-11-12', today: '2026-11-13', hasKey: true, shared: 2 };
+  assert.equal(briefingDue(base), true);
+  assert.equal(briefingDue({ ...base, day: '2026-11-13' }), false);   // already written today
+  assert.equal(briefingDue({ ...base, on: false }), false);
+  assert.equal(briefingDue({ ...base, hasKey: false }), false);
+  assert.equal(briefingDue({ ...base, shared: 0 }), false);           // nothing it may see
+  assert.equal(briefingDue({ ...base, day: '' }), true);
+  assert.ok(ASSIST_BRIEFING.length < 400 && ASSIST_BRIEFING.includes('5 short lines'));
 });

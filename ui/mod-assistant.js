@@ -1,9 +1,10 @@
 // Assistant module: ask questions about your own data and have things added for you, using your own Gemini API key.
 // Off until you add it and a key (Settings); it sends only the question and the parts you tick under "What it can see".
 // Every action it suggests is listed and runs only when you press the button. The key lives in the backend (assistant.rs).
-// Data: { share: [ids], period: 'week' | 'days30' | 'month' | 'lastmonth' | 'year' (the span the module summaries cover), log: [{ role: 'user' | 'model', text, error?, actions?: [{ ...action, state: 'pending' | 'done' | 'skipped' | 'error', err? }] }] }.
+// It can also write a short briefing on Home, once a day, the first time Home is shown (off until you turn it on; it uses only what you ticked).
+// Data: { brief: { on, day, text }, share: [ids], period: 'week' | 'days30' | 'month' | 'lastmonth' | 'year' (the span the module summaries cover), log: [{ role: 'user' | 'model', text, error?, actions?: [{ ...action, state: 'pending' | 'done' | 'skipped' | 'error', err? }] }] }.
 (() => {
-  let data = { share: [], log: [], period: 'week' };
+  let data = { share: [], log: [], period: 'week', brief: { on: false, day: '', text: '' } };
   let info = { has_key: false, model: '' };
   let busy = false;
   const save = () => saveModule('assistant', data).catch((e) => tell('Could not save: ' + (e.message || e)));
@@ -44,6 +45,8 @@
         el('p', { className: 'as-fine' }, 'Nothing is sent unless you tick it. Your question and the ticked parts go to Google’s Gemini service with your own key.'),
         el('label', { className: 'as-period' }, 'Summaries cover', el('select', { id: 'as-period', ariaLabel: 'Span the summaries cover', onchange: () => { data.period = $('as-period').value; save(); paintShare(); paintPreview(); } }, ...ASSIST_PERIODS.map(([k, l]) => el('option', { value: k }, l)))),
         el('div', { id: 'as-share', className: 'as-share', role: 'group', ariaLabel: 'Shared with the assistant' }),
+        el('label', { className: 'check as-opt' }, el('input', { id: 'as-brief', type: 'checkbox', checked: data.brief.on, onchange: () => { data.brief.on = $('as-brief').checked; save(); } }), ' Write a briefing on Home each day'),
+        el('p', { className: 'as-fine' }, 'Once a day, the first time Home is shown, the ticked parts go to Gemini and a short briefing appears on Home. Off until you tick this.'),
         el('details', { id: 'as-details', className: 'as-details' }, el('summary', {}, 'Show exactly what is sent'), el('pre', { id: 'as-pre' })),
         el('button', { id: 'as-clear', type: 'button', className: 'linkish', textContent: 'Clear the conversation', onclick: clearLog })));
   }
@@ -140,6 +143,42 @@
     paintLog();
   }
 
+  // ── the briefing on Home ──
+  let briefBusy = false;
+  let briefError = '';
+  const sharing = () => shareable().filter((s) => data.share.includes(s.id)).length;
+  const redrawHome = () => { if (view === 'home') renderHome(); };
+
+  async function writeBrief() {
+    if (briefBusy) return;
+    briefBusy = true;
+    briefError = '';
+    redrawHome();
+    try {
+      const raw = await invoke('assistant_ask', { system: assistantPrompt({ now: new Date(), sections: sections(), can: [], views: [], period: range() }), turns: [{ role: 'user', text: ASSIST_BRIEFING }] });
+      data.brief = { ...data.brief, day: today(), text: parseAssistantReply(raw, {}).reply };
+      save();
+    } catch (e) {
+      briefError = String(e.message || e);
+    }
+    briefBusy = false;
+    redrawHome();
+  }
+
+  // the band on Home; the first time Home is on screen each day it asks for the briefing (not while the window is hidden)
+  function briefBand() {
+    const b = data.brief;
+    if (!b.on || !info.has_key) return null;
+    if (!briefBusy && !document.hidden && briefingDue({ on: b.on, day: b.day, today: today(), hasKey: info.has_key, shared: sharing() })) setTimeout(writeBrief, 0);
+    const body = briefBusy ? [el('p', { className: 'br-note' }, 'Writing your briefing…')]
+      : !sharing() ? [el('p', { className: 'br-note' }, 'Tick what it may see on the Assistant page, then it can write your briefing. ', el('button', { type: 'button', className: 'linkish', textContent: 'Open Assistant', onclick: () => setView('assistant') }))]
+      : [...(b.text ? [el('p', { className: 'br-text' }, b.text)] : []), ...(briefError ? [el('p', { className: 'br-note bad' }, 'Could not write it: ' + briefError)] : [])];
+    return el('section', { className: 'brief', id: 'brief-band', ariaLabel: 'Briefing' },
+      el('div', { className: 'br-head' }, el('small', {}, b.text && b.day === today() ? 'Briefing · today' : b.text ? 'Briefing · ' + fmt(parseDay(b.day), { day: 'numeric', month: 'short' }) : 'Briefing'),
+        ...(sharing() && !briefBusy ? [el('button', { id: 'br-refresh', type: 'button', className: 'linkish', textContent: b.text ? 'Write again' : 'Write it now', onclick: writeBrief })] : [])),
+      ...body);
+  }
+
   async function readInfo() { try { info = await invoke('get_assistant'); } catch {} }
 
   // the key section on the Settings page
@@ -198,6 +237,7 @@
   defineModule('assistant', {
     async start() {
       data = { share: [], log: [], period: 'week', ...(moduleData.assistant || {}) };
+      data.brief = { on: false, day: '', text: '', ...(data.brief || {}) };
       await readInfo();
       build();
       enhanceSelect($('as-period'));
@@ -207,13 +247,15 @@
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
       settingsHooks.push(settingsSection);
+      homeHooks.push(briefBand);
     },
     stop() {
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
       settingsHooks.splice(settingsHooks.indexOf(settingsSection), 1);
+      homeHooks.splice(homeHooks.indexOf(briefBand), 1);
     },
-    async show() { await readInfo(); paintShare(); paintPreview(); paintLog(); },
+    async show() { await readInfo(); if ($('as-brief')) $('as-brief').checked = data.brief.on; paintShare(); paintPreview(); paintLog(); },
     keys(e) {
       const t = e.target.matches ? e.target : document.body;
       if ((e.ctrlKey || e.metaKey) && !e.altKey) return;

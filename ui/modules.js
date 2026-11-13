@@ -204,7 +204,7 @@ function renderHome() {
       el('p', { className: 'home-sub' }, started.size
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
-    ...homeHooks.flatMap((f) => { try { return [f()]; } catch (e) { console.error('home hook', e); return []; } }),
+    ...homeHooks.flatMap((f) => { try { const x = f(); return x ? [x] : []; } catch (e) { console.error('home hook', e); return []; } }), // a hook may return nothing
     ...todayStrip(),
     ...PACKS.map((p) => {
       const mods = MODULES.filter((m) => m.pack === p.id);
