@@ -100,6 +100,8 @@
     if (changed) save();
   }
 
+  // each charge day shows in the Calendar (from the next charge on, repeating by its cycle)
+  const calendarFn = (from, to) => data.subs.flatMap((s) => renewalsIn(s, from, to).map((day) => ({ day, title: `${s.name} ${money(s.amount)}`, kind: 'Renews', view: 'subs' })));
   const group = { module: 'subs', title: 'Subscriptions', items: [['N', 'New subscription']] };
   const commandFn = () => [{ label: 'Add a subscription', hint: 'Subscriptions', kind: 'Command', run: async () => { await setView('subs'); $('sb-name').focus(); } }];
 
@@ -122,12 +124,14 @@
       paint();
       checkDue();
       commandHooks.push(commandFn);
+      calendarHooks.push(calendarFn);
       shortcutGroups.push(group);
       timer = setInterval(() => { checkDue(); if (view === 'subs') paint(); }, 3600000);
     },
     stop() {
       clearInterval(timer);
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
+      calendarHooks.splice(calendarHooks.indexOf(calendarFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
     },
     show() { paint(); },

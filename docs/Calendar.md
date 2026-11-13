@@ -41,3 +41,7 @@ A repeating task is shown on **every day it comes back**, not only on its next d
 ## Countdown events
 
 With [Countdown](Countdown.md) on, its events appear in the calendar as **◆ reminders**: in the month cells, and in the day list beside the day (with "Countdown" or "Every year"). A yearly event, such as a birthday, shows every year. A reminder is not a task: you cannot tick or drag it, and clicking it opens Countdown. The hour-by-hour view lists them beside the timeline. Switching Countdown off removes them.
+
+## Subscription renewals
+
+With [Subscriptions](Subscriptions.md) on, every charge day is a **◆ reminder** too, with the amount ("Netflix 419"), repeating by its cycle from its next charge on. The notification a few days before is unchanged. Clicking one opens Subscriptions.
