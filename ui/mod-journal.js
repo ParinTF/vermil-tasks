@@ -38,6 +38,7 @@
     data.entries[day] = { ...e, text };
     if (!text.trim() && !data.entries[day].mood) delete data.entries[day];
     save();
+    if (text.trim()) emit('journal-written', { key: 'journal:' + day });
     paintList();
     paintChart();
     $('jr-saved').textContent = 'Saved';

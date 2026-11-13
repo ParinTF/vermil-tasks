@@ -557,6 +557,48 @@ function placeDue(t, day, defaultRemind = '0') {
   return patch;
 }
 
+// ── Levels: XP for what you do ──
+// Each rule is what an event from emit() is worth. An event carries a `key` naming that one thing (a task, a habit on a day), so
+// doing or undoing it again never pays twice; `cap` is the most a source can pay in a day, which keeps a flood of entries honest.
+const XP_RULES = {
+  'task-done': { src: 'tasks', label: 'Task done', pts: () => 10, cap: 200 },
+  'habit-done': { src: 'habits', label: 'Habit kept', pts: () => 8, cap: 80 },
+  'focus-done': { src: 'focus', label: 'Focus session', pts: () => 15, cap: 90 },
+  'time-logged': { src: 'time', label: 'Work tracked', pts: (d) => (d.minutes >= 5 ? Math.min(30, Math.round(d.minutes / 10) || 1) : 0), cap: 60 },
+  'journal-written': { src: 'journal', label: 'Journal written', pts: () => 10, cap: 10 },
+  'expense-added': { src: 'money', label: 'Spending recorded', pts: () => 3, cap: 15 },
+  'workout-logged': { src: 'workout', label: 'Workout', pts: () => 15, cap: 30 },
+  'water-goal': { src: 'water', label: 'Water goal reached', pts: () => 5, cap: 5 },
+  'bill-paid': { src: 'bills', label: 'Bill paid', pts: () => 10, cap: 30 },
+};
+const XP_TITLES = [[1, 'Beginner'], [3, 'Apprentice'], [5, 'Regular'], [8, 'Skilled'], [12, 'Expert'], [18, 'Master'], [25, 'Legend']];
+// level L starts at 50 * L * (L - 1) XP: 100, 300, 600, 1000...
+const xpStart = (level) => 50 * level * (level - 1);
+function xpLevel(total) {
+  const t = Math.max(0, Math.floor(total) || 0);
+  let level = Math.floor((1 + Math.sqrt(1 + 4 * t / 50)) / 2);
+  while (xpStart(level + 1) <= t) level++;
+  while (level > 1 && xpStart(level) > t) level--;
+  const into = t - xpStart(level), need = xpStart(level + 1) - xpStart(level);
+  return { level, into, need, pct: Math.round(into / need * 100), title: [...XP_TITLES].reverse().find(([from]) => level >= from)[1] };
+}
+// one event -> the new state and what it paid; state: { total, day, today: { source: xp }, keys: { key: day }, log: [{ day, label, pts }] }
+function xpAward(state, type, data, today) {
+  const rule = XP_RULES[type];
+  const none = { state, gained: 0, label: '' };
+  if (!rule || !data || typeof data.key !== 'string' || !data.key || state.keys[data.key]) return none;
+  const spent = state.day === today ? state.today : {};
+  const pts = Math.min(Math.max(0, Math.round(rule.pts(data))), rule.cap - (spent[rule.src] || 0));
+  if (pts <= 0) return none;
+  const keys = { ...state.keys, [data.key]: today };
+  const names = Object.keys(keys);
+  if (names.length > 3000) for (const k of names) if (keys[k] < shiftDay(today, -120)) delete keys[k]; // old things are never done again
+  return {
+    gained: pts, label: rule.label,
+    state: { total: state.total + pts, day: today, today: { ...spent, [rule.src]: (spent[rule.src] || 0) + pts }, keys, log: [...state.log, { day: today, label: rule.label, pts }].slice(-60) },
+  };
+}
+
 // ── Review: the span it covers and the numbers behind its charts ──
 // a day, the last 7 days, a calendar month or a calendar year, `back` periods before this one, never reaching past today
 function reviewRange(kind, back, today) {
@@ -1010,4 +1052,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, xpLevel, xpAward, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

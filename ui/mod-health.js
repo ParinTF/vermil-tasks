@@ -55,10 +55,12 @@
   function go(n) { const next = shiftDay(day, n); if (next > today()) return; day = next; paint(); }
 
   function water(n) {
-    data.water[day] = Math.max(0, (data.water[day] || 0) + n);
+    const before = data.water[day] || 0;
+    data.water[day] = Math.max(0, before + n);
     if (!data.water[day]) delete data.water[day];
     save();
     paint();
+    if (before < data.waterGoal && (data.water[day] || 0) >= data.waterGoal) emit('water-goal', { key: 'water:' + day });
   }
 
   function setSimple(key, id, max) {
@@ -80,8 +82,10 @@
     e.preventDefault();
     const minutes = Math.round(Number($('hl-wo-min').value));
     if (!Number.isFinite(minutes) || minutes < 1 || minutes > 1440) return;
-    data.workouts.push({ id: crypto.randomUUID(), day, kind: $('hl-wo-kind').value, minutes });
+    const workout = { id: crypto.randomUUID(), day, kind: $('hl-wo-kind').value, minutes };
+    data.workouts.push(workout);
     save();
+    emit('workout-logged', { key: 'workout:' + workout.id });
     $('hl-wo-min').value = '';
     paint();
   }

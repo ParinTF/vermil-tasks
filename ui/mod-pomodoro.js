@@ -18,6 +18,7 @@
     data.sessions.push({ task: task || null, title: taskTitle(task), day: localDay(new Date()), min });
     if (data.sessions.length > 2000) data.sessions.splice(0, data.sessions.length - 2000);
     refresh();
+    emit('focus-done', { minutes: min, key: 'focus:' + Date.now() });
   }
 
   const toast = (title, text) => invoke('toast', { title, text, module: 'pomodoro' }).catch(() => {});

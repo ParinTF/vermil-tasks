@@ -103,6 +103,7 @@
     };
     data.entries.push(entry);
     checkBudget(entry);
+    emit('expense-added', { key: 'expense:' + entry.id });
     save();
     month = entry.day.slice(0, 7); // show where it went
     $('mo-amount').value = '';
@@ -201,6 +202,7 @@
     const entry = { id: crypto.randomUUID(), day, kind, amount, cat, note: note || '' };
     data.entries.push(entry);
     checkBudget(entry);
+    emit('expense-added', { key: 'expense:' + entry.id });
     save();
     if ($('mo-title')) paint();
   }

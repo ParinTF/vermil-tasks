@@ -26,6 +26,7 @@ const MODULES = [
   { id: 'time', pack: 'work', name: 'Time Tracker', about: 'Time your work by project, add it by hand, and get hours and earnings for the week or the month to copy into an invoice.', script: 'mod-time.js', style: 'mod-time.css', view: 'Time' },
   { id: 'projects', pack: 'work', name: 'Projects', about: 'One page per project: its tasks and how far along they are, the time you put in and what it earns. Uses the Time Tracker projects.', script: 'mod-projects.js', style: 'mod-projects.css', view: 'Projects', requires: ['tasks', 'time'] },
   { id: 'plan', pack: 'plan', name: 'Week plan', about: 'Plan the week on one page: seven days with what is already on them, and the open tasks that still have no day. Press 1 to 7 to put a task on a day.', script: 'mod-plan.js', style: 'mod-plan.css', view: 'Plan', requires: ['tasks'] },
+  { id: 'xp', pack: 'smart', name: 'Levels', about: 'XP and levels for what you do: tasks done, habits kept, focus, time, journal days and more. One band on Home, and a short message at each level.', script: 'mod-xp.js', style: 'mod-xp.css' },
   { id: 'widget', pack: 'smart', name: 'Today widget', about: 'A small window that stays on top with today\u2019s numbers. Ctrl+Alt+W (changeable in Settings) shows or hides it, a click opens the module.', script: 'mod-widget.js' },
   { id: 'countdown', pack: 'plan', name: 'Countdown', about: 'Days until what matters: a trip, an exam, a birthday that comes back every year.', script: 'mod-countdown.js', style: 'mod-countdown.css', view: 'Countdown' },
   { id: 'journal', pack: 'life', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
@@ -203,6 +204,7 @@ function renderHome() {
       el('p', { className: 'home-sub' }, started.size
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
+    ...homeHooks.flatMap((f) => { try { return [f()]; } catch (e) { console.error('home hook', e); return []; } }),
     ...todayStrip(),
     ...PACKS.map((p) => {
       const mods = MODULES.filter((m) => m.pack === p.id);

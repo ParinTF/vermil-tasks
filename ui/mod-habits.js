@@ -68,6 +68,7 @@
     if (!data.log[day].length) delete data.log[day];
     save();
     paint();
+    if (data.log[day]?.includes(h.id)) emit('habit-done', { name: h.name, key: `habit:${h.id}:${day}` });
   }
 
   async function remove(h) {

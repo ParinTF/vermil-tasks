@@ -88,10 +88,7 @@
   function startStop(e) {
     e.preventDefault();
     if (data.running) {
-      const r = data.running;
-      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) });
-      data.running = null;
-      $('tt-notes').value = ''; // the next one starts with an empty box
+      stopRunning(); // saves the entry and empties the notes box for the next one
     } else {
       const project = $('tt-project').value;
       if (!project) { $('tt-m-msg').textContent = 'Add a project first (right).'; return; }
@@ -107,7 +104,9 @@
     const day = $('tt-m-day').value, from = $('tt-m-from').value, to = $('tt-m-to').value;
     const why = !project ? 'Add a project first (right), then choose it here.' : !day ? 'Pick the day.' : !from || !to ? 'Fill in the start and the end.' : to <= from ? 'The end must be after the start.' : '';
     if (why) { $('tt-m-msg').textContent = why; return; }
-    data.entries.push({ id: crypto.randomUUID(), project, desc: $('tt-m-desc').value.trim(), start: `${day}T${from}:00`, end: `${day}T${to}:00` });
+    const made = { id: crypto.randomUUID(), project, desc: $('tt-m-desc').value.trim(), start: `${day}T${from}:00`, end: `${day}T${to}:00` };
+    data.entries.push(made);
+    emit('time-logged', { key: 'time:' + made.id, minutes: Math.round(secondsBetween(made.start, made.end) / 60) });
     save();
     $('tt-m-desc').value = '';
     $('tt-m-msg').textContent = 'Added.';
@@ -210,9 +209,11 @@
   const trackingTask = (t) => data.running && data.running.task === t.id;
   function stopRunning() {
     const r = data.running;
-    data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) });
+    const entry = { id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) };
+    data.entries.push(entry);
     data.running = null;
     $('tt-notes').value = '';
+    emit('time-logged', { key: 'time:' + entry.id, minutes: Math.round(secondsBetween(entry.start, entry.end) / 60) });
   }
   // the task's own project when it has one, else the one in use, else the last one used, else the first
   function trackTask(t) {

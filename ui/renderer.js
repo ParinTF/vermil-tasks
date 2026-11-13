@@ -60,7 +60,7 @@ async function commit(next, { undo = true } = {}) {
     undoStack.push(before);
     if (undoStack.length > 20) undoStack.shift();
   }
-  for (const t of next) if (t.done && !before.some((b) => b.id === t.id && b.done)) emit('task-done', { title: t.title });
+  for (const t of next) if (t.done && !before.some((b) => b.id === t.id && b.done)) emit('task-done', { title: t.title, key: 'task:' + t.id });
   const apply = () => { todos = next; render(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); registry.widget?.publishSoon?.(); };
   // a hidden window never gets the frame the transition waits for, so apply directly there
   if (document.startViewTransition && !document.hidden && !calm.matches) document.startViewTransition(apply); else apply();
@@ -100,6 +100,7 @@ const commandHooks = [];
 const metricHooks = []; // () => [{ id, label, unit, get() }]: numbers a module offers to Goals
 const calendarHooks = []; // (from, to) => [{ day, title, kind, view }]: dated things a module shows in the Calendar (countdown events, renewals)
 const settingsHooks = []; // () => element: a section a module adds to the Settings page
+const homeHooks = []; // () => element: a band a module shows on Home between the heading and the Today strip (Levels)
 const eventHooks = []; // (type, data) => void: what happened ('task-done', 'bill-paid', 'over-budget'); Automations listens
 const emit = (type, data = {}) => { for (const f of [...eventHooks]) try { f(type, data); } catch (e) { console.error('event', type, e); } };
 

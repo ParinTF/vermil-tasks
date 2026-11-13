@@ -60,7 +60,7 @@
     paying = null;
     save();
     paint();
-    emit('bill-paid', { name: b.name, amount });
+    emit('bill-paid', { name: b.name, amount, key: `bill:${b.id}:${today()}` });
   }
 
   async function remove(b) {

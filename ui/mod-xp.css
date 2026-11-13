@@ -1,0 +1,22 @@
+/* Levels module: loaded only while it is switched on */
+.xp { margin-bottom: 30px; padding: 14px 0 12px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); }
+.xp-row { display: grid; grid-template-columns: auto auto minmax(80px, 1fr) auto auto; align-items: center; gap: 6px 16px; }
+.xp-lv { font-size: 26px; font-weight: 700; letter-spacing: -.01em; }
+.xp-title { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); }
+.xp-bar { height: 6px; background: var(--line); }
+.xp-bar i { display: block; height: 100%; background: var(--accent); transition: width .5s var(--ease); }
+.xp-num { font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.xp-today { font-size: 12.5px; font-weight: 600; color: var(--accent-text); }
+.xp-recent { margin-top: 8px; font-size: 13px; }
+.xp-recent summary { cursor: pointer; color: var(--mute); }
+.xp-recent ul { margin: 6px 0 0; padding: 0; list-style: none; }
+.xp-recent li { display: grid; grid-template-columns: minmax(0, 1fr) auto 64px; gap: 12px; padding: 4px 0; border-bottom: 1px solid var(--line); }
+.xp-recent em { font-style: normal; font-variant-numeric: tabular-nums; }
+.xp-recent small { color: var(--mute); text-align: right; }
+.xp-up { position: fixed; right: 24px; bottom: 64px; z-index: 40; display: grid; gap: 2px; max-width: 300px; padding: 14px 18px; border: 1px solid var(--accent); background: var(--paper); box-shadow: 0 10px 30px color-mix(in srgb, var(--ink) 25%, transparent); cursor: pointer; animation: xp-in .35s var(--ease); }
+.xp-up small { font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--accent-text); }
+.xp-up b { font-size: 22px; font-weight: 700; letter-spacing: -.01em; }
+.xp-up span { font-size: 13px; color: var(--mute); }
+@keyframes xp-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .xp-up { animation: none; } .xp-bar i { transition: none; } }
+@media (max-width: 640px) { .xp-row { grid-template-columns: auto 1fr; } .xp-bar { grid-column: 1 / -1; } }
