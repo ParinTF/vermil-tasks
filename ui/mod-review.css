@@ -35,23 +35,30 @@
 }
 
 .rv-print-head { display: none; }
+.rv-row, .rv-cell { display: contents; } /* on screen the cards are the grid's own items; the rows are for paper */
 
-/* printed or saved as PDF: only the review, on white paper, whatever the theme or accent; backgrounds (the bars) are kept */
-@page { size: A4; margin: 14mm 13mm; }
+/* printed or saved as PDF: only the review, on white paper, whatever the theme or accent; backgrounds (the bars) are kept.
+   The cards flow down two columns and a card is never split across pages. Save as PDF (Review module) prints with the logo as the
+   running header; Print... opens the print dialog, where "Headers and footers" can be switched off. */
+@page { size: A4; margin: 18mm 13mm 15mm; background: #fff; } /* the page margins are white too, not the window's paper colour */
 @media print {
-  html:root[data-theme] , :root { color-scheme: light; --paper: #fff; --ink: #12110f; --mute: #5f5b54; --line: #d9d6cf; --accent-text: #b5300f; }
+  html:root[data-theme], :root { color-scheme: light; --paper: #fff; --ink: #12110f; --mute: #5f5b54; --line: #d9d6cf; --accent-text: #b5300f; }
   header.top, .marquee, footer.foot, .rv-head, .rv-nav, .rv-foot, #theme, .views-menu { display: none !important; }
   main:not(#review-view) { display: none !important; }
   html, body { height: auto !important; overflow: visible !important; background: #fff !important; color: #12110f !important; font-size: 10.5pt; }
   * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
   #review-view { display: block !important; overflow: visible !important; padding: 0 !important; }
   .rv-main { max-width: none; }
-  .rv-print-head { display: flex !important; align-items: baseline; justify-content: space-between; gap: 12pt; margin: 0 0 12pt; padding-bottom: 8pt; border-bottom: 2pt solid #12110f; }
-  .rv-print-head b { font-size: 9pt; letter-spacing: .16em; text-transform: uppercase; }
+  .rv-print-head { display: flex !important; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 0 12pt; margin: 0 0 12pt; padding-bottom: 8pt; border-bottom: 2pt solid #12110f; }
+  .rv-brand { flex: 0 0 100%; display: flex; align-items: center; gap: 6pt; margin-bottom: 6pt; }
+  .rv-brand img { display: block; width: 8mm; height: 8mm; }
+  .rv-brand b { font-size: 8.5pt; letter-spacing: .2em; text-transform: uppercase; }
+  html.pdf .rv-brand { display: none; }
   .rv-print-head h1 { margin: 0; font-size: 22pt; font-weight: 700; letter-spacing: -.01em; line-height: 1.1; }
   .rv-print-head span { font-size: 9pt; color: #5f5b54; }
-  .rv-body { display: grid !important; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 9pt 12pt; align-items: start; }
-  .rv-card { break-inside: avoid; page-break-inside: avoid; gap: 8pt; padding: 9pt 10pt 10pt; border: .75pt solid #cfccc5; border-top: 2pt solid #12110f; border-radius: 0; }
+  .rv-body { display: block !important; columns: 2; column-gap: 12pt; }
+  .rv-row, .rv-cell { display: contents; }
+  .rv-card { display: grid; break-inside: avoid; page-break-inside: avoid; margin: 0 0 9pt; gap: 8pt; padding: 9pt 10pt 10pt; border: .75pt solid #cfccc5; border-top: 2pt solid #12110f; border-radius: 0; }
   .rv-card h3 { font-size: 8pt; }
   .rv-big b { font-size: 24pt; }
   .rv-big small { font-size: 8.5pt; }
@@ -61,5 +68,4 @@
   .rv-axis { font-size: 7.5pt; }
   .rv-card ul { padding-top: 6pt; }
   .rv-card li { padding: 1.5pt 0; font-size: 9pt; line-height: 1.4; color: #3f3c37; }
-  .rv-print-foot { display: block !important; }
 }

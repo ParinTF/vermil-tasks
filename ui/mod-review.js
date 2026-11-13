@@ -64,7 +64,8 @@
   function build() {
     root().replaceChildren(
       el('section', { className: 'rv-main', ariaLabel: 'Review' },
-        el('div', { className: 'rv-print-head' }, el('div', {}, el('b', {}, 'Vermil'), el('h1', {}, 'Review')), el('span', { id: 'rv-print-range' })), // shown only on paper
+        // on paper only: the logo and title (a PDF made here carries the logo in its running header instead)
+        el('div', { className: 'rv-print-head' }, el('div', { className: 'rv-brand' }, el('img', { src: 'logo.png', alt: '' }), el('b', {}, 'Vermil')), el('h1', {}, 'Review'), el('span', { id: 'rv-print-range' })),
         el('div', { className: 'rv-head' }, el('h2', {}, 'Review'),
           el('div', { className: 'rv-pick', role: 'group', ariaLabel: 'Period' },
             ...KINDS.map(([k, l]) => el('button', { id: 'rv-k-' + k, type: 'button', ariaPressed: String(k === kind), textContent: l, onclick: () => { kind = k; back = 0; paint(); } })))),
@@ -73,13 +74,38 @@
           el('p', { id: 'rv-range', className: 'rv-range' }),
           el('button', { id: 'rv-next', type: 'button', className: 'linkish', ariaLabel: 'Later', textContent: '›', onclick: () => { back = Math.max(0, back - 1); paint(); } })),
         el('div', { id: 'rv-body', className: 'rv-body' }),
-        el('div', { className: 'rv-foot' }, el('button', { id: 'rv-copy', type: 'button', className: 'linkish', textContent: 'Copy as text', onclick: copy }), el('button', { id: 'rv-save', type: 'button', className: 'linkish', textContent: 'Save as file', onclick: saveFile }), el('button', { id: 'rv-print', type: 'button', className: 'linkish', textContent: 'Print or PDF', onclick: () => window.print() }), el('span', { id: 'rv-msg', className: 'rv-msg', role: 'status' }))));
+        el('div', { className: 'rv-foot' }, el('button', { id: 'rv-copy', type: 'button', className: 'linkish', textContent: 'Copy as text', onclick: copy }), el('button', { id: 'rv-save', type: 'button', className: 'linkish', textContent: 'Save as file', onclick: saveFile }), el('button', { id: 'rv-pdf', type: 'button', className: 'linkish', textContent: 'Save as PDF', onclick: savePdf }), el('button', { id: 'rv-print', type: 'button', className: 'linkish', textContent: 'Print…', onclick: () => window.print() }), el('span', { id: 'rv-msg', className: 'rv-msg', role: 'status' }))));
   }
 
   function copy() {
     // the clipboard only answers a focused window, so do not wait for it forever
     const gave = new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500));
     Promise.race([navigator.clipboard.writeText(reviewText(rangeLabel(), sections())), gave]).then(() => { $('rv-msg').textContent = 'Copied'; }, () => { $('rv-msg').textContent = 'Could not copy'; });
+  }
+
+  // The logo as a data URI, for the PDF's running header (which is its own little page and cannot reach files).
+  const logoData = () => new Promise((resolve, reject) => {
+    const img = new Image();
+    img.onload = () => { const c = el('canvas', { width: 96, height: 96 }); c.getContext('2d').drawImage(img, 0, 0, 96, 96); resolve(c.toDataURL('image/png')); };
+    img.onerror = () => reject(new Error('no logo'));
+    img.src = 'logo.png';
+  });
+
+  // Save as PDF: the web engine prints this page straight to Downloads: no dialog, no browser date and title line, the logo
+  // at the top left of every page and the page number at the bottom right.
+  async function savePdf() {
+    $('rv-msg').textContent = 'Making the PDF…';
+    document.documentElement.classList.add('pdf');
+    try {
+      const font = 'font-family:Segoe UI,Arial,sans-serif;font-size:8px';
+      const header = `<div style="width:100%;padding:0 13mm;display:flex;align-items:center;gap:7px;${font}"><img src="${await logoData()}" style="width:26px;height:26px"><b style="letter-spacing:.22em">VERMIL</b></div>`;
+      const footer = `<div style="width:100%;padding:0 13mm;text-align:right;color:#666;${font}"><span class="pageNumber"></span> / <span class="totalPages"></span></div>`;
+      $('rv-msg').textContent = 'Saved ' + await invoke('save_page_pdf', { name: 'Vermil review', header, footer });
+    } catch (e) {
+      $('rv-msg').textContent = 'Could not save the PDF: ' + (e.message || e);
+    } finally {
+      document.documentElement.classList.remove('pdf');
+    }
   }
 
   function saveFile() {
@@ -95,9 +121,9 @@
     const list = cards();
     const { until } = range();
     $('rv-body').replaceChildren(...(list.length
-      ? list.map((c) => card(c, until))
+      ? Array.from({ length: Math.ceil(list.length / 2) }, (_, i) => el('div', { className: 'rv-row' }, el('div', { className: 'rv-cell' }, ...list.slice(i * 2, i * 2 + 2).map((c) => card(c, until))))) // pairs: rows on paper, so a page never splits one
       : [el('div', { className: 'empty' }, 'Nothing to sum up yet. The review reads from the modules you switch on.')]));
-    $('rv-copy').hidden = $('rv-save').hidden = $('rv-print').hidden = !list.length;
+    $('rv-copy').hidden = $('rv-save').hidden = $('rv-pdf').hidden = $('rv-print').hidden = !list.length;
   }
 
   defineModule('review', {

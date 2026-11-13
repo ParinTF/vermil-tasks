@@ -885,6 +885,70 @@ fn export_text(app: AppHandle, name: String, text: String) -> Result<String, Str
     Ok(file.display().to_string())
 }
 
+/// Plain base64 (the engine hands the PDF over this way); anything that is not base64 is an error.
+fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
+    let mut out = Vec::with_capacity(text.len() / 4 * 3);
+    let (mut acc, mut bits) = (0u32, 0u32);
+    for b in text.bytes().filter(|b| !b.is_ascii_whitespace()) {
+        let v = match b {
+            b'A'..=b'Z' => b - b'A',
+            b'a'..=b'z' => b - b'a' + 26,
+            b'0'..=b'9' => b - b'0' + 52,
+            b'+' => 62,
+            b'/' => 63,
+            b'=' => break,
+            _ => return Err("the PDF data was not valid".into()),
+        };
+        acc = (acc << 6) | v as u32;
+        bits += 6;
+        if bits >= 8 {
+            bits -= 8;
+            out.push((acc >> bits) as u8);
+            acc &= (1 << bits) - 1;
+        }
+    }
+    Ok(out)
+}
+
+/// Saves the page on screen (the Review) as a PDF in Downloads, printed by the web engine itself so there is no print dialog
+/// and no browser date line: `header` and `footer` are the HTML of the running header and footer of every page.
+#[tauri::command]
+async fn save_page_pdf(app: AppHandle, name: String, header: String, footer: String) -> Result<String, String> {
+    use webview2_com::{CallDevToolsProtocolMethodCompletedHandler, Microsoft::Web::WebView2::Win32::ICoreWebView2};
+    if header.len() > 200_000 || footer.len() > 20_000 {
+        return Err("the header is too large".into());
+    }
+    let win = app.get_webview_window("main").ok_or("no window")?;
+    let params = serde_json::json!({ "printBackground": true, "preferCSSPageSize": true, "displayHeaderFooter": true, "headerTemplate": header, "footerTemplate": footer }).to_string();
+    let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+    win.with_webview(move |wv| unsafe {
+        let tx_done = tx.clone();
+        let started = (|| -> Result<(), String> {
+            let core: ICoreWebView2 = wv.controller().CoreWebView2().map_err(|e| e.to_string())?;
+            let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |err, json| {
+                let _ = tx_done.send(if err.is_ok() { Ok(json) } else { Err(format!("{err:?}")) });
+                Ok(())
+            }));
+            core.CallDevToolsProtocolMethod(&windows::core::HSTRING::from("Page.printToPDF"), &windows::core::HSTRING::from(params), &handler).map_err(|e| e.to_string())
+        })();
+        if let Err(e) = started {
+            let _ = tx.send(Err(e));
+        }
+    }).map_err(|e| e.to_string())?;
+    let json = tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(40)))
+        .await.map_err(|e| e.to_string())?.map_err(|_| "printing took too long".to_string())??;
+    let data = serde_json::from_str::<serde_json::Value>(&json).ok().and_then(|v| v["data"].as_str().map(String::from)).ok_or("the engine returned no PDF")?;
+    let bytes = base64_decode(&data)?;
+    if !bytes.starts_with(b"%PDF") {
+        return Err("the engine returned something that is not a PDF".into());
+    }
+    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+    let base = safe_file_name(&name);
+    let file = dir.join(format!("{}-{}.pdf", if base.is_empty() { "Vermil" } else { &base }, Local::now().format("%Y-%m-%d-%H%M%S")));
+    fs::write(&file, bytes).map_err(|e| e.to_string())?;
+    Ok(file.display().to_string())
+}
+
 #[derive(Serialize)]
 struct BackupInfo {
     on: bool,
@@ -1342,7 +1406,7 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, save_page_pdf, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
@@ -1449,6 +1513,14 @@ mod tests {
         d.hotkeys.insert("widget".into(), "Ctrl+Shift+W".into());
         assert_eq!(hotkey_text(&d, "widget"), "Ctrl+Shift+W");
         assert_eq!(hotkey_text(&d, "nope"), "");
+    }
+
+    #[test]
+    fn base64_decodes_what_the_engine_sends() {
+        assert_eq!(base64_decode("JVBERi0xLjQ=").unwrap(), b"%PDF-1.4");
+        assert_eq!(base64_decode("TWFu\nTWE=").unwrap(), b"ManMa");
+        assert_eq!(base64_decode("").unwrap(), b"");
+        assert!(base64_decode("@@@@").is_err());
     }
 
     #[test]
