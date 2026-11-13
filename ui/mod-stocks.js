@@ -33,7 +33,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
         el('div', { id: 'st-sum', className: 'st-sum' }),
         el('ul', { id: 'st-list', className: 'st-list', ariaLabel: 'Your stocks' }),
         el('div', { id: 'st-none', className: 'empty', hidden: true }, 'Nothing here yet. Search for a stock on the right, then add it to watch or to track a position.'),
-        el('p', { className: 'st-fine' }, 'Prices come from Yahoo Finance and may be delayed. Pre-market moves compare with the previous close, after-hours moves with today’s close. This is information, not advice.')),
+        el('p', { className: 'st-fine' }, 'Prices come from Yahoo Finance, update every 15 seconds while this tab is open, and may be delayed (some exchanges by 15 minutes). The big price is the latest trade, even before the open or after the close, and its move is against the previous close. Under it: the close, and the pre-market and after-hours moves. This is information, not advice.')),
       el('aside', { className: 'st-side', ariaLabel: 'Find and add a stock' },
         el('form', { id: 'st-find', onsubmit: (e) => { e.preventDefault(); const first = document.querySelector('#st-results button'); if (first) first.click(); } },
           field('st-q', 'Find a stock', { type: 'search', autocomplete: 'off', placeholder: 'Name or symbol, e.g. apple or NVDA', maxLength: 40 })),
@@ -57,7 +57,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     $('st-status').replaceChildren(
       el('i', { className: 'st-dot ' + (online === null ? '' : online ? 'on' : 'off') }),
       document.createTextNode(online === null ? 'Checking connection…' : online ? 'Online' : 'Offline'),
-      ...(data.at ? [document.createTextNode(` · updated ${new Date(data.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}`)] : []),
+      ...(data.at ? [document.createTextNode(` · updated ${new Date(data.at).toLocaleTimeString('en-GB')}`)] : []),
       ...(market ? [document.createTextNode(' · ' + market)] : []));
     $('st-offline').hidden = online !== false;
     $('st-note').hidden = !note;
@@ -65,29 +65,35 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     for (const id of ['st-q', 'st-refresh']) $(id).disabled = online === false || busy;
   }
 
-  const move = (n) => el('span', { className: 'st-move' + (n < 0 ? ' down' : '') }, (n > 0 ? '▲ ' : n < 0 ? '▼ ' : '') + pctLabel(n));
+  const move = (n) => el('span', { className: 'st-move ' + (n > 0 ? 'up' : n < 0 ? 'down' : 'flat') }, (n > 0 ? '▲ ' : n < 0 ? '▼ ' : '') + pctLabel(n));
+  const clock = (sec) => new Date(sec * 1000).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
 
   function paint() {
     const { rows, totals } = portfolio(data.items, data.quotes);
     $('st-sum').replaceChildren(...totals.flatMap((t) => {
       const fig = (label, value, cls = '') => el('div', { className: cls }, el('small', {}, label), el('b', {}, value));
       return [fig('Value' + (totals.length > 1 ? ' · ' + t.currency : ''), priceLabel(t.value, t.currency)),
-        fig('Today', signedLabel(t.day, t.currency), t.day < 0 ? 'neg' : ''),
-        fig('Profit / loss', t.hasPl ? `${signedLabel(t.pl, t.currency)} (${pctLabel(t.plPct)})` : '—', t.hasPl && t.pl < 0 ? 'neg' : '')];
+        fig('Today', signedLabel(t.day, t.currency), t.day < 0 ? 'neg' : t.day > 0 ? 'pos' : ''),
+        fig('Profit / loss', t.hasPl ? `${signedLabel(t.pl, t.currency)} (${pctLabel(t.plPct)})` : '—', !t.hasPl ? '' : t.pl < 0 ? 'neg' : t.pl > 0 ? 'pos' : '')];
     }));
     $('st-list').replaceChildren(...rows.map((r) => {
       const q = r.q;
+      const now = q ? stockNow(q) : null;
+      const ext = (label, price, pct) => el('span', {}, `${label} ${priceLabel(price, q.currency)} `, move(pct));
       const edit = el('button', { type: 'button', className: 'st-act', ariaLabel: 'Edit ' + r.symbol, textContent: '✎', onclick: () => openPosition(r) });
       const del = el('button', { type: 'button', className: 'st-act', ariaLabel: 'Remove ' + r.symbol, textContent: '✕', onclick: () => remove(r) });
       return el('li', {},
         el('span', { className: 'st-name' }, el('b', {}, r.symbol), el('small', {}, r.name || (q && q.name) || '')),
-        q ? el('span', { className: 'st-price' }, priceLabel(q.price, q.currency), move(q.changePct)) : el('span', { className: 'st-price st-wait' }, online === false ? 'no price saved' : 'loading…'),
+        // the big number is the latest price, with its move against the previous close; what the market did before and after is small
+        q ? el('span', { className: 'st-price' }, el('b', { className: 'st-now' }, priceLabel(now.price, q.currency)), move(now.pct), el('small', {}, now.label + (now.time ? ' · ' + clock(now.time) : ''))) : el('span', { className: 'st-price st-wait' }, online === false ? 'no price saved' : 'loading…'),
         el('span', { className: 'st-ext' },
-          ...(q && q.prePct !== null ? [el('span', {}, 'Pre-market ', move(q.prePct))] : []),
-          ...(q && q.postPct !== null ? [el('span', {}, 'After-hours ', move(q.postPct))] : [])),
+          ...(q && now.label === 'Live' ? [el('span', {}, 'Prev close ', priceLabel(q.prevClose, q.currency))] : []),
+          ...(q && (now.label === 'Pre-market' || now.label === 'After-hours') ? [ext('Close', q.price, q.changePct)] : []),
+          ...(q && q.prePct !== null && now.label !== 'Pre-market' ? [ext('Pre-market', q.prePrice, q.prePct)] : []),
+          ...(q && q.postPct !== null && now.label !== 'After-hours' ? [ext('After-hours', q.postPrice, q.postPct)] : [])),
         el('span', { className: 'st-pos-cell' },
           ...(r.shares ? [el('span', {}, `${r.shares} sh`, q ? ` · ${priceLabel(r.value, q.currency)}` : ''),
-            ...(r.pl !== null ? [el('span', { className: 'st-pl' + (r.pl < 0 ? ' down' : '') }, `${signedLabel(r.pl, q.currency)} (${pctLabel(r.plPct)})`)] : [])] : [el('span', { className: 'st-watch' }, 'watching')])),
+            ...(r.pl !== null ? [el('span', { className: 'st-pl' + (r.pl < 0 ? ' down' : r.pl > 0 ? ' up' : '') }, `${signedLabel(r.pl, q.currency)} (${pctLabel(r.plPct)})`)] : [])] : [el('span', { className: 'st-watch' }, 'watching')])),
         el('span', { className: 'st-acts' }, edit, del));
     }));
     $('st-none').hidden = data.items.length > 0;
@@ -99,8 +105,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     if (busy) return;
     busy = true;
     note = '';
-    online = null;
-    paintStatus();
+    if (online !== true) { online = null; paintStatus(); } // an update while online does not flash "Checking connection"
     try { online = await stocksApi.online(); } catch { online = false; }
     if (online && symbols().length) {
       try {
@@ -206,7 +211,8 @@ const stocksApi = { // one place for the network calls, so a test can replace th
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
       metricHooks.push(metricsFn);
-      timer = setInterval(() => { if (view === 'stocks' && !document.hidden) refresh(); }, 60000);
+      // while this tab is open the prices update every 15 seconds (30 with more than ten stocks); Yahoo may still delay some exchanges
+      timer = setInterval(() => { if (view === 'stocks' && !document.hidden && (symbols().length <= 10 || Date.now() - data.at > 29000)) refresh(); }, 15000);
       addEventListener('online', goOnline);
       addEventListener('offline', goOffline);
     },

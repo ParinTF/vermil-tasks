@@ -984,6 +984,10 @@ struct Quote {
     post_pct: Option<f64>,
     state: String, // PRE, REGULAR, POST or CLOSED
     time: i64,
+    // the newest trade of all, even before the open or after the close, and the session it fell in (PRE, POST, or "" for the regular one)
+    last_price: f64,
+    last_time: i64,
+    last_in: String,
 }
 
 #[derive(Serialize, Debug, PartialEq)]
@@ -1022,6 +1026,11 @@ fn parse_chart(v: &serde_json::Value, now: i64) -> Result<Quote, String> {
         times.iter().zip(closes).filter_map(|(t, c)| Some((t.as_i64()?, c.as_f64()?))).filter(|(t, _)| inside(w, *t)).last().map(|(_, c)| c)
     };
     let (pre_price, post_price) = (last_in(pre), last_in(post));
+    let newest: Option<(i64, f64)> = (|| {
+        let times = res["timestamp"].as_array()?;
+        let closes = res["indicators"]["quote"].get(0)?["close"].as_array()?;
+        times.iter().zip(closes).filter_map(|(t, c)| Some((t.as_i64()?, c.as_f64()?))).last()
+    })();
     let state = if inside(pre, now) { "PRE" } else if inside(regular, now) { "REGULAR" } else if inside(post, now) { "POST" } else { "CLOSED" };
     let symbol = meta["symbol"].as_str().unwrap_or("").to_string();
     let name = meta["longName"].as_str().or(meta["shortName"].as_str()).unwrap_or(&symbol).to_string();
@@ -1038,6 +1047,9 @@ fn parse_chart(v: &serde_json::Value, now: i64) -> Result<Quote, String> {
         post_pct: post_price.map(|p| pct(p, price)),
         state: state.to_string(),
         time: meta["regularMarketTime"].as_i64().unwrap_or(0),
+        last_price: newest.map_or(price, |n| n.1),
+        last_time: newest.map_or(meta["regularMarketTime"].as_i64().unwrap_or(0), |n| n.0),
+        last_in: match newest { Some((t, _)) if inside(pre, t) => "PRE", Some((t, _)) if inside(post, t) => "POST", _ => "" }.to_string(),
         symbol,
     })
 }
@@ -1504,6 +1516,22 @@ mod tests {
         assert_eq!(parse_chart(&chart_fixture(), 1500).unwrap().state, "PRE");
         assert_eq!(parse_chart(&chart_fixture(), 2500).unwrap().state, "REGULAR");
         assert_eq!(parse_chart(&chart_fixture(), 9000).unwrap().state, "CLOSED");
+    }
+
+    #[test]
+    fn chart_has_the_newest_trade_and_its_session() {
+        let after = |times: serde_json::Value, closes: serde_json::Value| serde_json::json!({ "chart": { "result": [{
+            "meta": { "symbol": "A", "currency": "USD", "regularMarketPrice": 110.0, "chartPreviousClose": 100.0, "regularMarketTime": 2900,
+                "currentTradingPeriod": { "pre": { "start": 1000, "end": 2000 }, "regular": { "start": 2000, "end": 3000 }, "post": { "start": 3000, "end": 4000 } } },
+            "timestamp": times, "indicators": { "quote": [{ "close": closes }] } }] } });
+        let q = parse_chart(&after(serde_json::json!([1500, 2500, 3100]), serde_json::json!([102.0, 110.0, 111.1])), 3500).unwrap();
+        assert_eq!((q.last_price, q.last_time, q.last_in.as_str()), (111.1, 3100, "POST"));
+        let q = parse_chart(&after(serde_json::json!([1500, 1900]), serde_json::json!([102.0, 150.0])), 1950).unwrap();
+        assert_eq!((q.last_price, q.last_in.as_str()), (150.0, "PRE"));
+        let q = parse_chart(&after(serde_json::json!([2100, 2500]), serde_json::json!([105.0, 110.0])), 2600).unwrap();
+        assert_eq!((q.last_price, q.last_in.as_str()), (110.0, "")); // the regular session
+        let q = parse_chart(&after(serde_json::json!([]), serde_json::json!([])), 2600).unwrap();
+        assert_eq!((q.last_price, q.last_time), (110.0, 2900)); // no candles: the regular price
     }
 
     #[test]

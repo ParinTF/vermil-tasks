@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -743,4 +743,38 @@ test('settings: a key event becomes a shortcut text, or nothing when it cannot b
   assert.equal(hotkeyFromEvent(ev('ControlLeft', { ctrlKey: true })), null); // only a modifier so far
   assert.equal(hotkeyFromEvent(ev('KeyT', { ctrlKey: true, metaKey: true })), null);
   assert.equal(hotkeyFromEvent(ev('Escape', { ctrlKey: true })), null);
+});
+
+test('repeat: the first due is today at that time when it is still ahead, else the next day', () => {
+  const at = (h, m, d = 11) => new Date(2026, 10, d, h, m); // Wednesday 11 Nov 2026 by default
+  assert.equal(repeatDue('daily', '18:00', at(9, 0)), '2026-11-11T18:00');
+  assert.equal(repeatDue('daily', '08:00', at(9, 0)), '2026-11-12T08:00');
+  assert.equal(repeatDue('daily', '09:00', at(9, 0)), '2026-11-12T09:00'); // the minute itself has gone
+  assert.equal(repeatDue('weekdays', '18:00', at(9, 0, 14)), '2026-11-16T18:00'); // Saturday: Monday
+  assert.equal(repeatDue('weekly', '08:00', at(9, 0)), '2026-11-18T08:00');
+  assert.equal(repeatDue('daily', '07:30', at(9, 0), '2026-11-20'), '2026-11-20T07:30'); // editing keeps the day
+});
+
+test('repeat: an open repeating task shows on every day it comes back, from today on', () => {
+  const task = (repeat, due, extra = {}) => ({ id: 't', title: 'Stretch', due, repeat, done: false, ...extra });
+  const days = (list) => list.filter((t) => t.ghost).map((t) => t.due.slice(0, 10));
+  const out = withRepeats([task('daily', '2026-11-11T09:00')], '2026-11-08', '2026-11-15', '2026-11-11');
+  assert.deepEqual(days(out), ['2026-11-12', '2026-11-13', '2026-11-14', '2026-11-15']); // not the days before today, not its own day
+  assert.ok(out.find((t) => t.ghost).due.endsWith('T09:00') && out.find((t) => t.ghost).ghostOf === 't' && out.find((t) => t.ghost).id === 't@2026-11-12');
+  assert.deepEqual(days(withRepeats([task('weekdays', '2026-11-12T09:00')], '2026-11-12', '2026-11-22', '2026-11-12')), ['2026-11-13', '2026-11-16', '2026-11-17', '2026-11-18', '2026-11-19', '2026-11-20']);
+  assert.deepEqual(days(withRepeats([task('weekly', '2026-11-12T09:00')], '2026-11-01', '2026-12-10', '2026-11-12')), ['2026-11-19', '2026-11-26', '2026-12-03', '2026-12-10']);
+  assert.deepEqual(days(withRepeats([task('monthly', '2026-01-31T09:00')], '2026-02-01', '2026-04-30', '2026-01-31')), ['2026-02-28', '2026-03-31', '2026-04-30']); // the 31st lands on the last day of a short month
+  assert.deepEqual(days(withRepeats([task('daily', '2026-11-05T09:00')], '2026-11-08', '2026-11-13', '2026-11-12')), ['2026-11-12', '2026-11-13']); // an overdue one stays on its own day; the copies start today
+  assert.deepEqual(withRepeats([task('daily', '2026-11-11T09:00', { done: true }), task('', '2026-11-11T09:00'), task('daily', null)], '2026-11-01', '2026-11-30', '2026-11-11').filter((t) => t.ghost), []);
+});
+
+test('stocks: the latest trade is the price, against the previous close', () => {
+  const q = { price: 166.19, prevClose: 173.7, change: -7.51, changePct: -4.32, state: 'CLOSED', lastPrice: 150.0, lastIn: 'PRE', lastTime: 1700 };
+  assert.deepEqual(stockNow(q), { price: 150, change: -23.7, pct: -13.64, label: 'Pre-market', time: 1700 });
+  assert.equal(stockNow({ ...q, lastPrice: 167.84, lastIn: 'POST' }).label, 'After-hours');
+  assert.equal(stockNow({ ...q, lastPrice: 166.19, lastIn: 'REGULAR' }).label, 'At close');
+  assert.equal(stockNow({ ...q, state: 'REGULAR', lastIn: 'REGULAR' }).label, 'Live');
+  const old = { price: 110, prevClose: 100, change: 10, changePct: 10, state: 'CLOSED' }; // saved by an earlier version
+  assert.deepEqual(stockNow(old), { price: 110, change: 10, pct: 10, label: 'At close', time: 0 });
+  assert.equal(stockNow({ ...old, prevClose: 0 }).pct, 10);
 });

@@ -25,8 +25,8 @@ function dayCell(cell, list, cap, today) {
     ariaLabel: `${fmt(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${taskCount(list.length)}`,
   }, el('span', { className: 'cal-d' }, String(date.getDate())),
   ...lines.map((t) => {
-    const line = el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') }, `${t.due.slice(11, 16)} ${t.title}`);
-    if (!t.done) line.dataset.id = t.id; // an open task can be dragged to another day
+    const line = el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') + (t.ghost ? ' ghost' : '') }, `${t.due.slice(11, 16)} ${t.title}`);
+    if (!t.done && !t.ghost) line.dataset.id = t.id; // an open task can be dragged to another day
     return line;
   }),
   ...(more ? [el('span', { className: 'cal-more' }, `+${more} more`)] : []));
@@ -41,11 +41,11 @@ function renderDayPanel(list) {
   $('cal-day-title').textContent = fmt(parseDay(calDay), { weekday: 'long', day: 'numeric', month: 'long' });
   $('cal-day-count').textContent = list.length ? taskCount(list.length) : 'Nothing due';
   $('cal-day-list').replaceChildren(...list.map((t) => {
-    const box = el('input', { type: 'checkbox', checked: t.done, ariaLabel: (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title });
+    const box = el('input', { type: 'checkbox', checked: t.done, disabled: !!t.ghost, ariaLabel: (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title });
     box.onchange = () => commit(t.done ? todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)) : complete(t));
     const open = el('button', { type: 'button', className: 'cal-open' + (t.done ? ' done' : '') }, t.title);
-    open.onclick = () => showTask(t.id);
-    if (!t.done) open.dataset.id = t.id;
+    open.onclick = () => showTask(t.ghostOf || t.id);
+    if (!t.done && !t.ghost) open.dataset.id = t.id;
     return el('li', {}, box, open, el('time', {}, t.due.slice(11, 16)));
   }));
 }
@@ -62,12 +62,12 @@ function renderTimeline(list) {
       const { lane, lanes: n } = lanes[t.id];
       const late = !t.done && new Date(t.due) < now;
       const box = el('button', {
-        type: 'button', className: 'tl-block' + (t.done ? ' done' : late ? ' late' : ''),
+        type: 'button', className: 'tl-block' + (t.done ? ' done' : late ? ' late' : '') + (t.ghost ? ' ghost' : ''),
         style: `top:${start / 60 * HOUR_PX}px;height:${Math.max(22, (end - start) / 60 * HOUR_PX - 1)}px;left:calc(52px + (100% - 52px) * ${lane / n});width:calc((100% - 52px) / ${n} - 3px)`,
       }, el('b', {}, t.title), el('time', {}, `${withTime('', start).slice(1)} – ${withTime('', end % 1440 || 1440 - 1).slice(1)}`));
       box.ariaLabel = `${t.title}, ${t.due.slice(11, 16)}, ${end - start} minutes`;
-      box.onclick = () => showTask(t.id);
-      if (!t.done) {
+      box.onclick = () => showTask(t.ghostOf || t.id);
+      if (!t.done && !t.ghost) {
         box.dataset.id = t.id;
         box.append(el('span', { className: 'tl-grip', ariaHidden: 'true' }));
       }
@@ -102,8 +102,9 @@ function setCalMode(mode) {
 function renderCalendar() {
   const [y, m] = calMonth.split('-').map(Number);
   const grid = $('cal-grid');
-  const byDay = groupByDay(todos);
   const today = localDay(new Date());
+  const span = monthGrid(y, m - 1);
+  const byDay = groupByDay(withRepeats(todos, span[0].day, span[41].day, today)); // repeating tasks show on each day they come back
   const title = fmt(new Date(y, m - 1, 1), { month: 'long', year: 'numeric' });
   const day = calMode === 'day';
   $('cal-mode').textContent = day ? 'Month' : 'Day';

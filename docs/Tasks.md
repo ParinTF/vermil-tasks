@@ -12,7 +12,7 @@ Tabs on the right: **To do**, **Today** (overdue and due today), **Week** (overd
 
 Each row: tick the circle to finish it. Hover for **Pin** (pinned tasks go first), **Edit** and **Delete** (it asks first). Overdue tasks are marked.
 
-- **Repeating tasks**: finishing one leaves a fresh copy for the next day, and the finished one shows as "Back tomorrow". Daily and weekday tasks count a **streak**.
+- **Repeating tasks**: choosing a **Repeat** turns the Due field into a **Time of day** (it comes back every day, week or month, so only the time matters). The first one is today at that time if it is still ahead, otherwise the next day; the reminder fires at that time each day. Editing a repeating task changes its time and keeps its day. Finishing one leaves a fresh copy for the next day, and the finished one shows as "Back tomorrow". Daily and weekday tasks count a **streak**.
 - **History** holds what you finished, newest first; restore a task from there. Above it, a 14-day chart of how many you finished each day (a table view of the same numbers is one click away).
 - A task with a **linked note** shows it under the row, with Copy and Open.
 - **Undo**: `Ctrl+Z` brings back a deleted or changed task.

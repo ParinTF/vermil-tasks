@@ -33,3 +33,7 @@ Keyboard: `Alt+↑` / `Alt+↓` on a focused block moves it 15 minutes; add `Shi
 | `Enter` or `N` | Add a task on this day |
 | `D` / `M` | Day view / month view |
 | `Alt` + arrows on a task in the day list | Move it a day or a week |
+
+## Repeating tasks
+
+A repeating task is shown on **every day it comes back**, not only on its next due day: in the month cells (in italics), in the day list and on the timeline (dashed). Those later days are previews: you cannot tick or drag them. Open one to go to the real task. They start today and follow its rule: every day, weekdays, the same weekday each week, or the same date each month.

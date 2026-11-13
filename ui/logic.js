@@ -319,9 +319,10 @@ function portfolio(items, quotes) {
     const shares = Number(it.shares) || 0;
     const cost = Number(it.cost) || 0;
     if (!q || !shares) return { ...it, q, shares, cost, value: null, day: null, pl: null, plPct: null };
-    const value = cents(shares * q.price);
+    const now = stockNow(q);
+    const value = cents(shares * now.price);
     const spent = cents(shares * cost);
-    return { ...it, q, shares, cost, value, day: cents(shares * (q.price - q.prevClose)), pl: cost ? cents(value - spent) : null, plPct: cost ? cents((value - spent) / spent * 100) : null, spent: cost ? spent : 0 };
+    return { ...it, q, shares, cost, value, day: cents(shares * (now.price - q.prevClose)), pl: cost ? cents(value - spent) : null, plPct: cost ? cents((value - spent) / spent * 100) : null, spent: cost ? spent : 0 };
   });
   const totals = {};
   for (const r of rows) {
@@ -680,6 +681,46 @@ function hotkeyFromEvent(e) {
   return key ? [...mods, key].join('+') : null;
 }
 
+// A repeating task keeps only a time of day: its first due is today at that time if that is still ahead (and a
+// weekdays task is not on a weekend), else its next day. When editing, `keepDay` keeps the occurrence it already has.
+function repeatDue(repeat, time, now, keepDay) {
+  if (keepDay) return `${keepDay}T${time}`;
+  const today = localDay(now);
+  const ahead = time > `${two(now.getHours())}:${two(now.getMinutes())}` && (repeat !== 'weekdays' || (now.getDay() !== 0 && now.getDay() !== 6));
+  return `${ahead ? today : nextOccurrence(repeat, today, now)}T${time}`;
+}
+
+// The calendar shows an open repeating task on every day it will come back, not only on its next due day:
+// todos plus a read-only copy (`ghost`, `ghostOf`) for each of those days from `today` on, within [from, to].
+function withRepeats(todos, from, to, today) {
+  const extra = [];
+  for (const t of todos) {
+    if (t.done || !t.repeat || !t.due) continue;
+    const start = t.due.slice(0, 10), anchor = parseDay(start);
+    for (let d = [shiftDay(start, 1), from, today].sort().pop(); d <= to; d = shiftDay(d, 1)) {
+      const date = parseDay(d), dow = date.getDay();
+      const lastOfMonth = new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
+      const hit = t.repeat === 'daily' || (t.repeat === 'weekdays' && dow !== 0 && dow !== 6) || (t.repeat === 'weekly' && dow === anchor.getDay()) || (t.repeat === 'monthly' && date.getDate() === Math.min(anchor.getDate(), lastOfMonth));
+      if (hit) extra.push({ ...t, id: `${t.id}@${d}`, due: d + t.due.slice(10), ghost: true, ghostOf: t.id });
+    }
+  }
+  return [...todos, ...extra];
+}
+
+// the latest price of a quote: the newest trade, even before the open or after the close, against the previous close
+function stockNow(q) {
+  const price = q.lastPrice ?? q.price; // quotes saved by an older version have no lastPrice
+  const base = q.prevClose;
+  const session = q.lastIn || 'REGULAR';
+  return {
+    price,
+    change: base ? Math.round((price - base) * 10000) / 10000 : q.change,
+    pct: base ? Math.round((price - base) / base * 10000) / 100 : q.changePct,
+    label: session === 'PRE' ? 'Pre-market' : session === 'POST' ? 'After-hours' : q.state === 'REGULAR' ? 'Live' : 'At close',
+    time: q.lastTime || 0,
+  };
+}
+
 // the tabs in the order Settings chose; ones it does not know keep their own order, after the known ones
 function orderTabs(ids, order) {
   const at = (id) => { const i = order.indexOf(id); return i < 0 ? 1000 + ids.indexOf(id) : i; };
@@ -839,4 +880,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

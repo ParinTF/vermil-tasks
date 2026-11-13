@@ -1,5 +1,5 @@
 /* Stocks module: loaded only while it is switched on */
-.stocks-page { display: grid; gap: 32px; padding-top: 24px; }
+.stocks-page { --up: light-dark(#146c2a, #3fb950); --down: light-dark(#c62828, #ff7b72); display: grid; gap: 32px; padding-top: 24px; }
 .st-main, .st-side { min-width: 0; }
 .st-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 12px; }
 .st-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
@@ -14,17 +14,26 @@
 .st-sum:empty { display: none; }
 .st-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
 .st-sum b { font-size: clamp(20px, 2.2vw, 30px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
-.st-sum .neg b { color: var(--accent-text); }
+.st-sum .pos b { color: var(--up); }
+.st-sum .neg b { color: var(--down); }
 .st-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
-.st-list li { display: grid; grid-template-columns: minmax(110px, 1.3fr) minmax(110px, 1fr) minmax(100px, 1fr) minmax(110px, 1.2fr) auto; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.st-list li { display: grid; grid-template-columns: minmax(110px, 1.2fr) minmax(110px, 1fr) minmax(190px, 1.3fr) minmax(110px, 1.2fr) auto; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; font-variant-numeric: tabular-nums; }
 .st-name { display: grid; min-width: 0; }
 .st-name b { font-size: 16px; }
 .st-name small { overflow: hidden; color: var(--mute); text-overflow: ellipsis; white-space: nowrap; }
-.st-price { display: grid; font-weight: 600; }
+.st-price { display: grid; justify-items: start; gap: 3px; font-weight: 600; }
+.st-now { font-size: 20px; font-variant-numeric: tabular-nums; }
+.st-price small { font-size: 11.5px; font-weight: 400; color: var(--mute); }
 .st-wait, .st-watch { font-weight: 400; color: var(--mute); }
-.st-move { font-size: 12.5px; font-weight: 600; }
-.st-move.down, .st-pl.down { color: var(--accent-text); }
-.st-ext { display: grid; gap: 2px; font-size: 12px; color: var(--mute); }
+.st-move { width: fit-content; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 600; font-variant-numeric: tabular-nums; }
+.st-move.up { color: var(--up); background: color-mix(in srgb, var(--up) 14%, transparent); }
+.st-move.down { color: var(--down); background: color-mix(in srgb, var(--down) 14%, transparent); }
+.st-move.flat { color: var(--mute); }
+.st-pl.up { color: var(--up); }
+.st-pl.down { color: var(--down); }
+.st-ext { display: grid; gap: 4px; justify-items: start; font-size: 12px; color: var(--mute); }
+.st-ext > span { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
+.st-ext .st-move { padding: 0 6px; font-size: 11.5px; }
 .st-pos-cell { display: grid; gap: 2px; }
 .st-pl { font-size: 12.5px; font-weight: 600; }
 .st-acts { display: flex; gap: 10px; }

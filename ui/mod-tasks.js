@@ -54,9 +54,23 @@ function seriesStreaks() {
   return out;
 }
 
+// A repeating task keeps only a time of day (it comes back every day, week or month), so with Repeat set the Due field is a time.
+function syncRepeat() {
+  const rep = $('repeat').value, input = $('due');
+  const want = rep ? 'time' : 'datetime-local';
+  if (input.type !== want) {
+    const old = input.value;
+    input.type = want;
+    input.value = rep ? old.slice(11, 16) : ''; // a time alone has no day, so dropping Repeat asks for the date again
+  }
+  input.previousSibling.textContent = rep ? 'Time of day\n              ' : 'Due\n              ';
+}
+$('repeat').onchange = syncRepeat;
+
 function resetForm() {
   editingId = null;
   $('form').reset();
+  syncRepeat();
   $('remind').value = prefsNow.defaultRemind;
   $('submit').textContent = 'Add task';
   $('cancel').hidden = true;
@@ -119,9 +133,10 @@ function pendingItem(t) {
   edit.onclick = () => {
     editingId = t.id;
     $('title').value = t.title;
-    $('due').value = t.due || '';
-    $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('repeat').value = t.repeat || '';
+    syncRepeat();
+    $('due').value = t.repeat ? (t.due || '').slice(11, 16) : t.due || '';
+    $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('note-link').value = t.noteId || '';
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
@@ -321,7 +336,9 @@ $('form').onsubmit = async (e) => {
     fillNoteLinks();
   }
   // due stays in datetime-local form ("2026-11-12T09:00"): Date parses it as local time and it sorts as text
-  const due = $('due').value || null;
+  const old = todos.find((t) => t.id === editingId);
+  let due = $('due').value || null;
+  if (due && $('repeat').value) due = repeatDue($('repeat').value, due.slice(0, 5), new Date(), old && old.repeat && old.due ? old.due.slice(0, 10) : null);
   const fields = {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
