@@ -4,6 +4,7 @@
 .dd-btn { display: flex; align-items: center; justify-content: space-between; gap: 12px; width: 100%; min-height: 44px; padding: 0 14px; border: 1px solid color-mix(in srgb, var(--ink) 40%, transparent); border-radius: 4px; background: none; font: inherit; font-size: 15px; color: var(--ink); text-align: left; cursor: pointer; }
 .dd-btn:hover { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
 .dd-btn[aria-expanded="true"] { border-color: var(--ink); border-bottom-left-radius: 0; border-bottom-right-radius: 0; background: none; }
+.dd-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; } /* inside the box: a ring outside it was cut off by the scrolling column's edge */
 .dd-btn:disabled { opacity: .5; cursor: default; background: none; border-color: color-mix(in srgb, var(--ink) 25%, transparent); }
 .dd-btn.empty .dd-text { color: var(--mute); }
 .dd-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
