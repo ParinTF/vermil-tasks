@@ -1,6 +1,6 @@
 # Settings
 
-How Vermil looks. Open it with **Settings** in the top bar or `Ctrl+,` (press again, `Esc` or **Back** to return). Changes apply at once and are remembered.
+How Vermil looks. Open it with **Settings** in the top bar or `Ctrl+,` (press again, `Esc` or **Back** to return). Changes apply at once and are remembered. The sections are **tabs** along the top (Appearance, General, Notifications, Shortcuts, Data, About, and the Assistant when it is on): click one, or use `←` `→` (and `Home`/`End`) on the tabs. The tab you are on stays when you change a setting.
 
 ## Appearance
 

@@ -243,11 +243,30 @@ function aboutSection() {
 
 const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection, shortcutsSection, dataSection, aboutSection];
 
+// one section is shown at a time, chosen from a row of tabs; a module's section (the Assistant's) gets its own tab
+let settingsTab = 'Appearance';
 function renderSettings() {
   const scroll = $('settings-view').scrollTop;
+  const sections = [...SETTINGS_SECTIONS, ...settingsHooks].flatMap((f) => { try { return [f()]; } catch (e) { console.error('settings section', e); return []; } });
+  const names = sections.map((s) => s.ariaLabel);
+  if (!names.includes(settingsTab)) settingsTab = names[0];
+  const pick = (name) => { settingsTab = name; renderSettings(); $('st-tab-' + name)?.focus(); };
+  const tabs = names.map((name, i) => {
+    const on = name === settingsTab;
+    const b = el('button', { id: 'st-tab-' + name, type: 'button', role: 'tab', className: 'st-tab', textContent: name, ariaSelected: String(on), tabIndex: on ? 0 : -1 });
+    b.setAttribute('aria-controls', 'st-panel-' + name);
+    b.onclick = () => pick(name);
+    b.onkeydown = (e) => {
+      const to = { ArrowRight: (i + 1) % names.length, ArrowLeft: (i + names.length - 1) % names.length, Home: 0, End: names.length - 1 }[e.key];
+      if (to !== undefined) { e.preventDefault(); e.stopPropagation(); pick(names[to]); }
+    };
+    return b;
+  });
+  sections.forEach((s) => { s.hidden = s.ariaLabel !== settingsTab; s.id = 'st-panel-' + s.ariaLabel; s.setAttribute('role', 'tabpanel'); });
   $('settings-view').replaceChildren(el('div', { className: 'st-wrap' },
     el('header', { className: 'st-head' }, el('h2', {}, 'Settings'), el('button', { type: 'button', className: 'linkish', id: 'st-back', textContent: 'Back', onclick: () => setView(lastView) })),
-    ...[...SETTINGS_SECTIONS, ...settingsHooks].flatMap((f) => { try { return [f()]; } catch (e) { console.error('settings section', e); return []; } })));
+    el('div', { className: 'st-nav', role: 'tablist', ariaLabel: 'Settings sections' }, ...tabs),
+    ...sections));
   if ($('bk-body')) { paintBackup(); paintSync(); } // the sections that need the page to exist first
   $('settings-view').scrollTop = scroll;
 }
