@@ -6,6 +6,7 @@ Record what you spend and earn, by category, month by month. Adds a **Money** ta
 
 On the right: choose **Spent** or **Income**, type the **Amount** (`1,250.50` works), pick a **Category**, the date and an optional note, then **Add**.
 
+- **Keep your own**: type a category and press the **+** beside the box to keep it as a button below, one tap next time (up to 12 each for spending and income). A small ✕ on it takes it off again; your entries stay. There is no dropdown list any more.
 - **One-tap categories**: Food, Transport, Bills, Shopping, Health, Fun, Invest, Savings, Other for spending; Salary, Dividends, Gift, Refund, Other for income. Categories you used before join them, most used first. A chip fills the field and jumps to the amount.
 - A minus sign is not accepted as an amount (use Spent or Income).
 - **Currency symbol** (right column) is `฿` to start; change it any time. Other modules use the same symbol.

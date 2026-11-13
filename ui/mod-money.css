@@ -50,6 +50,14 @@
 .mo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -6px; }
 .mo-chips button { padding: 4px 11px; border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 999px; background: none; font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; }
 .mo-chips button:hover { border-color: var(--ink); }
+.mo-catrow { display: flex; align-items: flex-end; gap: 10px; }
+.mo-catrow input { flex: 1; }
+.mo-plus { flex: none; width: 34px; height: 34px; margin-bottom: 2px; padding: 0; border: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 50%; background: none; font: inherit; font-size: 20px; line-height: 1; color: var(--ink); cursor: pointer; }
+.mo-plus:hover { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.mo-chipgroup { display: inline-flex; align-items: center; }
+.mo-chipgroup > button:first-child { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+.mo-chips .mo-chip-x { padding: 4px 8px; border-left: 0; border-top-left-radius: 0; border-bottom-left-radius: 0; font-size: 10px; color: var(--mute); }
+.mo-chips .mo-chip-x:hover { color: var(--accent-text); }
 .mo-chips button[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
 .mo-kind { display: flex; gap: 22px; }
 .mo-kind button { padding: 0 0 4px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); cursor: pointer; }

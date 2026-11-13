@@ -1,12 +1,11 @@
 // Expenses module: a month of spending and income by category, in its own view. Loaded only while the module is on.
-// Data: { cur: '฿', entries: [{ id, day, kind: 'out' | 'in', amount, cat, note }] }.
+// Data: { cur: '฿', entries: [{ id, day, kind: 'out' | 'in', amount, cat, note }], budgets, chips: { out: [cat], in: [cat] } (categories kept as buttons) }.
 (() => {
   let data = { cur: '฿', entries: [], budgets: {}, alerted: {} }; // budgets: { category: monthly limit }, alerted: { month: { category: 80 or 100 } }
   let month = localDay(new Date()).slice(0, 7);
   let kind = 'out';
   // one tap fills the category; what you used before joins these, most used first
   const QUICK = { out: ['Food', 'Transport', 'Bills', 'Shopping', 'Health', 'Fun', 'Invest', 'Savings', 'Other'], in: ['Salary', 'Dividends', 'Gift', 'Refund', 'Other'] };
-  const DEFAULT_CATS = [...new Set([...QUICK.out, ...QUICK.in])];
   const save = () => saveModule('money', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('money-view');
   const money = (n) => moneyLabel(n, data.cur);
@@ -31,9 +30,10 @@
             el('button', { id: 'mo-out', type: 'button', ariaPressed: 'true', textContent: 'Spent', onclick: () => setKind('out') }),
             el('button', { id: 'mo-in', type: 'button', ariaPressed: 'false', textContent: 'Income', onclick: () => setKind('in') })),
           num('mo-amount', 'Amount', { inputMode: 'decimal', autocomplete: 'off', placeholder: '0', ariaLabel: 'Amount' }),
-          num('mo-cat', 'Category', { autocomplete: 'off', maxLength: 30, placeholder: 'Food' }),
-          el('div', { id: 'mo-chips', className: 'mo-chips', role: 'group', ariaLabel: 'Quick categories' }),
-          el('datalist', { id: 'mo-cats' }),
+          el('label', { className: 'mo-field' }, 'Category', el('div', { className: 'mo-catrow' },
+            el('input', { id: 'mo-cat', autocomplete: 'off', maxLength: 30, placeholder: 'Food' }),
+            el('button', { id: 'mo-addcat', type: 'button', className: 'mo-plus', textContent: '+', title: 'Keep this category as a button below', ariaLabel: 'Keep this category as a button below', onclick: keepCategory }))),
+          el('div', { id: 'mo-chips', className: 'mo-chips', role: 'group', ariaLabel: 'Categories' }),
           num('mo-day', 'Date', { type: 'date' }),
           num('mo-note', 'Note', { maxLength: 120, autocomplete: 'off', placeholder: 'Optional' }),
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
@@ -44,8 +44,6 @@
           el('div', { className: 'mo-brow' }, el('input', { id: 'mo-bcat', maxLength: 30, autocomplete: 'off', placeholder: 'Category', ariaLabel: 'Budget category' }), el('input', { id: 'mo-blimit', inputMode: 'decimal', autocomplete: 'off', placeholder: 'Limit', ariaLabel: 'Monthly limit' }), el('button', { className: 'linkish', type: 'submit', textContent: 'Set' })),
           el('div', { id: 'mo-bmsg', className: 'mo-msg', role: 'status' }),
           el('ul', { id: 'mo-bedit', className: 'mo-bedit' }))));
-    $('mo-cat').setAttribute('list', 'mo-cats');
-    $('mo-bcat').setAttribute('list', 'mo-cats');
     $('mo-cat').oninput = paintChips;
     paintChips();
     $('mo-cur').value = data.cur;
@@ -61,12 +59,30 @@
   function paintChips() {
     const mine = {};
     for (const e of data.entries) if (e.kind === kind) mine[e.cat] = (mine[e.cat] || 0) + 1;
-    const extra = Object.keys(mine).filter((c) => !QUICK[kind].includes(c)).sort((a, b) => mine[b] - mine[a]).slice(0, 4);
-    $('mo-chips').replaceChildren(...[...QUICK[kind], ...extra].map((c) => {
+    const mine2 = data.chips[kind];
+    const extra = Object.keys(mine).filter((c) => !QUICK[kind].includes(c) && !mine2.includes(c)).sort((a, b) => mine[b] - mine[a]).slice(0, 4);
+    $('mo-chips').replaceChildren(...[...QUICK[kind], ...mine2, ...extra].map((c) => {
       const b = el('button', { type: 'button', textContent: c, ariaPressed: String($('mo-cat').value.trim().toLowerCase() === c.toLowerCase()) });
       b.onclick = () => { $('mo-cat').value = c; paintChips(); $('mo-amount').focus(); };
-      return b;
+      if (!mine2.includes(c)) return b;
+      // a category you kept: a small x takes it off again
+      const x = el('button', { type: 'button', className: 'mo-chip-x', textContent: '✕', ariaLabel: `Remove the button ${c}`, title: 'Remove this button' });
+      x.onclick = () => { data.chips[kind] = mine2.filter((n) => n !== c); save(); paintChips(); };
+      return el('span', { className: 'mo-chipgroup' }, b, x);
     }));
+  }
+
+  // the + beside the Category box: keep what is typed as a button below, so next time it is one tap
+  function keepCategory() {
+    const name = $('mo-cat').value.trim();
+    if (!name) { $('mo-msg').textContent = 'Type a category first, then press +.'; $('mo-cat').focus(); return; }
+    const have = [...QUICK[kind], ...data.chips[kind]].some((c) => c.toLowerCase() === name.toLowerCase());
+    if (have) { $('mo-msg').textContent = `${name} is already a button.`; return; }
+    if (data.chips[kind].length >= 12) { $('mo-msg').textContent = 'That is 12 buttons already. Remove one first.'; return; }
+    data.chips[kind].push(name);
+    save();
+    $('mo-msg').textContent = `${name} is now a button.`;
+    paintChips();
   }
 
   function setKind(k) {
@@ -168,8 +184,6 @@
       return el('li', {}, el('span', {}, cat), el('time', {}, money(limit)), del);
     }));
     $('mo-none').hidden = s.list.length > 0;
-    const used = [...new Set([...data.entries.map((e) => e.cat), ...DEFAULT_CATS])];
-    $('mo-cats').replaceChildren(...used.map((c) => el('option', { value: c })));
   }
 
   const metricsFn = () => {
@@ -217,6 +231,7 @@
     start() {
       data = { ...data, ...(moduleData.money || {}) };
       data.budgets = data.budgets || {};
+      data.chips = { out: [], in: [], ...(data.chips || {}) }; // categories you kept as buttons
       data.alerted = data.alerted || {};
       build();
       paint();
