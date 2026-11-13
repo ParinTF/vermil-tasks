@@ -82,7 +82,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
       const ext = (label, price, pct) => el('span', {}, `${label} ${priceLabel(price, q.currency)} `, move(pct));
       const edit = el('button', { type: 'button', className: 'st-act', ariaLabel: 'Edit ' + r.symbol, textContent: '✎', onclick: () => openPosition(r) });
       const del = el('button', { type: 'button', className: 'st-act', ariaLabel: 'Remove ' + r.symbol, textContent: '✕', onclick: () => remove(r) });
-      return el('li', {},
+      const li = el('li', { tabIndex: 0, title: 'Drag to reorder', ariaLabel: `${r.symbol}. Alt and the up or down arrow move it.` },
         el('span', { className: 'st-name' }, el('b', {}, r.symbol), el('small', {}, r.name || (q && q.name) || '')),
         // the big number is the latest price, with its move against the previous close; what the market did before and after is small
         q ? el('span', { className: 'st-price' }, el('b', { className: 'st-now' }, priceLabel(now.price, q.currency)), move(now.pct), el('small', {}, now.label + (now.time ? ' · ' + clock(now.time) : ''))) : el('span', { className: 'st-price st-wait' }, online === false ? 'no price saved' : 'loading…'),
@@ -95,9 +95,46 @@ const stocksApi = { // one place for the network calls, so a test can replace th
           ...(r.shares ? [el('span', {}, `${r.shares} sh`, q ? ` · ${priceLabel(r.value, q.currency)}` : ''),
             ...(r.pl !== null ? [el('span', { className: 'st-pl' + (r.pl < 0 ? ' down' : r.pl > 0 ? ' up' : '') }, `${signedLabel(r.pl, q.currency)} (${pctLabel(r.plPct)})`)] : [])] : [el('span', { className: 'st-watch' }, 'watching')])),
         el('span', { className: 'st-acts' }, edit, del));
+      li.dataset.symbol = r.symbol;
+      li.onpointerdown = (e) => { if (e.button === 0 && !e.target.closest('button')) dragRow(li, e); };
+      li.onkeydown = (e) => { if (e.altKey && (e.key === 'ArrowUp' || e.key === 'ArrowDown') && e.target === li) { e.preventDefault(); e.stopPropagation(); moveRow(r.symbol, e.key === 'ArrowUp' ? -1 : 1); } };
+      return li;
     }));
     $('st-none').hidden = data.items.length > 0;
     paintStatus();
+  }
+
+  // Reorder the list: drag a row (pointer events: HTML5 drag and drop is unreliable in the WebView) or Alt+Up/Down on it.
+  function keepOrder(symbols) {
+    data.items.sort((a, b) => symbols.indexOf(a.symbol) - symbols.indexOf(b.symbol));
+    save();
+    paint();
+  }
+  function moveRow(symbol, d) {
+    const order = symbols(), i = order.indexOf(symbol);
+    if (i + d < 0 || i + d >= order.length) return;
+    [order[i], order[i + d]] = [order[i + d], order[i]];
+    keepOrder(order);
+    document.querySelector(`#st-list li[data-symbol="${symbol}"]`)?.focus();
+  }
+  function dragRow(li, e) {
+    const list = li.parentNode;
+    const from = { x: e.clientX, y: e.clientY };
+    let moved = false;
+    list.setPointerCapture(e.pointerId); // on the list: moving the row in the DOM would drop a capture held by the row
+    list.onpointermove = (ev) => {
+      if (!moved && Math.hypot(ev.clientX - from.x, ev.clientY - from.y) < 5) return;
+      moved = true;
+      li.classList.add('dragging');
+      const others = [...list.children].filter((x) => x !== li);
+      const at = others.filter((x) => { const r = x.getBoundingClientRect(); return r.top + r.height / 2 < ev.clientY; }).length;
+      if (others[at] !== li.nextSibling) list.insertBefore(li, others[at] || null);
+    };
+    list.onpointerup = list.onpointercancel = () => {
+      list.onpointermove = list.onpointerup = list.onpointercancel = null;
+      li.classList.remove('dragging');
+      if (moved) keepOrder([...list.children].map((x) => x.dataset.symbol));
+    };
   }
 
   // every use starts with a connection check
@@ -185,7 +222,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
   }
 
   const metricsFn = () => [{ id: 'stocks.value', label: 'Portfolio value (saved prices)', unit: '', get: () => portfolio(data.items, data.quotes).totals[0]?.value || 0 }];
-  const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices']] };
+  const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices'], ['Alt+↑/↓', 'Move the focused stock up or down']] };
   const commandFn = () => [{ label: 'Look up a stock', hint: 'Stocks', kind: 'Command', run: async () => { await setView('stocks'); $('st-q').focus(); } }];
   const wake = () => { if (view === 'stocks') refresh(); };
   const goOnline = () => wake();

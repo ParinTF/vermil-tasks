@@ -18,6 +18,9 @@
 .st-sum .neg b { color: var(--down); }
 .st-list { margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
 .st-list li { display: grid; grid-template-columns: minmax(110px, 1.2fr) minmax(110px, 1fr) minmax(190px, 1.3fr) minmax(110px, 1.2fr) auto; align-items: center; gap: 14px; padding: 12px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; font-variant-numeric: tabular-nums; }
+.st-list li { cursor: grab; touch-action: none; user-select: none; }
+.st-list li.dragging { cursor: grabbing; background: color-mix(in srgb, var(--ink) 6%, transparent); box-shadow: inset 3px 0 var(--accent); }
+.st-list li:focus-visible { outline-offset: -2px; }
 .st-name { display: grid; min-width: 0; }
 .st-name b { font-size: 16px; }
 .st-name small { overflow: hidden; color: var(--mute); text-overflow: ellipsis; white-space: nowrap; }
