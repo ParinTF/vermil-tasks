@@ -2,6 +2,8 @@
 
 A small frameless window that stays on top of your other programs with today's numbers, so you do not have to open Vermil to see them.
 
+![Today widget](screenshots/today-widget.png)
+
 ## Use it
 
 1. Add **Today widget** on Home. The window appears in the top right of the screen.

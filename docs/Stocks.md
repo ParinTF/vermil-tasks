@@ -2,6 +2,8 @@
 
 Look up a stock, see how it moved today (and before and after the market), and track what your positions are worth. **Needs the internet**; every use starts with a connection check.
 
+![Stocks](screenshots/stocks.png)
+
 ## Find and add
 
 On the right, type a name or symbol (`apple`, `NVDA`, `PTT.BK`) in **Find a stock**; results appear after a short pause with their exchange. Click one, then:
@@ -14,6 +16,8 @@ On the right, type a name or symbol (`apple`, `NVDA`, `PTT.BK`) in **Find a stoc
 Under the heading, **Watch** and **My stocks** are two views of the same stocks (the same list, order, search and prices); `1` and `2` switch, and the one you used last is remembered. Until you choose, it opens on My stocks when you hold something and on Watch otherwise.
 
 **Watch** is for a glance at each stock: one slim line each, with a small header over the columns: **Symbol** (and name), **Price** (the latest price), **Change** (the move against the previous close as a coloured pill, and in money), **Pre / post** (the close while it is pre-market or after-hours, otherwise the pre-market and after-hours moves), **Prev close** and **Status** (Live, Pre-market, After-hours or At close, with the time). It shows nothing about your positions. In a narrower window the Pre / post column goes first, then Prev close and Status. Drag a line or `Alt+↑` / `Alt+↓` to reorder; ✎ edits and ✕ removes, as on the other page.
+
+![Stocks Watch page](screenshots/stocks-watch.png)
 
 **My stocks** is the page described below: the big rows, with each position's value and profit or loss, and the totals on top.
 

@@ -2,6 +2,8 @@
 
 Press `?` anywhere (outside a text field) for the live list; it shows only the modules you have on. Shortcuts use the physical key, so they work with a Thai layout.
 
+![Keyboard shortcuts](screenshots/shortcuts.png)
+
 ## Everywhere
 
 | Keys | Does |

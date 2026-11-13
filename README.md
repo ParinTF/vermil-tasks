@@ -4,9 +4,13 @@ One light Windows app for the small things of daily life. It starts empty and yo
 
 ![Windows](https://img.shields.io/badge/Windows-10%2F11-lightgrey)
 
+![Tasks](docs/screenshots/tasks.png)
+
 ## What it is
 
 The app opens on **Home**: a strip of today's numbers and five packages (Work, Money, Life, Plan, Smart) that open to show one card per module. Add a module with its card, or a whole package with **Add all**; remove it and your data stays. The first time you start, nothing is on. Pick what you need.
+
+![Home](docs/screenshots/home.png)
 
 | Module | What it does |
 |---|---|
@@ -62,6 +66,7 @@ Windows, [Rust](https://rustup.rs) and Node.js.
 ```bash
 npm install
 npm test            # cargo tests (backend logic) and node tests (the pure UI logic)
+npm run screenshots # build a test copy, drive every view and save docs/screenshots/*.png
 npx tauri dev       # run it
 npx tauri build     # build the installer
 ```

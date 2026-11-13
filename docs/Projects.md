@@ -2,6 +2,8 @@
 
 One page per project: its tasks and how far along they are, the time you put in and what it earns. Part of the **Work** package on Home. Adding it also adds [Tasks](Tasks.md) and [Time Tracker](Time-Tracker.md), because a project is a Time Tracker project.
 
+![Projects](screenshots/projects.png)
+
 ## Add a project
 
 On the right: a **name** and an optional **client**, then **Add**. The project appears in the [Time Tracker](Time-Tracker.md) too (with no rate; add a project there to give it a rate per hour), and the other way round: every Time Tracker project is listed here.

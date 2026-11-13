@@ -2,6 +2,8 @@
 
 A Pomodoro timer for a task, and a record of the time you really spent. Needs [Tasks](Tasks.md).
 
+![Focus timer](screenshots/focus-timer.png)
+
 ## Use it
 
 1. In Tasks, select a task and press `F` (or its **Focus** button, or "Focus timer…" in the [palette](Command-palette.md)).

@@ -2,6 +2,8 @@
 
 Targets for numbers that other modules already keep, or for a number you update by hand.
 
+![Goals](screenshots/goals.png)
+
 ## Add a goal
 
 On the right: a **Goal** name, **Measured by**, the **Aim** and the **Target**.

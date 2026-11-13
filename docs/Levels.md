@@ -2,6 +2,8 @@
 
 XP and levels for what you do, like in a game. Part of the **Smart** package on Home. It adds one band to Home and a short message at each level; it has no page of its own.
 
+![Levels](screenshots/levels.png)
+
 ## The band
 
 On Home, above the Today numbers: **Level 3 · Apprentice**, a thin bar to the next level, "40 / 300 XP" and "+38 today". **Recent** lists the last eight things that paid XP.

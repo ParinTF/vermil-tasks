@@ -2,6 +2,8 @@
 
 Patterns across your modules, found for you: "on days with more sleep, your mood tends to be higher", "after days with more tasks done, your spending is lower". Everything is worked out on your computer from your own data; nothing is sent anywhere and nothing is stored.
 
+![Insights](screenshots/insights.png)
+
 ## What it looks at
 
 One number per day from each module you have on that keeps one: tasks done, focus minutes, money spent, hours tracked, habits kept (share of the day's habits), sleep, water, workout minutes and journal mood. It needs **at least two modules** and about **three weeks** of data to say anything.

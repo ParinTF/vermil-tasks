@@ -2,6 +2,8 @@
 
 Ask about your own week, or say what to add, and an AI answers. It uses **your own Google Gemini API key**: there is no Vermil account or server, and nothing happens until you add a key.
 
+![Assistant](screenshots/assistant.png)
+
 ## Set up
 
 1. Make an API key in Google AI Studio.

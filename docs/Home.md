@@ -2,6 +2,8 @@
 
 Home is the first page every time you open Vermil (or the last tab, if you chose that in [Settings](Settings.md)). `Ctrl+0` brings you back to it. **Backup and sync** are in Settings, under Data (`Ctrl+,`); everything below about them is unchanged.
 
+![Home](screenshots/home.png)
+
 ## Modules
 
 Every tool is a module with a card on Home. The cards sit in five **packages**: Work, Money, Life, Plan and Smart. Each package is one row that says how many of its modules are on and which; click it (or focus it and press `Enter`) to open it and see the cards, and it stays open until you close it. **Add all** on the row switches on every module of that package at once.

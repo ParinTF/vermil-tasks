@@ -2,6 +2,8 @@
 
 `Ctrl+K` from anywhere opens a box. Type, use the arrows, press `Enter`; `Esc` closes it.
 
+![Command palette](screenshots/command-palette.png)
+
 ## Search
 
 Type part of a title or a word from a note. Results mix, best match first:

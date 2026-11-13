@@ -2,6 +2,8 @@
 
 Record what you spend and earn, by category, month by month. Adds a **Money** tab.
 
+![Expenses](screenshots/expenses.png)
+
 ## Add an entry
 
 On the right: choose **Spent** or **Income**, type the **Amount** (`1,250.50` works), pick a **Category**, the date and an optional note, then **Add**.

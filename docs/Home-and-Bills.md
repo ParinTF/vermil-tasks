@@ -2,6 +2,8 @@
 
 Electricity, water, rent, insurance, the car tax: when each is due, what you paid, and where the paperwork is.
 
+![Home & Bills](screenshots/bills.png)
+
 ## Add a bill
 
 On the right: **Bill**, the **usual amount** (optional; an estimate is fine), how often it **repeats** (every month, every 3 months, every year, or once), the **next due** date, and a note such as the account number or "blue folder".

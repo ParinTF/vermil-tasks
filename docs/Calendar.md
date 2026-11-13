@@ -2,6 +2,8 @@
 
 Your tasks by their due date, as a month or hour by hour. Needs [Tasks](Tasks.md).
 
+![Calendar](screenshots/calendar.png)
+
 ## Month view
 
 A month grid with the tasks of each day (the first few, then "+N more"). Today is marked; late tasks are accented, finished ones struck through. Click a day (or use the arrows) to select it; the list on the right shows that day's tasks.
@@ -13,6 +15,8 @@ A month grid with the tasks of each day (the first few, then "+N more"). Today i
 ## Day view: time blocking
 
 Press **Day** (or `D`, or double-click a day) to see the selected day hour by hour.
+
+![Calendar day view](screenshots/calendar-day.png)
 
 - Each task is a **block** at its time. Its length is an hour unless you change it. Blocks that overlap share the width. A line marks the current time.
 - **Drag a block** up or down to move it (15-minute steps). **Drag its bottom edge** to resize.

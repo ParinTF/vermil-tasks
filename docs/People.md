@@ -2,6 +2,8 @@
 
 Birthdays, gift ideas and a nudge when it has been too long since you were in touch.
 
+![People](screenshots/people.png)
+
 ## Add or edit a person
 
 On the right: **Name**, **Birthday** (the year is only used to show an age; tick **Show their age** to see "turns 36"), **Stay in touch** (never, or every week, 2 weeks, month, 2 months, 3 months), a **Note** and **Gift ideas**, one per line. Adding someone counts as being in touch today. **Edit** on a row loads it into the form; **Cancel** goes back to adding.

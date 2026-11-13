@@ -2,6 +2,8 @@
 
 A simple log for you: water, sleep, weight, workouts and medicine. It is not medical advice.
 
+![Health](screenshots/health.png)
+
 Use `‹` `›` (or the arrow keys) to look at or fix another day; `Today` (or `T`) comes back.
 
 ## Cards

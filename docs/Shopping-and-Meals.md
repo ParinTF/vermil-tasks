@@ -2,6 +2,8 @@
 
 A shopping list that remembers what you usually buy, and a meal plan for the week.
 
+![Shopping & Meals](screenshots/shopping.png)
+
 ## Shopping list
 
 Type an item and press `Enter`. The same item (in any capitalisation) is not added twice.

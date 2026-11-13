@@ -2,6 +2,8 @@
 
 A small dark bar that opens from **any program** so you can capture something without switching windows.
 
+![Quick bar](screenshots/quick-bar.png)
+
 ## Add a task: `Ctrl+Alt+T`
 
 Type the task and press `Enter`. The bar closes by itself (or press `Esc`, or click elsewhere).

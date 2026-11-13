@@ -2,6 +2,8 @@
 
 A dashboard of your day, week, month or year, built from every module you have on. (The file is still called Weekly-Review so old links work.)
 
+![Review](screenshots/review.png)
+
 ## Read it
 
 Open the **Review** tab and choose **Day**, **Week**, **Month** or **Year**. `‹` and `›` (or `←` `→`) move to the period before or after; `›` is off on the current one. Keys: `D` `W` `M` `Y` pick the period and `C` copies.

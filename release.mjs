@@ -21,6 +21,7 @@ if (bump !== 'none') run(`npm version ${bump} --no-git-tag-version`);
 const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
 const tag = `v${version}`;
 
+run('npm run screenshots');
 run('npx tauri build', { TAURI_SIGNING_PRIVATE_KEY: key, TAURI_SIGNING_PRIVATE_KEY_PASSWORD: process.env.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' });
 
 // GitHub rewrites spaces in asset names, so publish under a name without any
@@ -41,8 +42,12 @@ writeFileSync(join(dir, 'latest.json'), JSON.stringify({
 }, null, 2));
 
 if (bump !== 'none') {
-  run('git add package.json package-lock.json');
+  run('git add package.json package-lock.json docs/screenshots');
   run(`git commit -m "Release ${tag}"`);
+} else if (out('git status --porcelain docs/screenshots')) {
+  run('git add docs/screenshots');
+  run(`git commit -m "Update screenshots for ${tag}"`);
+  run(`git tag -f -a ${tag} -m "Vermil ${version}"`);
 }
 if (!out(`git tag -l ${tag}`)) run(`git tag -a ${tag} -m "Vermil ${version}"`);
 run('git push --follow-tags');

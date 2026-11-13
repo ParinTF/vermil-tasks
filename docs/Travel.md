@@ -2,6 +2,8 @@
 
 Trips with a packing list, a plan for each day and what it costs against your budget.
 
+![Travel](screenshots/travel.png)
+
 ## Add a trip
 
 On the right: **Where to**, **From** and **To** dates (the end cannot be before the start) and an optional **Budget**. The trips are listed soonest first, past ones last, with "in 10 days" or "day 2 of 4" while you are away. Click one to open it.

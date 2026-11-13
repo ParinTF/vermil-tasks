@@ -2,6 +2,8 @@
 
 Books, films, series and games: what you want, what you are in the middle of, what you finished and how you rated it.
 
+![Library](screenshots/library.png)
+
 ## Add
 
 On the right: **Title**, **Author, director or a note**, **Kind** (Book, Film, Series, Game) and which stage to **put it in**. Press **Add**.

@@ -2,6 +2,8 @@
 
 Everything that renews, with the cost per month and a reminder before each charge.
 
+![Subscriptions](screenshots/subscriptions.png)
+
 ## Add one
 
 On the right: **Name** (Netflix), **Price**, **Every** week, month or year, and **Next charge**. A charge on the 31st comes back on the 31st after a short month.

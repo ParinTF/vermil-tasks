@@ -2,6 +2,8 @@
 
 Rules that do things for you: **when** something happens, **then** Vermil does something. They run while Vermil is open, which it is whenever it sits in the tray.
 
+![Automations](screenshots/automations.png)
+
 ## Add a rule
 
 On the right, choose a **When** and a **Then**, fill what appears, and press **Add rule**.

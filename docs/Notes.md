@@ -2,6 +2,8 @@
 
 Quick notes with a little formatting, kept light on purpose. A list on the left, the editor on the right.
 
+![Notes](screenshots/notes.png)
+
 ## Write
 
 `Ctrl+N` (or the New note button) starts a note: a title, then the text. It **saves itself** half a second after you stop typing, and when you switch notes, change tab or leave the window. The list shows the newest edit first with the first line.

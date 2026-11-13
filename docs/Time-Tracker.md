@@ -2,6 +2,8 @@
 
 Time your work by project, add time by hand, and get hours and earnings for an invoice. Adds a **Time** tab.
 
+![Time Tracker](screenshots/time-tracker.png)
+
 ## Set up
 
 On the right, add a **project**: a name, an optional **client** and an optional **rate per hour**. ✕ removes a project; its entries stay in the history as "Deleted project".

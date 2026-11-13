@@ -2,6 +2,8 @@
 
 Plan the week on one page. Part of the **Plan** package on Home; it needs [Tasks](Tasks.md) and shows the [Calendar](Calendar.md)'s dated things too when that is on. Adds a **Plan** tab.
 
+![Week plan](screenshots/week-plan.png)
+
 ## The page
 
 Seven rows, one per day of the week (the week starts on the day set in [Settings](Settings.md)), each with its tasks (with their time), the dates other modules bring (bills, events, renewals, marked ◆), and a line saying how much is on it: "3 tasks · 1 h 30 min" (the length comes from tasks that have one in the Calendar's day view), or "Free". Today's number is in the accent and past days are dimmed. A repeating task shows on every day it comes back; it keeps its own rhythm, so it can only be changed in Tasks.

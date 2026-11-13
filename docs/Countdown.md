@@ -2,6 +2,8 @@
 
 Days until what matters: a trip, an exam, a birthday that comes back every year.
 
+![Countdown](screenshots/countdown.png)
+
 ## Add an event
 
 On the right: the **Event**, its **Date**, and tick **Every year (a birthday)** if it repeats. A yearly event always counts to its next occurrence (29 February falls on 28 February in other years).

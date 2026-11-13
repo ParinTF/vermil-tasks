@@ -2,6 +2,8 @@
 
 A few lines about the day and how it felt.
 
+![Journal](screenshots/journal.png)
+
 ## Write
 
 Open the Journal; it starts on **Today**. Press a **mood** from 1 (Rough) to 5 (Great), then write. The text **saves itself** half a second after you stop typing, when you change day, when the window loses focus, and when the module is removed. Pressing the same mood again clears it. Clearing the text and the mood removes the day.

@@ -2,6 +2,8 @@
 
 Daily habits with streaks and a year-at-a-glance heatmap.
 
+![Habits](screenshots/habits.png)
+
 ## Add a habit
 
 On the right: a name ("Read 20 minutes"), the **days** it is due (tap the seven circles, or use **Every day**, **Weekdays**, **Weekends**), then **Add**. A habit counts from the day you create it.
