@@ -60,6 +60,7 @@ button { cursor: pointer; }
 .brand { margin-right: 28px; }
 .win { display: flex; align-self: stretch; margin-left: 20px; }
 .win button { width: 46px; border: 0; background: none; transition: background .2s var(--ease), color .2s var(--ease); }
+.win button:focus-visible { outline-offset: -4px; } /* inside the button: the ring outside it spilled past the bar's edge */
 .win button:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .win #win-close:hover { background: var(--accent); color: var(--on-accent); }
 .win svg { width: 10px; height: 10px; fill: none; stroke: currentColor; stroke-width: 1.1; }

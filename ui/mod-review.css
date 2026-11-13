@@ -1,6 +1,6 @@
 /* Review module: loaded only while it is switched on */
 .review-page { display: block; padding-top: 24px; }
-.rv-main { max-width: 1100px; }
+.rv-main { max-width: none; } /* the cards fill the width: more columns on a wide window */
 .rv-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; flex-wrap: wrap; }
 .rv-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
 .rv-pick { display: flex; gap: 22px; }
