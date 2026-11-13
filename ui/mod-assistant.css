@@ -12,10 +12,11 @@
 .as-note { font-size: 14px; color: var(--mute); }
 .as-actions { display: grid; gap: 10px; margin-top: 6px; padding: 12px 0 4px; border-top: 1px solid var(--line); }
 .as-actions ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
-.as-actions li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 14px; font-size: 14px; }
-.as-actions li.skipped { color: var(--mute); text-decoration: line-through; }
-.as-state { font-size: 12px; color: var(--mute); }
-.as-actions li.error .as-state { color: var(--accent-text); }
+.as-actions li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; font-size: 14px; }
+.as-actions li.skipped label { color: var(--mute); text-decoration: line-through; }
+.as-state { flex: none; padding: 1px 9px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 999px; font-size: 11.5px; line-height: 1.5; color: var(--mute); }
+.as-actions li.done .as-state { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.as-actions li.error .as-state { border-color: var(--accent); color: var(--accent-text); }
 .as-act-row { display: flex; align-items: center; gap: 18px; }
 .as-form { display: grid; gap: 10px; padding-top: 12px; border-top: 1px solid var(--line); }
 .as-form textarea { width: 100%; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 16px; color: var(--ink); resize: none; }

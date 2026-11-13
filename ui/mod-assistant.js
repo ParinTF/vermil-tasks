@@ -82,7 +82,7 @@
     const pending = m.actions.some((a) => a.state === 'pending');
     const boxes = [];
     const rows = m.actions.map((a) => {
-      const box = el('input', { type: 'checkbox', checked: true, disabled: a.state !== 'pending' });
+      const box = el('input', { type: 'checkbox', checked: a.state === 'pending' || a.state === 'done', disabled: a.state !== 'pending' }); // a line that was skipped or failed is not ticked
       boxes.push(box);
       const status = a.state === 'done' ? 'Done' : a.state === 'skipped' ? 'Skipped' : a.state === 'error' ? 'Problem: ' + a.err : '';
       return el('li', { className: a.state }, el('label', { className: 'check' }, box, ' ' + describeAction(a)), ...(status ? [el('span', { className: 'as-state' }, status)] : []));
