@@ -37,3 +37,7 @@ Keyboard: `Alt+↑` / `Alt+↓` on a focused block moves it 15 minutes; add `Shi
 ## Repeating tasks
 
 A repeating task is shown on **every day it comes back**, not only on its next due day: in the month cells (in italics), in the day list and on the timeline (dashed). Those later days are previews: you cannot tick or drag them. Open one to go to the real task. They start today and follow its rule: every day, weekdays, the same weekday each week, or the same date each month.
+
+## Countdown events
+
+With [Countdown](Countdown.md) on, its events appear in the calendar as **◆ reminders**: in the month cells, and in the day list beside the day (with "Countdown" or "Every year"). A yearly event, such as a birthday, shows every year. A reminder is not a task: you cannot tick or drag it, and clicking it opens Countdown. The hour-by-hour view lists them beside the timeline. Switching Countdown off removes them.

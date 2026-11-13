@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -777,4 +777,18 @@ test('stocks: the latest trade is the price, against the previous close', () => 
   const old = { price: 110, prevClose: 100, change: 10, changePct: 10, state: 'CLOSED' }; // saved by an earlier version
   assert.deepEqual(stockNow(old), { price: 110, change: 10, pct: 10, label: 'At close', time: 0 });
   assert.equal(stockNow({ ...old, prevClose: 0 }).pct, 10);
+});
+
+test('calendar: the days a countdown event or a renewal falls on', () => {
+  assert.deepEqual(eventDaysIn({ day: '2026-11-20', yearly: false }, '2026-11-01', '2026-11-30'), ['2026-11-20']);
+  assert.deepEqual(eventDaysIn({ day: '2026-12-20', yearly: false }, '2026-11-01', '2026-11-30'), []);
+  assert.deepEqual(eventDaysIn({ day: '1990-11-05', yearly: true }, '2026-10-25', '2026-12-06'), ['2026-11-05']); // a birthday comes every year
+  assert.deepEqual(eventDaysIn({ day: '1990-11-05', yearly: true }, '2025-10-01', '2027-02-01'), ['2025-11-05', '2026-11-05']);
+  assert.deepEqual(eventDaysIn({ day: '2028-02-29', yearly: true }, '2029-02-01', '2029-03-01'), ['2029-02-28']); // 29 Feb falls on 28 Feb in other years
+  assert.deepEqual(eventDaysIn({ day: '2026-11-05', yearly: true }, '2025-10-01', '2025-12-01'), []); // not before it began
+  const sub = (cycle, next, anchor) => ({ next, cycle, anchor });
+  assert.deepEqual(renewalsIn(sub('week', '2026-11-03'), '2026-11-01', '2026-11-30'), ['2026-11-03', '2026-11-10', '2026-11-17', '2026-11-24']);
+  assert.deepEqual(renewalsIn(sub('month', '2026-01-31', 31), '2026-02-01', '2026-04-30'), ['2026-02-28', '2026-03-31', '2026-04-30']);
+  assert.deepEqual(renewalsIn(sub('year', '2026-06-01'), '2026-11-01', '2027-07-01'), ['2027-06-01']);
+  assert.deepEqual(renewalsIn(sub('month', '2026-12-10'), '2026-11-01', '2026-11-30'), []); // its next charge is later
 });

@@ -376,6 +376,8 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 .cal-line, .cal-more { display: block; overflow: hidden; font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
 .cal-line.late { color: var(--accent-text); font-weight: 600; }
 .cal-line.done { color: var(--mute); text-decoration: line-through; }
+.cal-line.mark { color: var(--accent-text); font-weight: 600; }
+#cal-day-list li.cal-mark .cal-markdot { color: var(--accent-text); text-align: center; }
 .cal-line.ghost { color: var(--mute); font-style: italic; } /* a repeating task on a later day it comes back */
 .tl-block.ghost { opacity: .6; border-style: dashed; }
 .cal-more { color: var(--mute); }

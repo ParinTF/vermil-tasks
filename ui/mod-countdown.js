@@ -24,6 +24,8 @@
     $('cd-day').value = today();
   }
 
+  const calendarFn = (from, to) => data.events.flatMap((ev) => eventDaysIn(ev, from, to).map((day) => ({ day, title: ev.title, kind: ev.yearly ? 'Every year' : 'Countdown', view: 'countdown' })));
+
   function add(e) {
     e.preventDefault();
     const title = $('cd-title').value.trim();
@@ -94,12 +96,14 @@
       paint();
       checkToday();
       commandHooks.push(commandFn);
+      calendarHooks.push(calendarFn);
       shortcutGroups.push(group);
       timer = setInterval(() => { checkToday(); if (view === 'countdown') paint(); }, 3600000);
     },
     stop() {
       clearInterval(timer);
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
+      calendarHooks.splice(calendarHooks.indexOf(calendarFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
     },
     show() { paint(); },

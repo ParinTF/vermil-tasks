@@ -97,6 +97,7 @@ const rowInfo = [];
 const rowTools = [];
 const commandHooks = [];
 const metricHooks = []; // () => [{ id, label, unit, get() }]: numbers a module offers to Goals
+const calendarHooks = []; // (from, to) => [{ day, title, kind, view }]: dated things a module shows in the Calendar (countdown events, renewals)
 const settingsHooks = []; // () => element: a section a module adds to the Settings page
 const eventHooks = []; // (type, data) => void: what happened ('task-done', 'bill-paid', 'over-budget'); Automations listens
 const emit = (type, data = {}) => { for (const f of [...eventHooks]) try { f(type, data); } catch (e) { console.error('event', type, e); } };

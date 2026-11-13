@@ -14,6 +14,17 @@ let tlDay = null; // the day the timeline was last scrolled for
 const HOUR_PX = 48; // keep in step with --hour in style.css
 const taskCount = (n) => `${n} ${n === 1 ? 'task' : 'tasks'}`;
 
+// the dated things other modules show in the month (calendarHooks), by day, each marked so the calendar never treats one as a task
+function calendarMarks(from, to) {
+  const byDay = {};
+  for (const f of calendarHooks) {
+    try { for (const m of f(from, to)) (byDay[m.day] ||= []).push({ ...m, mark: true, due: m.day + 'T00:00' }); } catch (e) { console.error('calendar hook', e); }
+  }
+  return byDay;
+}
+const plural = (n, w) => `${n} ${w}${n === 1 ? '' : 's'}`;
+const dayCount = (list) => [list.some((t) => !t.mark) && taskCount(list.filter((t) => !t.mark).length), list.some((t) => t.mark) && plural(list.filter((t) => t.mark).length, 'reminder')].filter(Boolean).join(', ');
+
 function dayCell(cell, list, cap, today) {
   const date = parseDay(cell.day);
   const lines = list.length > cap ? list.slice(0, Math.max(0, cap - 1)) : list; // the last line becomes "+N more"
@@ -22,9 +33,10 @@ function dayCell(cell, list, cap, today) {
   const btn = el('button', {
     type: 'button', role: 'gridcell', tabIndex: cell.day === calDay ? 0 : -1,
     className: 'cal-cell' + (cell.inMonth ? '' : ' out') + (cell.day === today ? ' today' : '') + (cell.day === calDay ? ' sel' : ''),
-    ariaLabel: `${fmt(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${taskCount(list.length)}`,
+    ariaLabel: `${fmt(date, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })}, ${dayCount(list) || 'nothing'}`,
   }, el('span', { className: 'cal-d' }, String(date.getDate())),
   ...lines.map((t) => {
+    if (t.mark) return el('span', { className: 'cal-line mark' }, `◆ ${t.title}`);
     const line = el('span', { className: 'cal-line' + (t.done ? ' done' : new Date(t.due) < now ? ' late' : '') + (t.ghost ? ' ghost' : '') }, `${t.due.slice(11, 16)} ${t.title}`);
     if (!t.done && !t.ghost) line.dataset.id = t.id; // an open task can be dragged to another day
     return line;
@@ -39,8 +51,13 @@ function dayCell(cell, list, cap, today) {
 
 function renderDayPanel(list) {
   $('cal-day-title').textContent = fmt(parseDay(calDay), { weekday: 'long', day: 'numeric', month: 'long' });
-  $('cal-day-count').textContent = list.length ? taskCount(list.length) : 'Nothing due';
+  $('cal-day-count').textContent = dayCount(list) || 'Nothing due';
   $('cal-day-list').replaceChildren(...list.map((t) => {
+    if (t.mark) {
+      const go = el('button', { type: 'button', className: 'cal-open' }, t.title);
+      go.onclick = () => setView(t.view);
+      return el('li', { className: 'cal-mark' }, el('span', { className: 'cal-markdot', ariaHidden: 'true' }, '◆'), go, el('time', {}, t.kind));
+    }
     const box = el('input', { type: 'checkbox', checked: t.done, disabled: !!t.ghost, ariaLabel: (t.done ? 'Mark not done: ' : 'Mark done: ') + t.title });
     box.onchange = () => commit(t.done ? todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)) : complete(t));
     const open = el('button', { type: 'button', className: 'cal-open' + (t.done ? ' done' : '') }, t.title);
@@ -104,7 +121,10 @@ function renderCalendar() {
   const grid = $('cal-grid');
   const today = localDay(new Date());
   const span = monthGrid(y, m - 1);
-  const byDay = groupByDay(withRepeats(todos, span[0].day, span[41].day, today)); // repeating tasks show on each day they come back
+  const tasksByDay = groupByDay(withRepeats(todos, span[0].day, span[41].day, today)); // repeating tasks show on each day they come back
+  const marks = calendarMarks(span[0].day, span[41].day);
+  const byDay = { ...tasksByDay };
+  for (const [d, list] of Object.entries(marks)) byDay[d] = [...list, ...(byDay[d] || [])]; // the reminders first, then the tasks
   const title = fmt(new Date(y, m - 1, 1), { month: 'long', year: 'numeric' });
   const day = calMode === 'day';
   $('cal-mode').textContent = day ? 'Month' : 'Day';
@@ -115,7 +135,7 @@ function renderCalendar() {
   renderNoDate();
   if (day) {
     $('cal-title').textContent = fmt(parseDay(calDay), { weekday: 'long', day: 'numeric', month: 'long' });
-    renderTimeline(byDay[calDay] || []);
+    renderTimeline(tasksByDay[calDay] || []); // the timeline is for tasks with a time; the reminders are in the list beside it
     renderDayPanel(byDay[calDay] || []);
     return;
   }
