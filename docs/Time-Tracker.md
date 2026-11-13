@@ -8,7 +8,7 @@ On the right, add a **project**: a name, an optional **client** and an optional 
 
 ## Track
 
-1. Choose the project, type what you are working on (open tasks from [Tasks](Tasks.md) are suggested) and press **Start**.
+1. Choose the project from the drop-down (click it, or focus it and press `Enter`, `↓` or `Space`; `↑` `↓` move, `Enter` chooses, `Esc` closes, a letter jumps to a project; it says "Add a project first" until you have one), type what you are working on (open tasks from [Tasks](Tasks.md) are suggested) and press **Start**.
 2. A chip in the top bar and the big clock show the running time; click the chip to come back. The timer **keeps running** if you close the window, switch the module off or restart Vermil.
 3. Press **Stop**. The entry lands in **Today** with its length.
 

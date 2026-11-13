@@ -45,6 +45,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'tt-p-msg', className: 'tt-msg', role: 'status' }))));
     $('tt-m-day').value = today();
+    enhanceSelect($('tt-project'), { empty: 'Add a project first' }); // the app's own drop-down, not the native popup
   }
   const field = (label, ctl) => el('label', { className: 'tt-field' }, label, ctl);
 
