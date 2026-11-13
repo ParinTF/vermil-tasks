@@ -815,8 +815,18 @@ const ASSIST_ACTION_HELP = {
   note: '{"type":"note","title":"...","body":"..."}',
   open: '{"type":"open","view":"..."}',
 };
+// The span the module summaries cover: the user picks one; every module's weekly(since, until) already takes any span.
+const ASSIST_PERIODS = [['week', 'the last 7 days'], ['days30', 'the last 30 days'], ['month', 'this month'], ['lastmonth', 'last month'], ['year', 'this year']];
+function assistantRange(kind, today) {
+  const label = (ASSIST_PERIODS.find(([k]) => k === kind) || ASSIST_PERIODS[0])[1];
+  if (kind === 'days30') return { since: shiftDay(today, -29), until: today, label };
+  if (kind === 'month') return { ...reviewRange('month', 0, today), label };
+  if (kind === 'lastmonth') return { ...reviewRange('month', 1, today), label };
+  if (kind === 'year') return { ...reviewRange('year', 0, today), label };
+  return { since: shiftDay(today, -6), until: today, label };
+}
 // can: the action types whose modules are on; sections: [{ title, lines }] the user chose to share; views: ids of open-able tabs
-function assistantPrompt({ now, sections, can, views }) {
+function assistantPrompt({ now, sections, can, views, period }) {
   const day = localDay(now), time = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
   const weekday = now.toLocaleDateString('en-GB', { weekday: 'long' });
   const data = sections.length
@@ -825,6 +835,7 @@ function assistantPrompt({ now, sections, can, views }) {
   return [
     'You are the assistant inside Vermil, a personal organiser on the user\'s Windows PC. Answer in the language the user writes in, briefly and plainly.',
     `Today is ${weekday} ${day}, local time ${time}.`,
+    ...(period ? [`The module summaries below cover ${period.label} (${period.since} to ${period.until}). Say so when the user asks about another span.`] : []),
     'Use only the data below for questions about the user\'s own life. If it is not there, say you cannot see it. Never invent entries.',
     'To add or open something, put it in "actions". The user sees each action and decides, so phrase it as an offer ("I can add..."), never as already done.',
     'Reply with JSON only, in this form: {"reply": "text for the user", "actions": []}',
@@ -958,4 +969,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };

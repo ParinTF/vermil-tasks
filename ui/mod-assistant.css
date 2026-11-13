@@ -38,3 +38,5 @@
   .as-log { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
   .as-side { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 }
+.as-period { display: grid; gap: 6px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.as-period .dd { text-transform: none; letter-spacing: 0; font-weight: 500; font-size: 15px; color: var(--ink); }

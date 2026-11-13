@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -852,4 +852,21 @@ test('projectSummary counts the tasks of a project, its time and what it earns',
   const s = projectSummary(todos, entries, p, '2026-11-09');
   assert.deepEqual(s, { open: 1, done: 2, total: 3, pct: 67, seconds: 9000, week: 5400, amount: 1500 });
   assert.deepEqual(projectSummary([], [], { id: 'x', rate: 0 }, '2026-11-09'), { open: 0, done: 0, total: 0, pct: 0, seconds: 0, week: 0, amount: 0 });
+});
+
+test('assistantRange: the span the summaries cover', () => {
+  const today = '2026-11-13';
+  assert.deepEqual(assistantRange('week', today), { since: '2026-11-07', until: today, label: 'the last 7 days' });
+  assert.deepEqual(assistantRange('days30', today), { since: '2026-10-15', until: today, label: 'the last 30 days' });
+  assert.deepEqual(assistantRange('month', today), { since: '2026-11-01', until: today, label: 'this month' });
+  assert.deepEqual(assistantRange('lastmonth', today), { since: '2026-10-01', until: '2026-10-31', label: 'last month' });
+  assert.deepEqual(assistantRange('year', today), { since: '2026-01-01', until: today, label: 'this year' });
+  assert.equal(assistantRange('nonsense', today).label, 'the last 7 days');
+});
+
+test('assistantPrompt names the period when there is one', () => {
+  const now = new Date(2026, 10, 13, 9, 0);
+  const base = { now, sections: [{ title: 'Money', lines: ['x'] }], can: [], views: [] };
+  assert.ok(!assistantPrompt(base).includes('cover'));
+  assert.ok(assistantPrompt({ ...base, period: assistantRange('lastmonth', '2026-11-13') }).includes('cover last month (2026-10-01 to 2026-10-31)'));
 });

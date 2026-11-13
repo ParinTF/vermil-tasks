@@ -14,7 +14,7 @@ The key is kept in its own file in your user folder (`assistant.json` in `%APPDA
 
 Open the **Assistant** tab, type, and press `Ctrl+Enter` (or Ask). Key: `/` writes a message.
 
-- On the right, **What it can see** lists what you may share: your open tasks and due dates, note **titles** (never the text), and a summary of the last 7 days from any module that has one (Expenses, Habits, Health…). **Nothing is ticked at first, and nothing is sent unless you tick it.**
+- On the right, **What it can see** lists what you may share: your open tasks and due dates, note **titles** (never the text), and a summary from any module that has one (Expenses, Habits, Health…). **Summaries cover** chooses the span: the last 7 days (the default), the last 30 days, this month, last month or this year, so you can ask "what did I spend most on last month?". The span is told to the model and shown in "Show exactly what is sent". **Nothing is ticked at first, and nothing is sent unless you tick it.**
 - **Show exactly what is sent** shows the full text that goes out now: the instructions, the data you ticked, and your message.
 - Only your message, the recent conversation and the ticked parts are sent, each time you ask.
 

@@ -1,30 +1,31 @@
 // Assistant module: ask questions about your own data and have things added for you, using your own Gemini API key.
 // Off until you add it and a key (Settings); it sends only the question and the parts you tick under "What it can see".
 // Every action it suggests is listed and runs only when you press the button. The key lives in the backend (assistant.rs).
-// Data: { share: [ids], log: [{ role: 'user' | 'model', text, error?, actions?: [{ ...action, state: 'pending' | 'done' | 'skipped' | 'error', err? }] }] }.
+// Data: { share: [ids], period: 'week' | 'days30' | 'month' | 'lastmonth' | 'year' (the span the module summaries cover), log: [{ role: 'user' | 'model', text, error?, actions?: [{ ...action, state: 'pending' | 'done' | 'skipped' | 'error', err? }] }] }.
 (() => {
-  let data = { share: [], log: [] };
+  let data = { share: [], log: [], period: 'week' };
   let info = { has_key: false, model: '' };
   let busy = false;
   const save = () => saveModule('assistant', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('assistant-view');
   const today = () => localDay(new Date());
 
-  // what can be shared: the open tasks, the note titles, and the weekly summary of any module that has one
+  const range = () => assistantRange(data.period, today());
+  // what can be shared: the open tasks, the note titles, and the summary of any module that has one, over the chosen span
   function shareable() {
     const list = [];
     if (started.has('tasks')) list.push({ id: 'tasks', label: 'Tasks: your open tasks and when they are due', build: () => ({ title: 'Open tasks', lines: todos.filter((t) => !t.done && !isLater(t)).slice(0, 40).map((t) => t.title + (t.due ? ` (due ${t.due.replace('T', ' ')})` : '')) }) });
     if (started.has('notes')) list.push({ id: 'notes', label: 'Notes: the titles only, never the text', build: () => ({ title: 'Note titles', lines: notes.slice(0, 40).map((n) => n.title || 'Untitled') }) });
     for (const m of MODULES) {
       if (!started.has(m.id) || ['tasks', 'notes', 'assistant'].includes(m.id) || !registry[m.id]?.weekly) continue;
-      list.push({ id: m.id, label: `${m.name}: a summary of the last 7 days`, build: () => registry[m.id].weekly(shiftDay(today(), -6), today()) });
+      list.push({ id: m.id, label: `${m.name}: a summary of ${range().label}`, build: () => registry[m.id].weekly(range().since, range().until) });
     }
     return list;
   }
   const sections = () => shareable().filter((s) => data.share.includes(s.id)).flatMap((s) => { try { const x = s.build(); return x && x.lines.length ? [x] : []; } catch { return []; } });
   const can = () => [['task', 'tasks'], ['shop', 'shopping'], ['expense', 'money'], ['note', 'notes']].filter(([, id]) => started.has(id)).map(([k]) => k).concat('open');
   const views = () => MODULES.filter((m) => m.view && started.has(m.id) && m.id !== 'assistant').map((m) => m.id);
-  const system = () => assistantPrompt({ now: new Date(), sections: sections(), can: can(), views: views() });
+  const system = () => assistantPrompt({ now: new Date(), sections: sections(), can: can(), views: views(), period: range() });
 
   function build() {
     root().replaceChildren(
@@ -37,12 +38,14 @@
       el('aside', { className: 'as-side', ariaLabel: 'What it can see' },
         el('h3', {}, 'What it can see'),
         el('p', { className: 'as-fine' }, 'Nothing is sent unless you tick it. Your question and the ticked parts go to Google’s Gemini service with your own key.'),
+        el('label', { className: 'as-period' }, 'Summaries cover', el('select', { id: 'as-period', ariaLabel: 'Span the summaries cover', onchange: () => { data.period = $('as-period').value; save(); paintShare(); paintPreview(); } }, ...ASSIST_PERIODS.map(([k, l]) => el('option', { value: k }, l)))),
         el('div', { id: 'as-share', className: 'as-share', role: 'group', ariaLabel: 'Shared with the assistant' }),
         el('details', { id: 'as-details', className: 'as-details' }, el('summary', {}, 'Show exactly what is sent'), el('pre', { id: 'as-pre' })),
         el('button', { id: 'as-clear', type: 'button', className: 'linkish', textContent: 'Clear the conversation', onclick: clearLog })));
   }
 
   function paintShare() {
+    if ($('as-period')) $('as-period').value = data.period;
     $('as-share').replaceChildren(...shareable().map((s) => {
       const box = el('input', { type: 'checkbox', checked: data.share.includes(s.id), value: s.id });
       box.onchange = () => { data.share = box.checked ? [...new Set([...data.share, s.id])] : data.share.filter((x) => x !== s.id); save(); paintPreview(); };
@@ -190,9 +193,10 @@
 
   defineModule('assistant', {
     async start() {
-      data = { share: [], log: [], ...(moduleData.assistant || {}) };
+      data = { share: [], log: [], period: 'week', ...(moduleData.assistant || {}) };
       await readInfo();
       build();
+      enhanceSelect($('as-period'));
       paintShare();
       paintPreview();
       paintLog();
