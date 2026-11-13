@@ -13,7 +13,8 @@
 .tt-form .primary.running { background: var(--accent); color: var(--on-accent); }
 .tt-manual { margin: 4px 0; font-size: 14px; }
 .tt-manual summary { cursor: pointer; color: var(--mute); }
-.tt-add { display: flex; flex-wrap: wrap; align-items: baseline; gap: 14px; padding-top: 10px; }
+.tt-add { display: flex; flex-wrap: wrap; align-items: center; gap: 14px; padding-top: 10px; }
+.tt-add .dd { flex: 1 1 220px; max-width: 280px; }
 .tt-msg { font-size: 13px; color: var(--mute); }
 .tt-list, .tt-plist { margin: 0; padding: 0; list-style: none; }
 .tt-list li { display: grid; grid-template-columns: minmax(0, 1fr) auto auto 18px; align-items: center; gap: 16px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 14px; }

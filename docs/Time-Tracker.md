@@ -12,7 +12,7 @@ On the right, add a **project**: a name, an optional **client** and an optional 
 2. A chip in the top bar and the big clock show the running time; click the chip to come back. The timer **keeps running** if you close the window, switch the module off or restart Vermil.
 3. Press **Stop**. The entry lands in **Today** with its length.
 
-Forgot to start? **Add time by hand** takes a day, a from and a to time (the end must be after the start) and a note.
+Forgot to start? **Add time by hand** takes its own **project** (choose it in the form; it starts on the one above and can differ), a day, a from and a to time (the end must be after the start) and a note. If something is missing it says exactly what: add a project first, pick the day, fill in the times, or the end must be after the start.
 
 ## Report
 

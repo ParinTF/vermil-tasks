@@ -28,6 +28,7 @@
             el('button', { id: 'tt-go', className: 'primary', type: 'submit' }, el('span', { id: 'tt-go-text' }, 'Start'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')))),
         el('details', { className: 'tt-manual' }, el('summary', {}, 'Add time by hand'),
           el('form', { id: 'tt-add', className: 'tt-add', onsubmit: addManual },
+            el('select', { id: 'tt-m-project', ariaLabel: 'Project' }),
             el('input', { id: 'tt-m-day', type: 'date', ariaLabel: 'Day' }), el('input', { id: 'tt-m-from', type: 'time', ariaLabel: 'From' }), el('input', { id: 'tt-m-to', type: 'time', ariaLabel: 'To' }), el('input', { id: 'tt-m-desc', maxLength: 120, placeholder: 'What', ariaLabel: 'What' }),
             el('button', { className: 'linkish', type: 'submit', textContent: 'Add' }), el('span', { id: 'tt-m-msg', className: 'tt-msg', role: 'status' }))),
         el('h3', {}, 'Today'),
@@ -46,6 +47,7 @@
           el('div', { id: 'tt-p-msg', className: 'tt-msg', role: 'status' }))));
     $('tt-m-day').value = today();
     enhanceSelect($('tt-project'), { empty: 'Add a project first' }); // the app's own drop-down, not the native popup
+    enhanceSelect($('tt-m-project'), { empty: 'Add a project first' });
   }
   const field = (label, ctl) => el('label', { className: 'tt-field' }, label, ctl);
 
@@ -89,9 +91,10 @@
 
   function addManual(e) {
     e.preventDefault();
-    const project = $('tt-project').value;
+    const project = $('tt-m-project').value;
     const day = $('tt-m-day').value, from = $('tt-m-from').value, to = $('tt-m-to').value;
-    if (!project || !day || !from || !to || to <= from) { $('tt-m-msg').textContent = 'A project, a day, and an end after the start.'; return; }
+    const why = !project ? 'Add a project first (right), then choose it here.' : !day ? 'Pick the day.' : !from || !to ? 'Fill in the start and the end.' : to <= from ? 'The end must be after the start.' : '';
+    if (why) { $('tt-m-msg').textContent = why; return; }
     data.entries.push({ id: crypto.randomUUID(), project, desc: $('tt-m-desc').value.trim(), start: `${day}T${from}:00`, end: `${day}T${to}:00` });
     save();
     $('tt-m-desc').value = '';
@@ -104,6 +107,10 @@
     $('tt-project').replaceChildren(...data.projects.map((p) => el('option', { value: p.id }, p.name + (p.client ? ' · ' + p.client : ''))));
     $('tt-project').value = data.running ? data.running.project : data.projects.some((p) => p.id === keep) ? keep : data.projects[0]?.id || '';
     $('tt-project').disabled = !!data.running;
+    // the form for time by hand has its own project, starting on the one chosen above
+    const keepManual = $('tt-m-project').value;
+    $('tt-m-project').replaceChildren(...data.projects.map((p) => el('option', { value: p.id }, p.name + (p.client ? ' · ' + p.client : ''))));
+    $('tt-m-project').value = data.projects.some((p) => p.id === keepManual) ? keepManual : $('tt-project').value;
     $('tt-go-text').textContent = data.running ? 'Stop' : 'Start';
     $('tt-go').classList.toggle('running', !!data.running);
     if (data.running) $('tt-desc').value = data.running.desc;
