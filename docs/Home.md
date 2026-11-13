@@ -4,7 +4,7 @@ Home is the first page every time you open Vermil (or the last tab, if you chose
 
 ## Modules
 
-Every tool is a module with a card on Home.
+Every tool is a module with a card on Home. The cards sit in five **packages**: Work, Money, Life, Plan and Smart. Each package is one row that says how many of its modules are on and which; click it (or focus it and press `Enter`) to open it and see the cards, and it stays open until you close it. **Add all** on the row switches on every module of that package at once.
 
 - **Add** switches a module on. Some need another one (Calendar needs Tasks); adding it brings what it needs.
 - **Open** goes to its tab. **Remove** switches it off; if other modules need it, Vermil asks first. **Your data always stays**, so adding it again brings everything back.

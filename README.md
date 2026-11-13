@@ -6,7 +6,7 @@ One light Windows app for the small things of daily life. It starts empty and yo
 
 ## What it is
 
-The app opens on **Home**: a strip of today's numbers and one card per module. Add a module with its card; remove it and your data stays. The first time you start, nothing is on. Pick what you need.
+The app opens on **Home**: a strip of today's numbers and five packages (Work, Money, Life, Plan, Smart) that open to show one card per module. Add a module with its card, or a whole package with **Add all**; remove it and your data stays. The first time you start, nothing is on. Pick what you need.
 
 | Module | What it does |
 |---|---|

@@ -10,30 +10,41 @@
 // commandHooks.push(() => [palette commands]), shortcutGroups.push({ module, title, items }), metricHooks.push(() => [{ id, label, unit, get() }]) for Goals; weekly(since, until) returns { title, lines } (or null) for the Weekly Review, with days as "YYYY-MM-DD", both included; take them out again in stop().
 // Its data goes through saveModule(id, value) into the same data file. summary() returns { label, value, unit, sub, warn } for the Today strip on Home (or null).
 const MODULES = [
-  { id: 'tasks', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
-  { id: 'notes', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
-  { id: 'calendar', name: 'Calendar', about: 'Your tasks by month or hour by hour. Drag to reschedule.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
-  { id: 'pomodoro', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
-  { id: 'money', name: 'Expenses', about: 'Record what you spend and earn, by category, month by month.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
-  { id: 'habits', name: 'Habits', about: 'Daily habits with streaks and a year-at-a-glance heatmap. Tick today, fix yesterday.', script: 'mod-habits.js', style: 'mod-habits.css', view: 'Habits' },
-  { id: 'subs', name: 'Subscriptions', about: 'Everything that renews, with the monthly total and a reminder a few days before each charge.', script: 'mod-subs.js', style: 'mod-subs.css', view: 'Subscriptions' },
-  { id: 'shopping', name: 'Shopping & Meals', about: 'A shopping list that remembers what you usually buy, and a meal plan for the week that can fill the list.', script: 'mod-shopping.js', style: 'mod-shopping.css', view: 'Shopping' },
-  { id: 'health', name: 'Health', about: 'Water, sleep, weight, workouts and medicine reminders, with a day-by-day look back.', script: 'mod-health.js', style: 'mod-health.css', view: 'Health' },
-  { id: 'library', name: 'Library', about: 'Books, films, series and games: what you want, what you are in the middle of, what you finished and how you rated it.', script: 'mod-library.js', style: 'mod-library.css', view: 'Library' },
-  { id: 'people', name: 'People', about: 'Birthdays with a reminder, gift ideas, and a nudge when it has been too long since you were in touch.', script: 'mod-people.js', style: 'mod-people.css', view: 'People' },
-  { id: 'bills', name: 'Home & Bills', about: 'Electricity, water, rent, insurance, the car tax: when each is due, what you paid, and where the paperwork is.', script: 'mod-bills.js', style: 'mod-bills.css', view: 'Bills' },
-  { id: 'travel', name: 'Travel', about: 'Trips with a packing list, a plan for each day and what it costs against your budget.', script: 'mod-travel.js', style: 'mod-travel.css', view: 'Travel' },
-  { id: 'time', name: 'Time Tracker', about: 'Time your work by project, add it by hand, and get hours and earnings for the week or the month to copy into an invoice.', script: 'mod-time.js', style: 'mod-time.css', view: 'Time' },
-  { id: 'widget', name: 'Today widget', about: 'A small window that stays on top with today\u2019s numbers. Ctrl+Alt+W (changeable in Settings) shows or hides it, a click opens the module.', script: 'mod-widget.js' },
-  { id: 'countdown', name: 'Countdown', about: 'Days until what matters: a trip, an exam, a birthday that comes back every year.', script: 'mod-countdown.js', style: 'mod-countdown.css', view: 'Countdown' },
-  { id: 'journal', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
-  { id: 'goals', name: 'Goals', about: 'Targets that watch your other modules: tasks done, focus time, money saved, habits kept. Or track anything by hand.', script: 'mod-goals.js', style: 'mod-goals.css', view: 'Goals' },
-  { id: 'stocks', name: 'Stocks', about: 'Look up a stock: today’s move, pre-market and after-hours, and what your positions are worth. Needs the internet.', script: 'mod-stocks.js', style: 'mod-stocks.css', view: 'Stocks' },
-  { id: 'auto', name: 'Automations', about: 'Rules that do things for you: every morning add a task, when a bill is paid open Expenses, when a budget runs out send a notification.', script: 'mod-auto.js', style: 'mod-auto.css', view: 'Automations' },
-  { id: 'insights', name: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
-  { id: 'assistant', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
-  { id: 'review', name: 'Review', about: 'A dashboard of your day, week, month or year from every module you use: numbers, charts and a summary you can copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
+  { id: 'tasks', pack: 'work', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
+  { id: 'notes', pack: 'work', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
+  { id: 'calendar', pack: 'work', name: 'Calendar', about: 'Your tasks by month or hour by hour. Drag to reschedule.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
+  { id: 'pomodoro', pack: 'work', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
+  { id: 'money', pack: 'money', name: 'Expenses', about: 'Record what you spend and earn, by category, month by month.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
+  { id: 'habits', pack: 'life', name: 'Habits', about: 'Daily habits with streaks and a year-at-a-glance heatmap. Tick today, fix yesterday.', script: 'mod-habits.js', style: 'mod-habits.css', view: 'Habits' },
+  { id: 'subs', pack: 'money', name: 'Subscriptions', about: 'Everything that renews, with the monthly total and a reminder a few days before each charge.', script: 'mod-subs.js', style: 'mod-subs.css', view: 'Subscriptions' },
+  { id: 'shopping', pack: 'plan', name: 'Shopping & Meals', about: 'A shopping list that remembers what you usually buy, and a meal plan for the week that can fill the list.', script: 'mod-shopping.js', style: 'mod-shopping.css', view: 'Shopping' },
+  { id: 'health', pack: 'life', name: 'Health', about: 'Water, sleep, weight, workouts and medicine reminders, with a day-by-day look back.', script: 'mod-health.js', style: 'mod-health.css', view: 'Health' },
+  { id: 'library', pack: 'life', name: 'Library', about: 'Books, films, series and games: what you want, what you are in the middle of, what you finished and how you rated it.', script: 'mod-library.js', style: 'mod-library.css', view: 'Library' },
+  { id: 'people', pack: 'life', name: 'People', about: 'Birthdays with a reminder, gift ideas, and a nudge when it has been too long since you were in touch.', script: 'mod-people.js', style: 'mod-people.css', view: 'People' },
+  { id: 'bills', pack: 'money', name: 'Home & Bills', about: 'Electricity, water, rent, insurance, the car tax: when each is due, what you paid, and where the paperwork is.', script: 'mod-bills.js', style: 'mod-bills.css', view: 'Bills' },
+  { id: 'travel', pack: 'plan', name: 'Travel', about: 'Trips with a packing list, a plan for each day and what it costs against your budget.', script: 'mod-travel.js', style: 'mod-travel.css', view: 'Travel' },
+  { id: 'time', pack: 'work', name: 'Time Tracker', about: 'Time your work by project, add it by hand, and get hours and earnings for the week or the month to copy into an invoice.', script: 'mod-time.js', style: 'mod-time.css', view: 'Time' },
+  { id: 'widget', pack: 'smart', name: 'Today widget', about: 'A small window that stays on top with today\u2019s numbers. Ctrl+Alt+W (changeable in Settings) shows or hides it, a click opens the module.', script: 'mod-widget.js' },
+  { id: 'countdown', pack: 'plan', name: 'Countdown', about: 'Days until what matters: a trip, an exam, a birthday that comes back every year.', script: 'mod-countdown.js', style: 'mod-countdown.css', view: 'Countdown' },
+  { id: 'journal', pack: 'life', name: 'Journal', about: 'A few lines about the day and how it felt. See the mood of the last two weeks.', script: 'mod-journal.js', style: 'mod-journal.css', view: 'Journal' },
+  { id: 'goals', pack: 'plan', name: 'Goals', about: 'Targets that watch your other modules: tasks done, focus time, money saved, habits kept. Or track anything by hand.', script: 'mod-goals.js', style: 'mod-goals.css', view: 'Goals' },
+  { id: 'stocks', pack: 'money', name: 'Stocks', about: 'Look up a stock: today’s move, pre-market and after-hours, and what your positions are worth. Needs the internet.', script: 'mod-stocks.js', style: 'mod-stocks.css', view: 'Stocks' },
+  { id: 'auto', pack: 'smart', name: 'Automations', about: 'Rules that do things for you: every morning add a task, when a bill is paid open Expenses, when a budget runs out send a notification.', script: 'mod-auto.js', style: 'mod-auto.css', view: 'Automations' },
+  { id: 'insights', pack: 'smart', name: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
+  { id: 'assistant', pack: 'smart', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
+  { id: 'review', pack: 'smart', name: 'Review', about: 'A dashboard of your day, week, month or year from every module you use: numbers, charts and a summary you can copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
 ];
+
+// Packages: Home shows the modules in a few sets instead of one long list. A new module names its set with `pack`.
+const PACKS = [
+  { id: 'work', name: 'Work', about: 'Get things done: tasks, notes, the calendar, focus and time by project.' },
+  { id: 'money', name: 'Money', about: 'Where the money goes: spending, what renews, bills and stocks.' },
+  { id: 'life', name: 'Life', about: 'You and yours: habits, health, a journal, people, and what you read and watch.' },
+  { id: 'plan', name: 'Plan', about: 'What is coming: shopping and meals, trips, countdowns and goals.' },
+  { id: 'smart', name: 'Smart', about: 'Vermil working for you: rules, patterns, an AI assistant, a review and a desktop widget.' },
+];
+let openPacks = new Set();
+try { openPacks = new Set(JSON.parse(localStorage.getItem('packs-open') || '[]')); } catch {}
 
 const moduleData = {}; // id -> saved value; "_on" lists the ids that are switched on
 const started = new Set();
@@ -191,7 +202,29 @@ function renderHome() {
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
     ...todayStrip(),
-    el('div', { className: 'mod-grid' }, ...MODULES.map(card)));
+    ...PACKS.map((p) => {
+      const mods = MODULES.filter((m) => m.pack === p.id);
+      const on = mods.filter((m) => started.has(m.id));
+      const all = el('button', { type: 'button', className: 'linkish pack-all', ariaLabel: `Add all of ${p.name}`, hidden: on.length === mods.length }, 'Add all');
+      all.onclick = async (e) => {
+        e.preventDefault(); // a click here is not a click on the summary
+        for (const m of mods) try { await setModule(m, true); } catch (err) { console.error(m.id, err); }
+        renderHome();
+        $('pack-' + p.id)?.querySelector('summary')?.focus();
+      };
+      const box = el('details', { className: 'pack', id: 'pack-' + p.id, open: openPacks.has(p.id) },
+        el('summary', {},
+          el('span', { className: 'pack-name' }, p.name),
+          el('span', { className: 'pack-about' }, p.about),
+          el('span', { className: 'pack-count' + (on.length ? ' on' : '') }, on.length ? `${on.length} of ${mods.length} on: ${on.map((m) => m.name).join(', ')}` : `${mods.length} modules`),
+          all),
+        el('div', { className: 'mod-grid' }, ...mods.map(card)));
+      box.ontoggle = () => {
+        if (box.open) openPacks.add(p.id); else openPacks.delete(p.id);
+        try { localStorage.setItem('packs-open', JSON.stringify([...openPacks])); } catch {}
+      };
+      return box;
+    }));
   if (focused) document.querySelector('#' + focused + ' button')?.focus();
 }
 
