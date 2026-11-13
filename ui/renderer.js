@@ -95,6 +95,7 @@ async function doAction(a) {
 // hooks for optional modules (see modules.js): extra row details, extra row buttons, extra palette commands
 const rowInfo = [];
 const rowTools = [];
+const taskFields = []; // a module that adds a field to the task form pushes { fill(task), read(oldTask) -> fields }
 const commandHooks = [];
 const metricHooks = []; // () => [{ id, label, unit, get() }]: numbers a module offers to Goals
 const calendarHooks = []; // (from, to) => [{ day, title, kind, view }]: dated things a module shows in the Calendar (countdown events, renewals)

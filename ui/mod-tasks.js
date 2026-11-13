@@ -138,6 +138,7 @@ function pendingItem(t) {
     $('due').value = t.repeat ? (t.due || '').slice(11, 16) : t.due || '';
     $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('note-link').value = t.noteId || '';
+    for (const h of taskFields) h.fill(t);
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
     $('title').focus();
@@ -343,6 +344,7 @@ $('form').onsubmit = async (e) => {
     title, due,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
     repeat: $('repeat').value || null,
+    ...Object.assign({}, ...taskFields.map((h) => h.read(old))),
     noteId: !started.has('notes') ? (todos.find((t) => t.id === editingId)?.noteId ?? null) : created ? created.id : choice || null, // without Notes the menu is hidden and the link stays as it was
   };
   const next = editingId

@@ -208,21 +208,39 @@
 
   // Track / Stop on a task row: the task's title becomes the description; the project is the last one used (or the first).
   const trackingTask = (t) => data.running && data.running.task === t.id;
+  function stopRunning() {
+    const r = data.running;
+    data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) });
+    data.running = null;
+    $('tt-notes').value = '';
+  }
+  // the task's own project when it has one, else the one in use, else the last one used, else the first
   function trackTask(t) {
     const stopping = trackingTask(t);
-    const project = data.running?.project || data.entries.at(-1)?.project || data.projects[0]?.id;
-    if (!project || !data.projects.some((p) => p.id === project)) { tell('Add a project in Time first, then you can track a task.'); return; }
-    if (data.running) {
-      const r = data.running;
-      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) });
-      data.running = null;
-      $('tt-notes').value = '';
-    }
+    const has = (id) => id && data.projects.some((p) => p.id === id);
+    const project = [t.projectId, data.running?.project, data.entries.at(-1)?.project, data.projects[0]?.id].find(has);
+    if (!project) { tell('Add a project in Time first, then you can track a task.'); return; }
+    if (data.running) stopRunning();
     if (!stopping) data.running = { project, desc: t.title.slice(0, 120), notes: '', start: iso(new Date()), task: t.id };
     $('tt-desc').value = data.running ? data.running.desc : '';
     save();
     paint();
     if (view === 'tasks') render();
+  }
+  // for Projects: the same project list, and start or stop the timer on a project
+  function trackOn(id) {
+    if (!data.projects.some((p) => p.id === id)) return;
+    if (data.running) stopRunning();
+    data.running = { project: id, desc: '', notes: '', start: iso(new Date()) };
+    $('tt-desc').value = '';
+    save();
+    paint();
+  }
+  function stopTimer() {
+    if (!data.running) return;
+    stopRunning();
+    save();
+    paint();
   }
   const rowToolFn = (t) => {
     const b = el('button', { type: 'button', className: 'act-track', textContent: trackingTask(t) ? 'Stop timer' : 'Track' });
@@ -237,6 +255,18 @@
   const commandFn = () => [{ label: data.running ? 'Stop the time tracker' : 'Start the time tracker', hint: 'Time', kind: 'Command', run: async () => { await setView('time'); if (data.running || data.projects.length) $('tt-form').requestSubmit(); } }];
 
   defineModule('time', {
+    projects: () => data.projects,
+    entries: () => data.entries,
+    running: () => data.running,
+    addProject(name, client) {
+      const p = { id: crypto.randomUUID(), name, client: client || '', rate: 0 };
+      data.projects.push(p);
+      save();
+      paint();
+      return p;
+    },
+    trackOn,
+    stopTimer,
     summary() {
       if (data.running) return { label: 'Tracking', value: clockHMS(elapsed()), unit: '', sub: `${nameOf(data.running.project)}${data.running.desc ? ' · ' + data.running.desc : ''}` };
       const secs = data.entries.filter((e) => localDay(new Date(e.start)) === today()).reduce((n, e) => n + secondsBetween(e.start, e.end), 0);

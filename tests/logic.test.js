@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -839,4 +839,17 @@ test('time: the work log lists what was done, newest first, with what was writte
   assert.equal(log[1].name, 'Deleted project');
   assert.equal(timeLogLine(log[2], '13 Nov'), '13 Nov 07:40-09:00 · Website · 1 h 20 min · Fix bug — Found the cause / in the form');
   assert.equal(timeLogLine(log[0], '14 Nov'), '14 Nov 10:00-10:30 · Website · 30 min');
+});
+
+test('projectSummary counts the tasks of a project, its time and what it earns', () => {
+  const p = { id: 'p1', name: 'Acme', rate: 600 };
+  const todos = [{ id: 1, projectId: 'p1', done: false }, { id: 2, projectId: 'p1', done: true }, { id: 3, projectId: 'p1', done: true }, { id: 4, projectId: 'p2', done: false }, { id: 5, done: false }];
+  const entries = [
+    { project: 'p1', start: '2026-11-10T09:00:00', end: '2026-11-10T10:30:00' }, // this week, 1.5 h
+    { project: 'p1', start: '2026-11-02T09:00:00', end: '2026-11-02T10:00:00' }, // earlier, 1 h
+    { project: 'p2', start: '2026-11-10T09:00:00', end: '2026-11-10T11:00:00' },
+  ];
+  const s = projectSummary(todos, entries, p, '2026-11-09');
+  assert.deepEqual(s, { open: 1, done: 2, total: 3, pct: 67, seconds: 9000, week: 5400, amount: 1500 });
+  assert.deepEqual(projectSummary([], [], { id: 'x', rate: 0 }, '2026-11-09'), { open: 0, done: 0, total: 0, pct: 0, seconds: 0, week: 0, amount: 0 });
 });
