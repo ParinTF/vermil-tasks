@@ -23,4 +23,4 @@ Switching a module off removes its card; a module that fails to report is skippe
 
 - **Copy as text** puts the summary lines on the clipboard.
 - **Save as file** writes a Markdown file in Downloads (`Vermil review-<date>.md`).
-- **Print or PDF** opens the print dialog with only the review, cards and charts, on a white page; choose **Save as PDF** there if you want a PDF.
+- **Print or PDF** opens the print dialog with a clean A4 page: a header with the period, then the cards in two columns with their charts, always black on white (whatever theme or accent colour you use) and never split across pages. Choose **Save as PDF** there if you want a PDF.

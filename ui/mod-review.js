@@ -15,6 +15,12 @@
     if (kind === 'month') return fmt(parseDay(since), { month: 'long', year: 'numeric' });
     return since.slice(0, 4);
   };
+  // the period in words for the printed header: "Last 7 days (7 Nov to 13 Nov)", "Today, 13 Nov 2026", "November 2026"
+  const printRange = () => {
+    const { since, until } = range();
+    const dated = (d) => fmt(parseDay(d), { day: 'numeric', month: 'short', year: 'numeric' });
+    return kind === 'day' ? (back <= 1 ? `${rangeLabel()}, ${dated(since)}` : dated(since)) : kind === 'week' && back === 0 ? `${rangeLabel()} (${fmtDay(since)} to ${dated(until)})` : rangeLabel();
+  };
   const fig = (v) => (v == null ? '—' : (Math.abs(v) >= 100 ? Math.round(v) : Math.round(v * 10) / 10).toLocaleString('en-US'));
 
   // one card per module: its lines (weekly) and its numbers (daily); a module that fails to report is skipped
@@ -58,6 +64,7 @@
   function build() {
     root().replaceChildren(
       el('section', { className: 'rv-main', ariaLabel: 'Review' },
+        el('div', { className: 'rv-print-head' }, el('div', {}, el('b', {}, 'Vermil'), el('h1', {}, 'Review')), el('span', { id: 'rv-print-range' })), // shown only on paper
         el('div', { className: 'rv-head' }, el('h2', {}, 'Review'),
           el('div', { className: 'rv-pick', role: 'group', ariaLabel: 'Period' },
             ...KINDS.map(([k, l]) => el('button', { id: 'rv-k-' + k, type: 'button', ariaPressed: String(k === kind), textContent: l, onclick: () => { kind = k; back = 0; paint(); } })))),
@@ -82,6 +89,7 @@
   function paint() {
     for (const [k] of KINDS) $('rv-k-' + k).ariaPressed = String(k === kind);
     $('rv-range').textContent = rangeLabel();
+    $('rv-print-range').textContent = printRange();
     $('rv-next').disabled = back === 0;
     $('rv-msg').textContent = '';
     const list = cards();
