@@ -14,6 +14,7 @@ Pick a project on the right. The page shows:
 - **This week**, **In total** and, when the project has a rate, **Earned**;
 - **Track time** (or **Stop timer** while it runs): starts the Time Tracker on this project;
 - **Tasks**: type in the box and press `Enter` to add a task to this project; tick a task to finish it; finished ones wait under "N done";
+- **Notes** (when [Notes](Notes.md) is on): the notes that belong to the project, newest first (click one to open it), and **New note**, which makes a note for the project and opens it with the cursor in the title;
 - **Recent time**: the last five entries.
 
 The list on the right says, for each project, how many tasks are open and how much time it has had.
@@ -22,6 +23,8 @@ The list on the right says, for each project, how many tasks are open and how mu
 
 The task form gets a **Project** menu. A task with a project shows "◆ Project name" on its row. **Track** on such a task starts the timer on the task's project, not on the last one you used.
 
+In Notes, an open note has a **Project** menu in its footer ("No project" by default). Choosing one files the note under that project; it saves with the note.
+
 Keys: `N` focuses the task box on a project page. The command palette lists "Project: …" to jump to one. Home has a tile with the number of projects and their open tasks.
 
-A project you remove in the Time Tracker disappears from here; its tasks keep their link in case you add it again.
+A project you remove in the Time Tracker disappears from here; its tasks and notes keep their link in case you add it again.

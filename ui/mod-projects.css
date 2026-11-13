@@ -34,6 +34,13 @@
 .pj-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
 .pj-msg { font-size: 13px; color: var(--mute); }
 
+.pj-notes-add { margin: 0 0 4px; }
+.pj-notes-add .linkish { font-size: 14px; }
+.pj-note { padding: 0; border: 0; background: none; font: inherit; text-align: left; color: var(--ink); cursor: pointer; overflow-wrap: anywhere; }
+.pj-note:hover { text-decoration: underline; text-underline-offset: 4px; }
+.note-project { min-width: 0; max-width: 200px; padding: 2px 0; border: 0; border-bottom: 1px solid var(--line); background: none; font: inherit; font-size: 13px; color: var(--mute); }
+.note-project:focus { outline: 0; border-color: var(--accent); }
+
 @media (min-width: 860px) {
   .projects-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(240px, 22vw, 320px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .pj-main { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-right: 8px; }

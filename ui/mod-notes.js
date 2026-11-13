@@ -34,6 +34,7 @@ function renderNoteList() {
     return chip;
   }), ...(linked.length > 6 ? [el('span', {}, `+${linked.length - 6} more`)] : []));
   fillNoteLinks();
+  registry.projects?.syncNote?.(cur); // the Project menu under the note, when Projects is on
 }
 
 // ── rich text: a note keeps a few formats (bold, four sizes, six colours) and nothing else ──

@@ -47,6 +47,15 @@
     $('pj-task')?.focus();
   }
 
+  // a new note for the project, written in the Notes page right after (the same way the task form makes one)
+  async function newNote(p) {
+    const created = { id: newNoteId(), title: '', body: '', updatedAt: new Date().toISOString(), projectId: p.id };
+    try { await invoke('save_notes', { notes: [created] }); } catch (err) { return tell('Could not create the note: ' + err); }
+    notes.push(created);
+    await setView('notes');
+    await registry.notes.open(created.id, 'title');
+  }
+
   function taskRow(t) {
     const box = el('input', { type: 'checkbox', ariaLabel: 'Mark done: ' + t.title });
     box.onchange = async () => { box.disabled = true; await commit(complete(t)); paint(); };
@@ -70,6 +79,7 @@
     track.onclick = () => { if (here) time().stopTimer(); else time().trackOn(p.id); paint(); };
     const stat = (label, value) => el('div', { className: 'pj-stat' }, el('small', {}, label), el('b', {}, value));
     const entries = (time().entries?.() || []).filter((e) => e.project === p.id).sort((a, b) => b.start.localeCompare(a.start)).slice(0, 5);
+    const mine = started.has('notes') ? notes.filter((n) => n.projectId === p.id).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')) : null;
     box.replaceChildren(
       el('div', { className: 'pj-head' }, el('h2', {}, p.name), ...(p.client ? [el('p', {}, p.client)] : [])),
       el('div', { className: 'pj-progress', role: 'progressbar', ariaValueNow: String(s.pct), ariaValueMin: '0', ariaValueMax: '100', ariaLabel: 'Tasks done' }, el('i', { style: `width:${s.pct}%` })),
@@ -82,6 +92,7 @@
         el('button', { className: 'linkish', type: 'submit' }, 'Add')),
       el('ul', { id: 'pj-open', className: 'pj-tasks' }, ...open.map(taskRow)),
       ...(done.length ? [el('details', { className: 'pj-done' }, el('summary', {}, `${done.length} done`), el('ul', { className: 'pj-tasks' }, ...done.map((t) => el('li', { className: 'done' }, el('span', {}, '✓ ' + t.title)))))] : []),
+      ...(mine ? [el('h3', {}, 'Notes'), el('div', { className: 'pj-notes-add' }, el('button', { id: 'pj-note-new', type: 'button', className: 'linkish', onclick: () => newNote(p) }, 'New note')), el('ul', { id: 'pj-notes', className: 'pj-tasks' }, ...mine.map((n) => { const b = el('button', { type: 'button', className: 'pj-note' }, n.title || 'Untitled'); b.onclick = async () => { await setView('notes'); await registry.notes.open(n.id, 'body'); }; return el('li', {}, b, ...(n.updatedAt ? [el('time', {}, fmt(n.updatedAt, { day: 'numeric', month: 'short' }))] : [])); }))] : []),
       ...(entries.length ? [el('h3', {}, 'Recent time'), el('ul', { id: 'pj-time', className: 'pj-tasks' }, ...entries.map((e) => el('li', {}, el('span', {}, e.desc || 'No description'), el('time', {}, `${fmt(e.start, { day: 'numeric', month: 'short' })} · ${hoursLabel(secondsBetween(e.start, e.end))}`))))] : []));
   }
 
@@ -107,6 +118,19 @@
     sel.replaceChildren(el('option', { value: '' }, 'None'), ...list().map((p) => el('option', { value: p.id }, p.name)));
     sel.value = list().some((p) => p.id === keep) ? keep : '';
   };
+  // the Project menu under an open note (called by Notes each time it draws)
+  function syncNote(cur) {
+    if (!started.has('projects')) return; // the registry keeps this script after the module is off
+    let sel = $('note-project');
+    if (!sel) {
+      sel = el('select', { id: 'note-project', className: 'note-project', ariaLabel: 'Project of this note' });
+      sel.onchange = () => { const n = currentNote(); if (n && typeof touchNote === 'function') { n.projectId = sel.value || null; touchNote(); } };
+      $('note-delete').before(sel);
+    }
+    const keep = cur?.projectId || '';
+    sel.replaceChildren(el('option', { value: '' }, 'No project'), ...list().map((p) => el('option', { value: p.id }, 'Project: ' + p.name)));
+    sel.value = list().some((p) => p.id === keep) ? keep : '';
+  }
   const group = { module: 'projects', title: 'Projects', items: [['N', 'Add a task to the open project']] };
   const commandFn = () => list().map((p) => ({ label: 'Project: ' + p.name, hint: 'Projects', kind: 'Command', run: async () => { selected = p.id; await setView('projects'); } }));
 
@@ -121,6 +145,7 @@
       build();
       const row = el('div', { className: 'row', id: 'project-row' }, el('label', { className: 'field' }, 'Project', el('select', { id: 'project-link' })));
       $('note-link').closest('.row').after(row);
+      if (started.has('notes') && selectedNoteId) syncNote(currentNote());
       fillMenu();
       $('project-link').onpointerdown = fillMenu; // a project added in Time since the last look
       taskFields.push(field);
@@ -131,12 +156,14 @@
     },
     stop() {
       $('project-row')?.remove();
+      $('note-project')?.remove();
       taskFields.splice(taskFields.indexOf(field), 1);
       rowInfo.splice(rowInfo.indexOf(rowInfoFn), 1);
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
       if (view === 'tasks') render();
     },
+    syncNote,
     show() { fillMenu(); paint(); },
     refresh() { paint(); },
     keys(e) {
