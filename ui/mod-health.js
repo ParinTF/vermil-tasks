@@ -1,5 +1,5 @@
 // Health module: water, sleep, weight, workouts and medicine, for any day. Loaded only while it is switched on.
-// Data: { water: { day: glasses }, sleep: { day: hours }, weight: { day: kg }, workouts: [{ id, day, kind, minutes }],
+// Data: { water: { day: glasses }, sleep: { day: hours slept the night before that day, logged on the day you woke }, weight: { day: kg }, workouts: [{ id, day, kind, minutes }],
 //         meds: [{ id, name, times, days }], taken: { day: { "<id>@<time>": true } }, announced: { day: { key: true } }, waterGoal, sleepGoal }.
 (() => {
   let data = { water: {}, sleep: {}, weight: {}, workouts: [], meds: [], taken: {}, announced: {}, waterGoal: 8, sleepGoal: 7 };
@@ -28,7 +28,8 @@
           card('Water', el('div', { id: 'hl-water', className: 'hl-big' }), el('span', { className: 'hl-track', ariaHidden: 'true' }, el('i', { id: 'hl-water-bar' })),
             el('div', { className: 'hl-row' }, el('button', { id: 'hl-w-minus', type: 'button', className: 'hl-round', textContent: '−', ariaLabel: 'One glass less', onclick: () => water(-1) }), el('button', { id: 'hl-w-plus', type: 'button', className: 'hl-round', textContent: '+', ariaLabel: 'One glass more', onclick: () => water(1) }), el('small', {}, 'glasses of about 250 ml'))),
           card('Sleep', el('div', { id: 'hl-sleep', className: 'hl-big' }), el('span', { className: 'hl-track', ariaHidden: 'true' }, el('i', { id: 'hl-sleep-bar' })),
-            el('label', { className: 'hl-field' }, 'Hours slept the night before', el('input', { id: 'hl-sleep-in', inputMode: 'decimal', autocomplete: 'off', placeholder: '7.5', onchange: () => setSimple('sleep', 'hl-sleep-in', 24) }))),
+            el('label', { id: 'hl-sleep-label', className: 'hl-field' }, 'Hours you slept last night', el('input', { id: 'hl-sleep-in', inputMode: 'decimal', autocomplete: 'off', placeholder: '7.5', onchange: () => setSimple('sleep', 'hl-sleep-in', 24) })),
+            el('small', { className: 'hl-note' }, 'Log it on the day you wake up: last night’s sleep counts for today.')),
           card('Weight', el('div', { id: 'hl-weight', className: 'hl-big' }), el('div', { id: 'hl-wchart', className: 'hl-wchart', role: 'img' }), el('small', { id: 'hl-wnote', className: 'hl-note' }),
             el('label', { className: 'hl-field' }, 'Weight today, kg', el('input', { id: 'hl-weight-in', inputMode: 'decimal', autocomplete: 'off', placeholder: '70.5', onchange: () => setSimple('weight', 'hl-weight-in', 500) }))),
           card('Workouts', el('div', { id: 'hl-wo-sum', className: 'hl-big' }),
@@ -117,6 +118,7 @@
     $('hl-sleep').textContent = s ? `${num(s)} h` : '—';
     $('hl-sleep-bar').style.width = Math.min(100, s / data.sleepGoal * 100) + '%';
     if (document.activeElement !== $('hl-sleep-in')) $('hl-sleep-in').value = s || '';
+    $('hl-sleep-label').firstChild.textContent = day === t ? 'Hours you slept last night' : 'Hours slept the night before this day';
     const kg = data.weight[day] || 0;
     $('hl-weight').textContent = kg ? `${num(kg)} kg` : '—';
     if (document.activeElement !== $('hl-weight-in')) $('hl-weight-in').value = kg || '';
