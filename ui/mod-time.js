@@ -89,7 +89,7 @@
     e.preventDefault();
     if (data.running) {
       const r = data.running;
-      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()) });
+      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) });
       data.running = null;
       $('tt-notes').value = ''; // the next one starts with an empty box
     } else {
@@ -206,9 +206,34 @@
     Promise.race([navigator.clipboard.writeText(text), new Promise((_, no) => setTimeout(() => no(new Error('timeout')), 1500))]).then(() => { $('tt-copy-msg').textContent = 'Copied'; }, () => { $('tt-copy-msg').textContent = 'Could not copy'; });
   }
 
+  // Track / Stop on a task row: the task's title becomes the description; the project is the last one used (or the first).
+  const trackingTask = (t) => data.running && data.running.task === t.id;
+  function trackTask(t) {
+    const stopping = trackingTask(t);
+    const project = data.running?.project || data.entries.at(-1)?.project || data.projects[0]?.id;
+    if (!project || !data.projects.some((p) => p.id === project)) { tell('Add a project in Time first, then you can track a task.'); return; }
+    if (data.running) {
+      const r = data.running;
+      data.entries.push({ id: crypto.randomUUID(), project: r.project, desc: r.desc, notes: r.notes || '', start: r.start, end: iso(new Date()), ...(r.task ? { task: r.task } : {}) });
+      data.running = null;
+      $('tt-notes').value = '';
+    }
+    if (!stopping) data.running = { project, desc: t.title.slice(0, 120), notes: '', start: iso(new Date()), task: t.id };
+    $('tt-desc').value = data.running ? data.running.desc : '';
+    save();
+    paint();
+    if (view === 'tasks') render();
+  }
+  const rowToolFn = (t) => {
+    const b = el('button', { type: 'button', className: 'act-track', textContent: trackingTask(t) ? 'Stop timer' : 'Track' });
+    b.onclick = () => trackTask(t);
+    return b;
+  };
+  const rowInfoFn = (t) => (trackingTask(t) ? '● tracking' : '');
+
   const weekSeconds = () => { const w = timeRange('week', today()); return timeReport(data.entries, data.projects, w.since, w.until).seconds; };
   const metricsFn = () => [{ id: 'time.week', label: 'Hours tracked this week', unit: 'h', get: () => Math.round(weekSeconds() / 360) / 10 }];
-  const group = { module: 'time', title: 'Time Tracker', items: [['Enter', 'Start or stop the timer (in the field)'], ['N', 'Focus the description']] };
+  const group = { module: 'time', title: 'Time Tracker', items: [['Enter', 'Start or stop the timer (in the field)'], ['N', 'Focus the description'], ['K', 'Track time on the selected task (in Tasks)']] };
   const commandFn = () => [{ label: data.running ? 'Stop the time tracker' : 'Start the time tracker', hint: 'Time', kind: 'Command', run: async () => { await setView('time'); if (data.running || data.projects.length) $('tt-form').requestSubmit(); } }];
 
   defineModule('time', {
@@ -234,6 +259,8 @@
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
       metricHooks.push(metricsFn);
+      rowTools.push(rowToolFn);
+      rowInfo.push(rowInfoFn);
       ticker = setInterval(paintClock, 1000);
     },
     stop() {
@@ -242,6 +269,9 @@
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
       metricHooks.splice(metricHooks.indexOf(metricsFn), 1);
+      rowTools.splice(rowTools.indexOf(rowToolFn), 1);
+      rowInfo.splice(rowInfo.indexOf(rowInfoFn), 1);
+      if (view === 'tasks') render();
     },
     show() { paint(); },
     refresh: undefined,

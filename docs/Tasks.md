@@ -39,5 +39,6 @@ A notification appears at the reminder time with **10 min**, **1 hour** and **To
 | `Ctrl+Z` | Undo |
 | `T` | Theme |
 | `F` | Focus timer (if on) |
+| `K` | Track time on the task (if Time is on) |
 
 Works with: [Calendar](Calendar.md), [Focus timer](Focus-timer.md), [Notes](Notes.md), [Goals](Goals.md) (tasks done), [Time Tracker](Time-Tracker.md).

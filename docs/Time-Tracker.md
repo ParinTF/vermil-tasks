@@ -12,6 +12,10 @@ On the right, add a **project**: a name, an optional **client** and an optional 
 2. A chip in the top bar and the big clock show the running time; click the chip to come back. The timer **keeps running** if you close the window, switch the module off or restart Vermil.
 3. Press **Stop**. The entry lands in **Today** with its length.
 
+## Track a task
+
+With Time on, every open task row in [Tasks](Tasks.md) has a **Track** button (key `K` on the selected row). It starts the timer with the task's title as the description, on the project you used last (or the first one; it asks you to add a project if there is none). The row then shows "● tracking" and its button reads **Stop timer**. Tracking another task stops the running one and saves it as an entry first. Entries keep the task they came from.
+
 ## What you did
 
 Next to the timer there is a **Details** box: write what you did, in as many lines as you like (up to 2,000 characters). You can type in it, and in the description box, **while the timer runs**; it is saved as you type and goes with the entry when you stop. Every entry has a **✎** pencil (orange when it has details): press it to write or change the details afterwards; it saves as you type, and `Esc` or leaving the box closes it. Emptying the box removes the details.

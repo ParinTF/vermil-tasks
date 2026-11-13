@@ -432,6 +432,7 @@ function taskKeys(e) {
   else if (e.code === 'KeyE') press('.act-edit');
   else if (e.code === 'KeyP') press('.act-pin');
   else if (e.code === 'KeyF') press('.act-focus'); // only there while the focus timer module is on
+  else if (e.code === 'KeyK') press('.act-track'); // only there while the Time module is on
   else if (e.code === 'KeyO') press('.act-open');
   else if (/^Digit[1-4]$/.test(e.code)) { e.preventDefault(); $('tab-' + TABS[+e.code.slice(5) - 1]).click(); }
   else if (e.key === 'Delete') press('.act-del');
