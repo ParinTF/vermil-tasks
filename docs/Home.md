@@ -15,7 +15,7 @@ When you have many modules on, the tab bar shows the tabs that fit and puts the 
 
 ## Today strip
 
-Above the cards, one tile per module that has something to say today: open and overdue tasks, focus minutes, spending, portfolio, renewals, habits done, and so on. Click a tile to open that module. The same tiles are what the [Today widget](Today-widget.md) shows.
+Above the cards, one tile per module that has something to say today: open and overdue tasks, focus minutes, spending, your stocks, renewals, habits done, and so on. Click a tile to open that module. The same tiles are what the [Today widget](Today-widget.md) shows.
 
 ## Backup
 

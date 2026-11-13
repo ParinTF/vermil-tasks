@@ -31,7 +31,7 @@ The app opens on **Home**: a strip of today's numbers and five packages (Work, M
 | [Countdown](docs/Countdown.md) | Days until what matters, yearly events too |
 | [Journal](docs/Journal.md) | A few lines a day and a mood, with a two-week chart |
 | [Goals](docs/Goals.md) | Targets that watch numbers from your other modules |
-| [Stocks](docs/Stocks.md) | Look up a stock, pre-market moves, portfolio profit and loss (needs the internet) |
+| [Stocks](docs/Stocks.md) | Look up a stock, pre-market moves, profit and loss of the stocks you hold (needs the internet) |
 | [Automations](docs/Automations.md) | Rules: when something happens, add a task, record an expense or notify you |
 | [Insights](docs/Insights.md) | Patterns across your modules, like sleep against mood or spending (needs a few weeks of data) |
 | [Assistant](docs/Assistant.md) | Ask about your week or say what to add; Gemini with your own key, sees only what you tick, acts only when you confirm |

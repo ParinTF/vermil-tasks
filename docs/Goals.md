@@ -6,7 +6,7 @@ Targets for numbers that other modules already keep, or for a number you update 
 
 On the right: a **Goal** name, **Measured by**, the **Aim** and the **Target**.
 
-- **Measured by** is either **By hand** or one of the numbers a switched-on module offers, for example: tasks done in the last 7 days or this month, focus minutes, money saved or spent this month, habits done in the last 7 days, days journalled this month, workout minutes, water and sleep averages, items finished in the Library this year, hours tracked this week, portfolio value. The list only shows what your modules offer right now.
+- **Measured by** is either **By hand** or one of the numbers a switched-on module offers, for example: tasks done in the last 7 days or this month, focus minutes, money saved or spent this month, habits done in the last 7 days, days journalled this month, workout minutes, water and sleep averages, items finished in the Library this year, hours tracked this week, the value of your stocks. The list only shows what your modules offer right now.
 - **Aim** is **Reach at least** (a savings goal, tasks done) or **Stay under** (a spending limit).
 
 ## Follow it

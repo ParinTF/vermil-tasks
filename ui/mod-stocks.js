@@ -1,6 +1,6 @@
 // Stocks module: look up a stock, watch it, and track what your positions are worth. It needs the internet, so every
 // use starts with a connection check; offline it shows the last saved prices and says so.
-// Two pages on one list: Watch (a compact table to glance at each stock) and Portfolio (the positions, with value and profit or loss).
+// Two pages on one list: Watch (a compact table to glance at each stock) and Portfolio (the positions, with value and profit or loss; the page is called My stocks).
 // Data: { items: [{ symbol, name, shares, cost }], quotes: { SYMBOL: quote }, at: ms, page: 'watch' | 'portfolio' }. Prices come from the backend
 // (Yahoo Finance's public endpoints: free, may be delayed, and can change without notice).
 const stocksApi = { // one place for the network calls, so a test can replace them
@@ -32,7 +32,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
           el('button', { className: 'linkish', type: 'button', textContent: 'Try again', onclick: () => refresh() })),
         el('div', { id: 'st-note', className: 'st-note-err', hidden: true }),
         el('div', { className: 'st-pages', role: 'group', ariaLabel: 'Stocks page' },
-          ...[['watch', 'Watch'], ['portfolio', 'Portfolio']].map(([id, label]) => { const b = el('button', { type: 'button', className: 'st-page-btn', textContent: label, onclick: () => setPage(id) }); b.dataset.page = id; return b; })),
+          ...[['watch', 'Watch'], ['portfolio', 'My stocks']].map(([id, label]) => { const b = el('button', { type: 'button', className: 'st-page-btn', textContent: label, onclick: () => setPage(id) }); b.dataset.page = id; return b; })),
         el('div', { id: 'st-watch', className: 'st-pane' },
           el('div', { className: 'sw-head', ariaHidden: 'true' }, ...['Symbol', 'Price', 'Change', 'Pre / post', 'Prev close', 'Status', ''].map((t) => el('span', {}, t))),
           el('ul', { id: 'sw-list', className: 'st-list sw-list', ariaLabel: 'Watched stocks' })),
@@ -265,8 +265,8 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     paint();
   }
 
-  const metricsFn = () => [{ id: 'stocks.value', label: 'Portfolio value (saved prices)', unit: '', get: () => portfolio(data.items, data.quotes).totals[0]?.value || 0 }];
-  const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices'], ['1 / 2', 'Watch or Portfolio'], ['Alt+↑/↓', 'Move the focused stock up or down']] };
+  const metricsFn = () => [{ id: 'stocks.value', label: 'My stocks value (saved prices)', unit: '', get: () => portfolio(data.items, data.quotes).totals[0]?.value || 0 }];
+  const group = { module: 'stocks', title: 'Stocks', items: [['/', 'Find a stock'], ['R', 'Refresh prices'], ['1 / 2', 'Watch or My stocks'], ['Alt+↑/↓', 'Move the focused stock up or down']] };
   const commandFn = () => [{ label: 'Look up a stock', hint: 'Stocks', kind: 'Command', run: async () => { await setView('stocks'); $('st-q').focus(); } }];
   const wake = () => { if (view === 'stocks') refresh(); };
   const goOnline = () => wake();
@@ -276,14 +276,14 @@ const stocksApi = { // one place for the network calls, so a test can replace th
     weekly() {
       if (!data.items.length) return null;
       const t = portfolio(data.items, data.quotes).totals[0];
-      return { title: 'Stocks', lines: t ? [`Portfolio ${priceLabel(t.value, t.currency)}, ${signedLabel(t.day, t.currency)} on the last day with a saved price`, ...(t.hasPl ? [`Profit or loss ${signedLabel(t.pl, t.currency)} (${pctLabel(t.plPct)})`] : [])] : [`${data.items.length} watched, no prices saved yet`] };
+      return { title: 'Stocks', lines: t ? [`My stocks ${priceLabel(t.value, t.currency)}, ${signedLabel(t.day, t.currency)} on the last day with a saved price`, ...(t.hasPl ? [`Profit or loss ${signedLabel(t.pl, t.currency)} (${pctLabel(t.plPct)})`] : [])] : [`${data.items.length} watched, no prices saved yet`] };
     },
     summary() {
       if (!data.items.length) return null;
       const t = portfolio(data.items, data.quotes).totals[0];
       if (!t) return { label: 'Stocks', value: String(data.items.length), unit: 'watching', sub: 'No prices saved yet' };
       const base = t.value - t.day;
-      return { label: 'Portfolio', value: priceLabel(t.value, t.currency), unit: '', warn: t.day < 0, sub: `Today ${signedLabel(t.day, t.currency)}${base ? ' (' + pctLabel(t.day / base * 100) + ')' : ''} · saved prices` };
+      return { label: 'My stocks', value: priceLabel(t.value, t.currency), unit: '', warn: t.day < 0, sub: `Today ${signedLabel(t.day, t.currency)}${base ? ' (' + pctLabel(t.day / base * 100) + ')' : ''} · saved prices` };
     },
     start() {
       data = { items: [], quotes: {}, at: 0, ...(moduleData.stocks || {}) };
