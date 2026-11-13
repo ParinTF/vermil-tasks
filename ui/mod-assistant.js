@@ -20,6 +20,10 @@
       if (!started.has(m.id) || ['tasks', 'notes', 'assistant'].includes(m.id) || !registry[m.id]?.weekly) continue;
       list.push({ id: m.id, label: `${m.name}: a summary of ${range().label}`, build: () => registry[m.id].weekly(range().since, range().until) });
     }
+    for (const m of MODULES) { // the same modules, entry by entry: each is its own tick because it sends the notes you wrote too
+      if (!started.has(m.id) || !registry[m.id]?.details) continue;
+      list.push({ id: m.id + ':items', label: `${m.name}: every entry of ${range().label}, with its note`, build: () => registry[m.id].details(range().since, range().until) });
+    }
     return list;
   }
   const sections = () => shareable().filter((s) => data.share.includes(s.id)).flatMap((s) => { try { const x = s.build(); return x && x.lines.length ? [x] : []; } catch { return []; } });

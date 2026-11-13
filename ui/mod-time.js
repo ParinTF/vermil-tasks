@@ -267,6 +267,7 @@
     },
     trackOn,
     stopTimer,
+    details: (since, until) => ({ title: 'Time entries, one by one', lines: timeDetail(data.entries, data.projects, since, until) }),
     summary() {
       if (data.running) return { label: 'Tracking', value: clockHMS(elapsed()), unit: '', sub: `${nameOf(data.running.project)}${data.running.desc ? ' · ' + data.running.desc : ''}` };
       const secs = data.entries.filter((e) => localDay(new Date(e.start)) === today()).reduce((n, e) => n + secondsBetween(e.start, e.end), 0);

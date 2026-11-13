@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
+const { projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, eventDaysIn, renewalsIn, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, monthGrid, shiftDay, shiftMonth, groupByDay, plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, rankItems, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, clock, minutesLabel, focusSummary, parseAmount, moneyLabel, moneyMonth, currencySign, priceLabel, pctLabel, signedLabel, portfolio, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, budgetStatus, addCycle, rollForward, monthlyCost, daysUntil, nextEventDay, countdownLabel, MOODS, moodAverage, goalProgress, parseConvert, convertUnit, convertLabel, reviewText, parseIngredients, topItems, weekDays, weightTrend, medDue, dosesDue, filterLibrary, libraryYear, birthdayInfo, touchState, paidTotals, billState, PACKING_TEMPLATES, tripDays, tripState, packingProgress, secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const next = (repeat, due, today = wed) => nextOccurrence(repeat, due, today);
@@ -869,4 +869,19 @@ test('assistantPrompt names the period when there is one', () => {
   const base = { now, sections: [{ title: 'Money', lines: ['x'] }], can: [], views: [] };
   assert.ok(!assistantPrompt(base).includes('cover'));
   assert.ok(assistantPrompt({ ...base, period: assistantRange('lastmonth', '2026-11-13') }).includes('cover last month (2026-10-01 to 2026-10-31)'));
+});
+
+test('entry-by-entry lines: newest first, inside the span, capped', () => {
+  const entries = [
+    { day: '2026-11-05', kind: 'out', amount: 120, cat: 'Food', note: 'lunch' },
+    { day: '2026-11-09', kind: 'in', amount: 900, cat: 'Salary', note: '' },
+    { day: '2026-10-30', kind: 'out', amount: 5, cat: 'Other', note: 'outside' },
+  ];
+  assert.deepEqual(moneyDetail(entries, '2026-11-01', '2026-11-30'), ['2026-11-09 earned 900 Salary', '2026-11-05 spent 120 Food: lunch']);
+  const many = Array.from({ length: 5 }, (_, i) => `l${i}`);
+  assert.deepEqual(capLines(many, 3), ['l0', 'l1', 'l2', '(2 older entries not shown)']);
+  assert.deepEqual(capLines(many, 5), many);
+  const t = [{ id: 'e1', project: 'p', desc: 'Fix bug', notes: 'found it\nfixed', start: '2026-11-05T07:40:00', end: '2026-11-05T09:00:00' }];
+  assert.deepEqual(timeDetail(t, [{ id: 'p', name: 'Web', client: '' }], '2026-11-01', '2026-11-30'), ['2026-11-05 07:40-09:00 · Web · 1 h 20 min · Fix bug — found it / fixed']);
+  assert.deepEqual(timeDetail(t, [], '2026-12-01', '2026-12-31'), []);
 });

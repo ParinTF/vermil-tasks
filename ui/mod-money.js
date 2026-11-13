@@ -212,6 +212,7 @@
       for (const e of data.entries) if (e.kind === 'out') byDay[e.day] = (byDay[e.day] || 0) + e.amount;
       return [{ id: 'money.spent', label: 'spending', byDay, zero: true }];
     },
+    details: (since, until) => ({ title: 'Expenses, entry by entry', lines: moneyDetail(data.entries, since, until) }),
     weekly(since, until) {
       const list = data.entries.filter((e) => e.day >= since && e.day <= until);
       if (!list.length) return { title: 'Money', lines: ['Nothing recorded'] };

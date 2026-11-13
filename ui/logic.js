@@ -516,6 +516,22 @@ function timeLogLine(x, dayLabel) {
   return [`${dayLabel} ${x.from}-${x.to}`, x.name, hoursLabel(x.seconds), x.desc].filter(Boolean).join(' · ') + (x.notes ? ' — ' + x.notes.replace(/\s*\n\s*/g, ' / ') : '');
 }
 
+// ── Assistant: entry by entry, for the modules that offer it (the user ticks each one on its own) ──
+// at most `max` lines, then one saying how many were left out
+function capLines(lines, max = 60) {
+  return lines.length > max ? [...lines.slice(0, max), `(${lines.length - max} older entries not shown)`] : lines;
+}
+// "2026-11-05 spent 120 Food: lunch", newest first
+function moneyDetail(entries, since, until, max = 60) {
+  const note = (s) => (s ? ': ' + String(s).replace(/\s+/g, ' ').slice(0, 80) : '');
+  return capLines(entries.filter((e) => e.day >= since && e.day <= until).sort((a, b) => b.day.localeCompare(a.day))
+    .map((e) => `${e.day} ${e.kind === 'in' ? 'earned' : 'spent'} ${e.amount} ${e.cat || 'Other'}${note(e.note)}`), max);
+}
+// "2026-11-05 07:40-09:00 · Website · 1 h 20 min · Fix bug — details", newest first
+function timeDetail(entries, projects, since, until, max = 60) {
+  return capLines(timeLog(entries, projects, since, until).map((x) => timeLogLine({ ...x, notes: x.notes.slice(0, 120) }, x.day)), max);
+}
+
 // ── Review: the span it covers and the numbers behind its charts ──
 // a day, the last 7 days, a calendar month or a calendar year, `back` periods before this one, never reaching past today
 function reviewRange(kind, back, today) {
@@ -969,4 +985,4 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
