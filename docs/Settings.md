@@ -21,7 +21,7 @@ The look is stored on this computer and applies to the Today widget too. It is n
 - **Clock**: 24-hour or 12-hour.
 - **Open on**: Home, or the tab you were on when you closed Vermil.
 - **New task reminder**: the reminder a new task starts with.
-- **Tab order**: move the tabs with the arrows. `Ctrl+1`, `Ctrl+2`... follow the order you set, and the More menu does too.
+- **Tab order**: **drag** a tab to a new place, or use the arrows on it. `Ctrl+1`, `Ctrl+2`... follow the order you set, and the More menu does too.
 
 Week start and clock are read while drawing, so changing them reloads the window once and returns here.
 

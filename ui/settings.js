@@ -82,6 +82,32 @@ function appearanceSection() {
     reset);
 }
 
+// Drag a tab to reorder: the tab follows the pointer through the list (pointer events: HTML5 drag and drop is unreliable in the
+// WebView) and the new order is kept when it is let go. A press that does not move is a plain click.
+function dragTab(li, e) {
+  const list = li.parentNode;
+  const from = { x: e.clientX, y: e.clientY };
+  let moved = false;
+  list.setPointerCapture(e.pointerId); // on the list: moving the tab in the DOM would drop a capture held by the tab itself
+  const before = (other, x, y) => { const r = other.getBoundingClientRect(); return r.bottom < y || (r.top <= y && r.left + r.width / 2 < x); }; // earlier in reading order than the pointer
+  list.onpointermove = (ev) => {
+    if (!moved && Math.hypot(ev.clientX - from.x, ev.clientY - from.y) < 5) return;
+    moved = true;
+    li.classList.add('dragging');
+    const others = [...list.children].filter((x) => x !== li);
+    const at = others.filter((x) => before(x, ev.clientX, ev.clientY)).length;
+    if (others[at] !== li.nextSibling) list.insertBefore(li, others[at] || null);
+  };
+  list.onpointerup = list.onpointercancel = () => {
+    list.onpointermove = list.onpointerup = list.onpointercancel = null;
+    li.classList.remove('dragging');
+    if (!moved) return;
+    setPrefs({ tabOrder: [...list.children].map((x) => x.dataset.id) });
+    syncViews();
+    renderSettings();
+  };
+}
+
 // ── General: startup, the morning summary, the calendar and clock, where to start ──
 function generalSection() {
   const p = readPrefs();
@@ -110,7 +136,10 @@ function generalSection() {
     const move = (d) => () => { const next = [...ordered]; [next[i], next[i + d]] = [next[i + d], next[i]]; setPrefs({ tabOrder: next }); syncViews(); renderSettings(); };
     up.onclick = move(-1);
     down.onclick = move(1);
-    return el('li', {}, el('span', {}, byId(id).view), up, down);
+    const li = el('li', { title: 'Drag to reorder' }, el('span', {}, byId(id).view), up, down);
+    li.dataset.id = id;
+    li.onpointerdown = (e) => { if (e.button === 0 && !e.target.closest('button')) dragTab(li, e); };
+    return li;
   });
   return stSection('General',
     el('div', { className: 'st-line' }, auto),
@@ -119,7 +148,7 @@ function generalSection() {
     stRow('Clock', stPicker('Clock', [['24', '24-hour'], ['12', '12-hour']], p.h12 ? '12' : '24', (v) => { setPrefs({ h12: v === '12' }); reloadToApply(); })),
     stRow('Open on', stPicker('Open on', [['home', 'Home'], ['last', 'Where I left off']], p.startPage, (v) => { setPrefs({ startPage: v }); renderSettings(); })),
     stRow('New task reminder', remind),
-    ...(tabRows.length > 1 ? [el('div', { className: 'st-row' }, el('span', { className: 'st-label' }, 'Tab order'), el('ol', { id: 'st-tabs', className: 'st-tabs' }, ...tabRows))] : []));
+    ...(tabRows.length > 1 ? [el('div', { className: 'st-row' }, el('span', { className: 'st-label' }, 'Tab order'), el('div', {}, el('ol', { id: 'st-tabs', className: 'st-tabs' }, ...tabRows), el('p', { className: 'st-fine' }, 'Drag a tab to a new place, or use its arrows.')))] : []));
 }
 
 // ── Notifications: quiet hours, what may notify, a test ──
