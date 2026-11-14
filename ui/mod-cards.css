@@ -1,0 +1,60 @@
+/* Spaced Flashcards module */
+.cards-page { display: grid; gap: 32px; padding-top: 24px; }
+.fc-main, .fc-side { min-width: 0; }
+.fc-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 14px; }
+.fc-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.fc-modes { display: inline-flex; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+.fc-modes button { padding: 4px 12px; border: 0; border-radius: 999px; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.fc-modes button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+.fc-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; padding: 14px 0 18px; border-top: 1px solid var(--ink); border-bottom: 1px solid var(--line); margin-bottom: 14px; }
+.fc-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.fc-sum b { font-size: clamp(20px, 2.2vw, 30px); font-weight: 700; font-variant-numeric: tabular-nums; }
+
+.fc-card { display: grid; gap: 18px; padding: 24px; border: 2px solid var(--ink); border-radius: 16px; background: color-mix(in srgb, var(--ink) 2.5%, transparent); cursor: pointer; }
+.fc-card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.fc-card-front { font-size: clamp(20px, 2.4vw, 28px); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.fc-card-back { padding-top: 16px; border-top: 1px solid var(--line); font-size: 17px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.fc-card-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
+.fc-grade { flex: 1; min-width: 120px; padding: 11px 16px; border: 1px solid var(--ink); border-radius: 999px; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.fc-grade.good { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.fc-reveal-btn { justify-self: start; }
+.fc-done-box { padding: 28px 20px; border: 1px solid var(--line); border-radius: 14px; text-align: center; }
+.fc-done-box h3 { margin: 0 0 6px; font-size: 20px; }
+.fc-done-box p { margin: 0; font-size: 14px; color: var(--mute); }
+
+.fc-list { margin: 0; padding: 0; list-style: none; }
+.fc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.fc-row-main { display: grid; gap: 3px; min-width: 180px; flex: 1; }
+.fc-row-main b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.fc-row-main span { font-size: 13.5px; color: var(--mute); overflow-wrap: anywhere; }
+.fc-row-meta { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--mute); }
+.fc-del { padding: 0 4px; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; }
+.fc-del:hover { color: var(--accent-text); }
+
+.fc-side form { display: grid; gap: 14px; }
+.fc-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.fc-field input, .fc-field textarea { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); resize: vertical; }
+.fc-field input:focus, .fc-field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.fc-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
+
+@media (max-width: 640px) {
+  .cards-page { gap: 16px; padding-top: 12px; }
+  .fc-head h2 { font-size: 24px; }
+  .fc-sum { gap: 10px; padding: 12px 0; }
+  .fc-sum b { font-size: 18px; }
+  .fc-card { padding: 18px; }
+  .fc-side {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    max-height: 86dvh; overflow-y: auto;
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper); border-top: 2px solid var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px #12110f55;
+  }
+  .cards-page.sheet-open .fc-side { display: block; animation: rise-in .25s var(--ease) both; }
+}
+
+@media (min-width: 860px) {
+  .cards-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(260px, 24vw, 340px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .fc-main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+  .fc-side { min-height: 0; overflow-y: auto; }
+}

@@ -35,6 +35,7 @@ const MODULES = [
   { id: 'insights', pack: 'smart', name: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
   { id: 'assistant', pack: 'smart', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
   { id: 'review', pack: 'smart', name: 'Review', about: 'A dashboard of your day, week, month or year from every module you use: numbers, charts and a summary you can copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
+  { id: 'cards', pack: 'smart', name: 'Flashcards', about: 'Spaced-repetition flashcards (5 Leitner boxes: 1, 3, 7, 14 and 30 days) to remember vocabulary, concepts and notes.', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
 ];
 
 // Packages: Home shows the modules in a few sets instead of one long list. A new module names its set with `pack`.
