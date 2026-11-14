@@ -1,0 +1,51 @@
+/* Bookmarks & Read Later module */
+.links-page { display: grid; gap: 32px; padding-top: 24px; }
+.lk-main, .lk-side { min-width: 0; }
+.lk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 12px; }
+.lk-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
+.lk-count { font-size: 13px; color: var(--mute); font-variant-numeric: tabular-nums; }
+.lk-tabs { display: flex; flex-wrap: wrap; gap: 18px; border-bottom: 1px solid var(--line); margin-bottom: 10px; }
+.lk-tabs button { padding: 8px 0 10px; border: 0; border-bottom: 3px solid transparent; background: none; font: inherit; font-size: 13.5px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.lk-tabs button[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--accent); }
+#lk-search { width: 100%; padding: 10px 0; margin-bottom: 8px; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); background: none; font: inherit; font-size: 15px; color: var(--ink); }
+#lk-search:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.lk-list { margin: 0; padding: 0; list-style: none; }
+.lk-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.lk-row.read { opacity: .68; }
+.lk-info { display: grid; gap: 4px; min-width: 180px; flex: 1; }
+.lk-title-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px; }
+.lk-title { padding: 0; border: 0; background: none; font: inherit; font-size: 15.5px; font-weight: 600; color: var(--ink); text-align: left; cursor: pointer; overflow-wrap: anywhere; }
+.lk-title:hover { text-decoration: underline; text-underline-offset: 4px; }
+.lk-host { font-size: 12px; color: var(--mute); }
+.lk-note { margin: 0; font-size: 13px; color: var(--mute); }
+.lk-acts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.lk-btn { padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.lk-btn:hover { border-color: var(--ink); }
+.lk-btn.primary-tint { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent-text); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.lk-del { padding: 0 4px; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; }
+.lk-del:hover { color: var(--accent-text); }
+.lk-side form { display: grid; gap: 14px; }
+.lk-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
+.lk-field input { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.lk-field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.lk-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
+
+@media (max-width: 640px) {
+  .links-page { gap: 16px; padding-top: 12px; }
+  .lk-head h2 { font-size: 24px; }
+  .lk-side {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    max-height: 86dvh; overflow-y: auto;
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper); border-top: 2px solid var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px #12110f55;
+  }
+  .links-page.sheet-open .lk-side { display: block; animation: rise-in .25s var(--ease) both; }
+}
+
+@media (min-width: 860px) {
+  .links-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(260px, 24vw, 340px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
+  .lk-main { display: flex; flex-direction: column; min-height: 0; }
+  .lk-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .lk-side { min-height: 0; overflow-y: auto; }
+}
