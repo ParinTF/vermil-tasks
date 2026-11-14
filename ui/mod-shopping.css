@@ -41,6 +41,22 @@
 .sh-send { font-size: 16px; }
 .sh-fine { margin: 12px 0 0; font-size: 12px; line-height: 1.5; color: var(--mute); }
 
+@media (max-width: 640px) {
+  .shopping-page { gap: 22px; padding-top: 12px; }
+  .sh-head h2 { font-size: 24px; }
+  .sh-form .primary { min-height: 40px; padding: 8px 18px; font-size: 13.5px; }
+  .sh-chips button { min-height: 34px; padding: 6px 12px; font-size: 13px; }
+  .sh-list li { grid-template-columns: 28px minmax(0, 1fr) 28px; padding: 13px 0; }
+  .sh-del { opacity: 1; min-width: 28px; min-height: 28px; }
+  .sh-side { padding-top: 16px; border-top: 1px solid var(--ink); }
+  .sh-week .linkish {
+    min-width: 36px; min-height: 36px; display: inline-grid; place-items: center;
+    border: 1px solid var(--line); border-radius: 999px;
+  }
+  .sh-days button { min-height: 44px; padding: 6px 2px; }
+  .sh-send { min-width: 32px; min-height: 32px; font-size: 18px; }
+}
+
 @media (min-width: 860px) {
   .shopping-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(300px, 28vw, 400px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .sh-main { display: flex; flex-direction: column; min-height: 0; }

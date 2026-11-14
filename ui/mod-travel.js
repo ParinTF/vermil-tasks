@@ -25,6 +25,7 @@
           el('div', { id: 'tv-msg', className: 'tv-msg', role: 'status' }))));
     $('tv-from').value = shiftDay(today(), 14);
     $('tv-to').value = shiftDay(today(), 18);
+    mobileSheet(root(), $('tv-form'), 'New trip');
   }
   const field = (label, ctl) => el('label', { className: 'tv-field' }, label, ctl);
 

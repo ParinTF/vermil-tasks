@@ -22,6 +22,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'cd-msg', className: 'cd-msg', role: 'status' }))));
     $('cd-day').value = today();
+    mobileSheet(root(), root().querySelector('.cd-side'), 'New event');
   }
 
   const calendarFn = (from, to) => data.events.flatMap((ev) => eventDaysIn(ev, from, to).map((day) => ({ day, title: ev.title, kind: ev.yearly ? 'Every year' : 'Countdown', view: 'countdown' })));

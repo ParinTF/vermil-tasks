@@ -28,6 +28,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'gl-msg', className: 'gl-msg', role: 'status' }))));
     fillSources();
+    mobileSheet(root(), root().querySelector('.gl-side'), 'New goal');
   }
 
   // "Measured by": by hand, or any number a switched-on module offers (read again each time, so a module added later shows up)
