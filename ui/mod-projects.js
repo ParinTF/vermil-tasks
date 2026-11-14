@@ -2,6 +2,7 @@
 // It keeps no list of its own: a project is a Time Tracker project ({ id, name, client, rate }), and a task joins one with `projectId`.
 (() => {
   let selected = '';
+  let viewMode = 'board';
   const root = () => $('projects-view');
   const time = () => registry.time;
   const list = () => time()?.projects?.() || [];
@@ -57,11 +58,67 @@
     await registry.notes.open(created.id, 'title');
   }
 
+  async function setStage(t, stage) {
+    if (stage === 'done') {
+      await commit(complete(t));
+    } else {
+      await commit(todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, stage } : x)));
+    }
+    paint();
+  }
+
   function taskRow(t) {
     const box = el('input', { type: 'checkbox', ariaLabel: 'Mark done: ' + t.title });
     box.onchange = async () => { box.disabled = true; await commit(complete(t)); paint(); };
+    const isDoing = t.stage === 'doing';
+    const stageBtn = el('button', { type: 'button', className: 'pj-stage-btn' + (isDoing ? ' active' : '') }, isDoing ? 'Doing' : 'Start');
+    stageBtn.onclick = () => setStage(t, isDoing ? 'todo' : 'doing');
     return el('li', {}, el('label', { className: 'pj-task-row' }, box, el('span', {}, t.title)),
-      ...(t.due ? [el('time', {}, fmt(t.due, { day: 'numeric', month: 'short' }))] : []));
+      el('div', { className: 'pj-row-meta' },
+        ...(t.due ? [el('time', {}, fmt(t.due, { day: 'numeric', month: 'short' }))] : []),
+        stageBtn));
+  }
+
+  function boardCard(t, col) {
+    const acts = [];
+    if (col === 'todo') {
+      const start = el('button', { type: 'button', className: 'pj-card-btn primary-tint' }, 'Start →');
+      start.onclick = () => setStage(t, 'doing');
+      const done = el('button', { type: 'button', className: 'pj-card-btn' }, 'Done');
+      done.onclick = () => setStage(t, 'done');
+      acts.push(start, done);
+    } else if (col === 'doing') {
+      const back = el('button', { type: 'button', className: 'pj-card-btn' }, '← To do');
+      back.onclick = () => setStage(t, 'todo');
+      const done = el('button', { type: 'button', className: 'pj-card-btn primary-tint' }, '✓ Done');
+      done.onclick = () => setStage(t, 'done');
+      acts.push(back, done);
+    } else {
+      const reopen = el('button', { type: 'button', className: 'pj-card-btn' }, 'Reopen');
+      reopen.onclick = () => setStage(t, 'todo');
+      acts.push(reopen);
+    }
+    const sp = typeof subtaskProgress === 'function' ? subtaskProgress(t.subtasks) : null;
+    return el('li', { className: 'pj-card' + (col === 'doing' ? ' doing' : col === 'done' ? ' done' : '') },
+      el('div', { className: 'pj-card-title' }, col === 'done' ? '✓ ' + t.title : t.title),
+      ...((t.due || sp) ? [el('div', { className: 'pj-card-sub' },
+        ...(t.due ? [el('time', {}, fmt(t.due, { day: 'numeric', month: 'short' }))] : []),
+        ...(sp ? [el('span', {}, `☑ ${sp.done}/${sp.total}`)] : []),
+      )] : []),
+      el('div', { className: 'pj-card-acts' }, ...acts));
+  }
+
+  function renderBoard(p) {
+    const b = projectBoard(todos, p.id);
+    const col = (key, label, items) => el('div', { className: 'pj-col', dataset: { col: key } },
+      el('div', { className: 'pj-col-head' }, el('span', {}, label), el('b', {}, String(items.length))),
+      items.length
+        ? el('ul', { className: 'pj-col-list' }, ...items.map((t) => boardCard(t, key)))
+        : el('p', { className: 'pj-col-empty' }, 'Nothing here'));
+    return el('div', { id: 'pj-board', className: 'pj-board' },
+      col('todo', 'To do', b.todo),
+      col('doing', 'Doing', b.doing),
+      col('done', 'Done', b.done));
   }
 
   function paintDetail() {
@@ -81,18 +138,28 @@
     const stat = (label, value) => el('div', { className: 'pj-stat' }, el('small', {}, label), el('b', {}, value));
     const entries = (time().entries?.() || []).filter((e) => e.project === p.id).sort((a, b) => b.start.localeCompare(a.start)).slice(0, 5);
     const mine = started.has('notes') ? notes.filter((n) => n.projectId === p.id).sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')) : null;
+    const modeSwitch = el('div', { className: 'pj-modes', role: 'group', ariaLabel: 'Task view' },
+      ...[['board', 'Board'], ['list', 'List']].map(([id, label]) => {
+        const btn = el('button', { type: 'button', className: 'pj-mode', ariaPressed: String(viewMode === id) }, label);
+        btn.onclick = () => { viewMode = id; paintDetail(); };
+        return btn;
+      }));
     box.replaceChildren(
       el('div', { className: 'pj-head' }, el('h2', {}, p.name), ...(p.client ? [el('p', {}, p.client)] : [])),
       el('div', { className: 'pj-progress', role: 'progressbar', ariaValueNow: String(s.pct), ariaValueMin: '0', ariaValueMax: '100', ariaLabel: 'Tasks done' }, el('i', { style: `width:${s.pct}%` })),
       el('p', { id: 'pj-count', className: 'pj-count' }, s.total ? `${s.done} of ${s.total} tasks done` : 'No tasks yet'),
       el('div', { className: 'pj-stats' }, stat('This week', timeText(s.week)), stat('In total', timeText(s.seconds)), ...(p.rate ? [stat('Earned', moneyLabel(s.amount, cur()))] : [])),
       track,
-      el('h3', {}, 'Tasks'),
+      el('div', { className: 'pj-tasks-head' }, el('h3', {}, 'Tasks'), modeSwitch),
       el('form', { id: 'pj-taskform', className: 'pj-taskform', onsubmit: (e) => addTask(e, p) },
         el('input', { id: 'pj-task', maxLength: 200, autocomplete: 'off', placeholder: 'Add a task to this project', ariaLabel: 'Add a task to this project' }),
         el('button', { className: 'linkish', type: 'submit' }, 'Add')),
-      el('ul', { id: 'pj-open', className: 'pj-tasks' }, ...open.map(taskRow)),
-      ...(done.length ? [el('details', { className: 'pj-done' }, el('summary', {}, `${done.length} done`), el('ul', { className: 'pj-tasks' }, ...done.map((t) => el('li', { className: 'done' }, el('span', {}, '✓ ' + t.title)))))] : []),
+      ...(viewMode === 'board'
+        ? [renderBoard(p)]
+        : [
+            el('ul', { id: 'pj-open', className: 'pj-tasks' }, ...open.map(taskRow)),
+            ...(done.length ? [el('details', { className: 'pj-done' }, el('summary', {}, `${done.length} done`), el('ul', { className: 'pj-tasks' }, ...done.map((t) => el('li', { className: 'done' }, el('span', {}, '✓ ' + t.title)))))] : []),
+          ]),
       ...(mine ? [el('h3', {}, 'Notes'), el('div', { className: 'pj-notes-add' }, el('button', { id: 'pj-note-new', type: 'button', className: 'linkish', onclick: () => newNote(p) }, 'New note')), el('ul', { id: 'pj-notes', className: 'pj-tasks' }, ...mine.map((n) => { const b = el('button', { type: 'button', className: 'pj-note' }, n.title || 'Untitled'); b.onclick = async () => { await setView('notes'); await registry.notes.open(n.id, 'body'); }; return el('li', {}, b, ...(n.updatedAt ? [el('time', {}, fmt(n.updatedAt, { day: 'numeric', month: 'short' }))] : [])); }))] : []),
       ...(entries.length ? [el('h3', {}, 'Recent time'), el('ul', { id: 'pj-time', className: 'pj-tasks' }, ...entries.map((e) => el('li', {}, el('span', {}, e.desc || 'No description'), el('time', {}, `${fmt(e.start, { day: 'numeric', month: 'short' })} · ${hoursLabel(secondsBetween(e.start, e.end))}`))))] : []));
   }
@@ -111,7 +178,7 @@
 
   // the task form's Project menu, and "◆ Project" on a task row
   const field = { fill: (t) => { fillMenu(); if ($('project-link')) $('project-link').value = nameOf(t.projectId) ? t.projectId : ''; }, read: (old) => ({ projectId: $('project-link') ? $('project-link').value || null : old?.projectId ?? null }) };
-  const rowInfoFn = (t) => (t.projectId && nameOf(t.projectId) ? '◆ ' + nameOf(t.projectId) : '');
+  const rowInfoFn = (t) => (t.projectId && nameOf(t.projectId) ? '◆ ' + nameOf(t.projectId) + (t.stage === 'doing' && !t.done ? ' · Doing' : '') : '');
   const fillMenu = () => {
     const sel = $('project-link');
     if (!sel) return;
