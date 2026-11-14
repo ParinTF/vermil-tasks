@@ -24,6 +24,26 @@
 .au-day input { accent-color: var(--accent); }
 .au-fine, .au-msg { margin: 0; min-height: 1.2em; font-size: 12.5px; color: var(--mute); }
 
+@media (max-width: 640px) {
+  .auto-page { gap: 18px; padding-top: 12px; }
+  .au-head h2 { font-size: 24px; }
+  .au-meta { flex-wrap: wrap; align-items: center; gap: 8px 12px; }
+  .au-now {
+    min-height: 32px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: none;
+  }
+  .au-del { opacity: 1; min-width: 28px; min-height: 28px; }
+  .au-two { grid-template-columns: 1fr; gap: 14px; }
+  .au-side {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    max-height: 86dvh; overflow-y: auto;
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper); border-top: 2px solid var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px #12110f55;
+  }
+  .auto-page.sheet-open .au-side { display: block; animation: rise-in .25s var(--ease) both; }
+}
+
 @media (min-width: 860px) {
   .auto-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(300px, 28vw, 400px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .au-main { display: flex; flex-direction: column; min-height: 0; }

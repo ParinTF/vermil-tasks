@@ -45,6 +45,7 @@
           el('div', { id: 'au-msg', className: 'au-msg', role: 'status' }))));
     fillSelects();
     sync();
+    mobileSheet(root(), root().querySelector('.au-side'), 'New rule');
   }
 
   const metrics = () => metricHooks.flatMap((f) => f());

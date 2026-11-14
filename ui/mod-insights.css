@@ -18,6 +18,15 @@
 .in-bar.hi .in-track i { background: var(--accent); }
 .in-card small { font-size: 12px; color: var(--mute); }
 
+@media (max-width: 640px) {
+  .insights-page { padding-top: 12px; }
+  .in-head { gap: 10px 16px; margin-bottom: 10px; }
+  .in-head h2 { font-size: 24px; }
+  .in-range .st-opt { min-height: 36px; padding: 6px 12px; }
+  .in-sentence { font-size: 15.5px; }
+  .in-bar { grid-template-columns: 7.5em minmax(0, 1fr) 3.2em; gap: 8px; font-size: 12.5px; }
+}
+
 @media (min-width: 860px) {
   .insights-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-top: clamp(12px, 2.5vh, 32px); }
 }

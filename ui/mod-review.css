@@ -29,6 +29,29 @@
 .rv-foot { display: flex; align-items: baseline; gap: 18px; margin-top: 6px; }
 .rv-foot .linkish { font-size: 14px; }
 .rv-msg { font-size: 13px; color: var(--mute); }
+html.android #rv-pdf, html.android #rv-print { display: none !important; }
+
+@media (max-width: 640px) {
+  .review-page { padding-top: 12px; }
+  .rv-head { align-items: center; gap: 12px; }
+  .rv-head h2 { font-size: 24px; }
+  .rv-pick { gap: 16px; }
+  .rv-pick button { min-height: 36px; }
+  .rv-nav { justify-content: space-between; margin: 10px 0 16px; }
+  .rv-nav .linkish {
+    min-width: 38px; min-height: 38px; padding: 0;
+    border: 1px solid var(--line); border-radius: 999px;
+    display: inline-grid; place-items: center; font-size: 22px;
+  }
+  .rv-body { grid-template-columns: 1fr; gap: 14px; }
+  .rv-card { padding: 14px 16px; border-radius: 10px; }
+  .rv-big b { font-size: 26px; }
+  .rv-foot { flex-wrap: wrap; gap: 10px 14px; margin-top: 14px; }
+  .rv-foot .linkish {
+    min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px;
+    font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: none;
+  }
+}
 
 @media (min-width: 860px) {
   .review-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-top: clamp(12px, 2.5vh, 32px); }

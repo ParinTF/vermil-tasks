@@ -32,6 +32,15 @@
 .as-details pre { max-height: 40vh; margin: 10px 0 0; padding: 10px; overflow: auto; border: 1px solid var(--line); font: 12px/1.5 Consolas, "Cascadia Mono", monospace; white-space: pre-wrap; overflow-wrap: anywhere; }
 #as-clear { justify-self: start; }
 
+@media (max-width: 640px) {
+  .assistant-page { gap: 22px; padding-top: 12px; }
+  .as-head h2 { font-size: 24px; }
+  .as-log { min-height: 120px; max-height: 52dvh; overflow-y: auto; }
+  .as-form .primary { width: 100%; justify-content: center; min-height: 44px; }
+  .as-side { padding-top: 16px; border-top: 1px solid var(--ink); }
+  .as-opt { min-height: 34px; display: flex; align-items: center; gap: 10px; }
+}
+
 @media (min-width: 860px) {
   .assistant-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 28vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .as-main { display: flex; flex-direction: column; min-height: 0; }
