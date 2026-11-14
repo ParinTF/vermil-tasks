@@ -53,7 +53,7 @@
   function fillSelects() {
     const keep = [$('au-when').value, $('au-do').value, $('au-metric').value, $('au-view').value];
     const have = { task: started.has('tasks'), shop: started.has('shopping'), expense: started.has('money'), toast: true, open: true };
-    const events = { daily: true, 'task-done': started.has('tasks'), overdue: started.has('tasks'), 'bill-paid': started.has('bills'), 'over-budget': started.has('money'), metric: metrics().length > 0 };
+    const events = { daily: true, 'task-done': started.has('tasks'), overdue: started.has('tasks'), 'bill-paid': started.has('bills') || started.has('money'), 'over-budget': started.has('money'), metric: metrics().length > 0 };
     $('au-when').replaceChildren(...opts(Object.entries(AUTO_WHEN).filter(([k]) => events[k])));
     $('au-do').replaceChildren(...opts(Object.entries(AUTO_DO).filter(([k]) => have[k])));
     $('au-metric').replaceChildren(...metrics().map((m) => el('option', { value: m.id }, m.label)));

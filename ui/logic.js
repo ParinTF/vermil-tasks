@@ -1187,4 +1187,56 @@ function sortNotes(notes) {
   return [...(notes || [])].sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || (b.updatedAt || '').localeCompare(a.updatedAt || ''));
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+const MONEY_ACCOUNTS = [
+  { id: 'online', label: 'Online' },
+  { id: 'cash', label: 'Cash' },
+  { id: 'paylater', label: 'PayLater' },
+];
+
+function moneyAccounts(entries = [], paylater = [], month = '') {
+  const inMonth = (d) => !month || String(d || '').startsWith(month);
+  let onlineCents = 0;
+  let cashCents = 0;
+  let paylaterSpentCents = 0;
+  for (const e of entries) {
+    if (!e || !inMonth(e.day)) continue;
+    const acc = e.account || 'online';
+    const c = Math.round((Number(e.amount) || 0) * 100);
+    if (e.kind === 'in') {
+      if (acc === 'cash') cashCents += c;
+      else onlineCents += c;
+    } else if (e.kind === 'out') {
+      if (acc === 'paylater') paylaterSpentCents += c;
+      else if (acc === 'cash') cashCents -= c;
+      else onlineCents -= c;
+    }
+  }
+  let unpaidCents = 0;
+  let dueMonthCents = 0;
+  let settledMonthCents = 0;
+  for (const it of paylater) {
+    if (!it) continue;
+    const c = Math.round((Number(it.amount) || 0) * 100);
+    if (it.paid) {
+      if (inMonth(it.paidDay || it.due)) {
+        settledMonthCents += c;
+        if (it.paidWith === 'cash') cashCents -= c;
+        else onlineCents -= c;
+      }
+    } else {
+      unpaidCents += c;
+      if (month && String(it.due || '').startsWith(month)) dueMonthCents += c;
+    }
+  }
+  return {
+    online: onlineCents / 100,
+    cash: cashCents / 100,
+    walletBalance: (onlineCents + cashCents) / 100,
+    paylaterSpent: paylaterSpentCents / 100,
+    paylaterUnpaid: unpaidCents / 100,
+    paylaterDueMonth: dueMonthCents / 100,
+    paylaterSettled: settledMonthCents / 100,
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };

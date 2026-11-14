@@ -1,15 +1,51 @@
-/* Expenses module: loaded only while it is switched on */
+/* Unified Money hub: Expenses, Online/Cash accounts, PayLater, Subscriptions & Bills */
 .money-page { display: grid; gap: 32px; padding-top: 24px; }
 .mo-main, .mo-side { min-width: 0; }
+
+/* Sub-navigation tabs across Expenses, PayLater, Subscriptions, Bills */
+.mo-subtabs { display: flex; flex-wrap: wrap; gap: 6px; padding-bottom: 14px; margin-bottom: 16px; border-bottom: 1px solid var(--line); }
+.mo-subtab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.mo-subtab:hover { border-color: var(--ink); color: var(--ink); }
+.mo-subtab[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.mo-subtab-badge { display: inline-grid; place-items: center; min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--accent); color: var(--on-accent); font-size: 11px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.mo-sub-lead { margin: -4px 0 14px; font-size: 13.5px; color: var(--mute); }
+.mo-sub-pills { display: inline-flex; gap: 4px; border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+.mo-sub-pills button { padding: 4px 12px; border: 0; border-radius: 999px; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.mo-sub-pills button[aria-selected="true"] { background: var(--ink); color: var(--paper); }
+
 .mo-head { display: flex; align-items: baseline; justify-content: space-between; gap: 20px; margin-bottom: 14px; }
 .mo-head h2 { margin: 0; font-size: clamp(30px, 3.6vw, 56px); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; }
 .mo-nav { display: flex; align-items: baseline; gap: 18px; }
 .mo-nav .linkish { font-size: 16px; }
 .mo-nav #mo-prev, .mo-nav #mo-next { font-size: 26px; line-height: 1; text-decoration: none; }
-.mo-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 16px 0 20px; border-top: 1px solid var(--ink); }
+
+/* Wallets & Account balances strip */
+.mo-wallets { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.mo-wallet-card { display: grid; gap: 2px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--ink) 2.5%, transparent); text-align: left; font: inherit; color: var(--ink); }
+button.mo-wallet-card { cursor: pointer; }
+button.mo-wallet-card:hover { border-color: var(--ink); }
+.mo-wallet-card.warn { border-color: color-mix(in srgb, var(--accent) 55%, var(--line)); background: color-mix(in srgb, var(--accent) 6%, transparent); }
+.mo-wallet-card small { font-size: 10.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.mo-wallet-card.warn small { color: var(--accent-text); }
+.mo-wallet-card b { font-size: clamp(18px, 2vw, 24px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mo-wallet-card.neg b { color: var(--accent-text); }
+.mo-wallet-card span { font-size: 11.5px; color: var(--mute); }
+
+.mo-sum { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 24px; padding: 14px 0 18px; border-top: 1px solid var(--ink); }
 .mo-sum small { display: block; margin-bottom: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
-.mo-sum b { font-size: clamp(22px, 2.4vw, 34px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.mo-sum b { font-size: clamp(20px, 2.2vw, 30px); font-weight: 700; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
 .mo-sum .neg b { color: var(--accent-text); }
+
+/* Account filter & selector */
+.mo-acc-filter { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+.mo-filter-pill { padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; background: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.mo-filter-pill.active { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.mo-acc-btns { display: flex; gap: 6px; margin-top: 2px; }
+.mo-acc-btn { flex: 1; padding: 7px 10px; border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); border-radius: 8px; background: none; font: inherit; font-size: 12.5px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.mo-acc-btn[aria-pressed="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.mo-acc-badge { display: inline-block; margin-left: 6px; padding: 1px 7px; border-radius: 999px; border: 1px solid var(--line); font-size: 10.5px; font-weight: 600; color: var(--mute); vertical-align: baseline; }
+.mo-acc-badge.paylater { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); color: var(--accent-text); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+
 .mo-bars, .mo-list, .mo-budget, .mo-bedit { margin: 0; padding: 0; list-style: none; }
 .mo-budget { margin-bottom: 18px; }
 .mo-budget:empty { display: none; }
@@ -39,14 +75,31 @@
 .mo-what b { color: var(--ink); }
 .mo-amt { font-weight: 600; font-variant-numeric: tabular-nums; }
 .mo-amt.in { color: var(--accent-text); }
+.mo-amt.pl { color: var(--accent-text); }
 .mo-del { padding: 0; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; opacity: 0; }
 .mo-list li:hover .mo-del, .mo-del:focus-visible { opacity: 1; }
 .mo-del:hover { color: var(--accent-text); }
+
+/* PayLater, Subscriptions & Bills rows inside Money */
+.mo-list li.pl-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 14px; padding: 12px 0; }
+.mo-list li.pl-row.soon .pl-info b { color: var(--accent-text); }
+.mo-list li.pl-row.paid { opacity: .75; }
+.pl-info { display: grid; gap: 2px; min-width: 160px; flex: 1; }
+.pl-info b { font-size: 15px; font-weight: 600; }
+.pl-info small { font-size: 12.5px; color: var(--mute); }
+.pl-acts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.mo-pay-btn { padding: 4px 10px; border: 1px solid color-mix(in srgb, var(--ink) 28%, transparent); border-radius: 999px; background: none; font: inherit; font-size: 12px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.mo-pay-btn:hover { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.bl-payform { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.bl-payform input { width: 84px; padding: 4px 6px; border: 1px solid var(--line); border-radius: 6px; background: none; font: inherit; font-size: 13px; color: var(--ink); }
+.bl-payform select { padding: 4px 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--paper); font: inherit; font-size: 12.5px; color: var(--ink); }
+
 .mo-side form { display: grid; gap: 16px; }
+.mo-two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .mo-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
-.mo-field input { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--ink); }
-.mo-field input:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
-.mo-side > .mo-field { margin-top: 28px; }
+.mo-field input, .mo-field select { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 16px; letter-spacing: 0; text-transform: none; color: var(--ink); }
+.mo-field input:focus, .mo-field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+#mo-pane-expenses > .mo-field { margin-top: 28px; }
 .mo-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: -6px; }
 .mo-chips button { padding: 4px 11px; border: 1px solid color-mix(in srgb, var(--ink) 25%, transparent); border-radius: 999px; background: none; font: inherit; font-size: 12.5px; color: var(--ink); cursor: pointer; }
 .mo-chips button:hover { border-color: var(--ink); }
@@ -66,6 +119,9 @@
 
 @media (max-width: 640px) {
   .money-page { gap: 18px; padding-top: 12px; }
+  .mo-subtabs { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding-bottom: 10px; margin-bottom: 12px; }
+  .mo-subtabs::-webkit-scrollbar { display: none; }
+  .mo-subtab { flex: none; }
   .mo-head { flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
   .mo-head h2 { font-size: 24px; }
   .mo-nav { gap: 8px; }
@@ -76,6 +132,9 @@
     font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: none;
   }
   .mo-nav #mo-prev, .mo-nav #mo-next { font-size: 20px; padding: 0 10px; }
+  .mo-wallets { grid-template-columns: 1fr; gap: 8px; }
+  .mo-wallet-card { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; }
+  .mo-wallet-card span { display: none; }
   .mo-sum { gap: 10px; padding: 12px 0 14px; }
   .mo-sum b { font-size: 18px; }
   .mo-budget li, .mo-bars li { grid-template-columns: minmax(64px, 100px) minmax(0, 1fr) auto; gap: 10px; padding: 6px 0; }
@@ -94,7 +153,6 @@
 
 @media (min-width: 860px) {
   .money-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
-  .mo-main { display: flex; flex-direction: column; min-height: 0; }
-  .mo-list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }
+  .mo-main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-right: 6px; }
   .mo-side { min-height: 0; overflow-y: auto; }
 }

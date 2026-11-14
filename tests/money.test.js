@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { parseAmount, moneyLabel, moneyMonth, budgetStatus } = require('../ui/logic.js');
+const { parseAmount, moneyLabel, moneyMonth, budgetStatus, moneyAccounts } = require('../ui/logic.js');
 
 test('money helpers', () => {
   assert.equal(parseAmount('1,250.50'), 1250.5);
@@ -36,4 +36,30 @@ test('budgetStatus: ok under 80%, near from 80%, over from 100%', () => {
   assert.deepEqual(budgetStatus(100, 100), { pct: 100, level: 'over', left: 0 });
   assert.deepEqual(budgetStatus(105, 100), { pct: 105, level: 'over', left: -5 });
   assert.deepEqual(budgetStatus(10, 0), { pct: 0, level: 'ok', left: -10 }); // no limit set: never a warning
+});
+
+test('moneyAccounts separates Online and Cash balances and does not deduct PayLater until settled', () => {
+  const entries = [
+    { id: '1', day: '2026-11-01', kind: 'in', amount: 10000, cat: 'Salary', account: 'online' },
+    { id: '2', day: '2026-11-02', kind: 'in', amount: 2000, cat: 'Salary', account: 'cash' },
+    { id: '3', day: '2026-11-03', kind: 'out', amount: 300, cat: 'Food', account: 'cash' },
+    { id: '4', day: '2026-11-04', kind: 'out', amount: 1500, cat: 'Shopping', account: 'paylater' },
+  ];
+  const unpaid = [{ id: 'pl1', entryId: '4', title: 'Headphones', amount: 1500, due: '2026-11-28', paid: false }];
+  const before = moneyAccounts(entries, unpaid, '2026-11');
+  assert.equal(before.online, 10000); // untouched by PayLater purchase!
+  assert.equal(before.cash, 1700);
+  assert.equal(before.walletBalance, 11700);
+  assert.equal(before.paylaterSpent, 1500);
+  assert.equal(before.paylaterUnpaid, 1500);
+  assert.equal(before.paylaterDueMonth, 1500);
+
+  // Settling PayLater from Online deducts from Online balance
+  const settled = [{ ...unpaid[0], paid: true, paidWith: 'online', paidDay: '2026-11-25' }];
+  const after = moneyAccounts(entries, settled, '2026-11');
+  assert.equal(after.online, 8500);
+  assert.equal(after.cash, 1700);
+  assert.equal(after.walletBalance, 10200);
+  assert.equal(after.paylaterUnpaid, 0);
+  assert.equal(after.paylaterSettled, 1500);
 });

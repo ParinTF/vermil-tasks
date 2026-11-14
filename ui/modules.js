@@ -14,14 +14,12 @@ const MODULES = [
   { id: 'notes', pack: 'work', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
   { id: 'calendar', pack: 'work', name: 'Calendar', about: 'Your tasks by month or hour by hour. Drag to reschedule.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
   { id: 'pomodoro', pack: 'work', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
-  { id: 'money', pack: 'money', name: 'Expenses', about: 'Record what you spend and earn, by category, month by month.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
+  { id: 'money', pack: 'money', name: 'Money & Bills', about: 'Online & Cash accounts, PayLater (BNPL), monthly expenses & budgets, subscriptions and household bills in one hub.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
   { id: 'habits', pack: 'life', name: 'Habits', about: 'Daily habits with streaks and a year-at-a-glance heatmap. Tick today, fix yesterday.', script: 'mod-habits.js', style: 'mod-habits.css', view: 'Habits' },
-  { id: 'subs', pack: 'money', name: 'Subscriptions', about: 'Everything that renews, with the monthly total and a reminder a few days before each charge.', script: 'mod-subs.js', style: 'mod-subs.css', view: 'Subscriptions' },
   { id: 'shopping', pack: 'plan', name: 'Shopping & Meals', about: 'A shopping list that remembers what you usually buy, and a meal plan for the week that can fill the list.', script: 'mod-shopping.js', style: 'mod-shopping.css', view: 'Shopping' },
   { id: 'health', pack: 'life', name: 'Health', about: 'Water, sleep, weight, workouts and medicine reminders, with a day-by-day look back.', script: 'mod-health.js', style: 'mod-health.css', view: 'Health' },
   { id: 'library', pack: 'life', name: 'Library', about: 'Books, films, series and games: what you want, what you are in the middle of, what you finished and how you rated it.', script: 'mod-library.js', style: 'mod-library.css', view: 'Library' },
   { id: 'people', pack: 'life', name: 'People', about: 'Birthdays with a reminder, gift ideas, and a nudge when it has been too long since you were in touch.', script: 'mod-people.js', style: 'mod-people.css', view: 'People' },
-  { id: 'bills', pack: 'money', name: 'Home & Bills', about: 'Electricity, water, rent, insurance, the car tax: when each is due, what you paid, and where the paperwork is.', script: 'mod-bills.js', style: 'mod-bills.css', view: 'Bills' },
   { id: 'travel', pack: 'plan', name: 'Travel', about: 'Trips with a packing list, a plan for each day and what it costs against your budget.', script: 'mod-travel.js', style: 'mod-travel.css', view: 'Travel' },
   { id: 'time', pack: 'work', name: 'Time Tracker', about: 'Time your work by project, add it by hand, and get hours and earnings for the week or the month to copy into an invoice.', script: 'mod-time.js', style: 'mod-time.css', view: 'Time' },
   { id: 'projects', pack: 'work', name: 'Projects', about: 'One page per project: its tasks and how far along they are, the time you put in and what it earns. Uses the Time Tracker projects.', script: 'mod-projects.js', style: 'mod-projects.css', view: 'Projects', requires: ['tasks', 'time'] },
@@ -521,6 +519,8 @@ invoke('get_modules').then(async (saved) => {
     const [t, n] = await Promise.all([invoke('get_todos'), invoke('get_notes')]);
     moduleData._on = t.length || n.length ? ['tasks', 'notes', 'calendar'] : [];
     if (moduleData._on.length) await invoke('save_module', { id: '_on', value: moduleData._on });
+  } else if (moduleData._on.some((id) => id === 'subs' || id === 'bills') && !moduleData._on.includes('money')) {
+    moduleData._on.push('money');
   }
   for (const m of MODULES) if (moduleOn(m.id)) await startModule(m).catch((e) => console.error(m.id, e));
   syncViews();
