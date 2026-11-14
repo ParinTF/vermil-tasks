@@ -533,5 +533,5 @@ invoke('get_modules').then(async (saved) => {
   if (again) setView('settings'); else if (prefsNow.startPage === 'last' && last && last !== 'home') setView(last);
   let seen = !!moduleData._guide;
   try { seen = seen || localStorage.getItem('guide-seen') === '1'; } catch {}
-  if (!seen && !again && !todos.length) openGuide(0);
+  if (!seen && !again && started.size <= 3 && !todos.length) openGuide(0);
 });
