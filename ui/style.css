@@ -322,6 +322,9 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 .notes-page { display: grid; gap: 32px; padding-top: 24px; } /* not .notes: that class styles the note under a task row */
 .note-tools { display: grid; gap: 6px; margin-bottom: 10px; }
 .note-tools .primary { justify-self: start; }
+.note-tpls { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 2px; }
+.note-tpl-btn { padding: 3px 9px; border: 1px solid var(--line); border-radius: 999px; background: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.note-tpl-btn:hover { border-color: var(--ink); color: var(--ink); }
 #note-search { width: 100%; padding: 12px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font-size: 16px; color: var(--ink); }
 #note-search:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
 #note-search::placeholder, #note-title::placeholder { color: color-mix(in srgb, var(--ink) 25%, transparent); }
@@ -371,6 +374,7 @@ body.quick { --paper: #f4f1ea; --ink: #12110f; color-scheme: dark; padding: 0; b
 .chip.done { color: var(--mute); }
 .chip:hover { color: var(--accent-text); }
 .note-foot { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 13px; color: var(--mute); }
+.note-foot-acts { display: inline-flex; align-items: baseline; gap: 14px; flex: none; }
 
 /* ── calendar view: a month grid with hairlines, today in the accent, the selected day beside it ── */
 .calendar-page { display: grid; gap: 32px; padding-top: 24px; }

@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress } = require('../ui/logic.js');
+const { plainToHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, checkProgress, sortNotes, NOTE_TEMPLATES } = require('../ui/logic.js');
 
 test('plainToHtml: one paragraph per line, blank lines kept, markup escaped', () => {
   assert.equal(plainToHtml('a\n\nb'), '<p>a</p><p><br></p><p>b</p>');
@@ -30,4 +30,14 @@ test('checkProgress counts ticked and total checklist lines only', () => {
   assert.deepEqual(checkProgress('just text'), { done: 0, total: 0 });
   assert.deepEqual(checkProgress(''), { done: 0, total: 0 });
   assert.deepEqual(checkProgress(undefined), { done: 0, total: 0 });
+});
+
+test('sortNotes puts pinned notes first, then newest updatedAt', () => {
+  const notes = [
+    { id: 'n1', title: 'Old', updatedAt: '2026-11-01T10:00:00Z' },
+    { id: 'n2', title: 'Newer', updatedAt: '2026-11-10T10:00:00Z' },
+    { id: 'n3', title: 'Pinned old', pinned: true, updatedAt: '2026-11-02T10:00:00Z' },
+  ];
+  assert.deepEqual(sortNotes(notes).map((n) => n.id), ['n3', 'n2', 'n1']);
+  assert.ok(NOTE_TEMPLATES.length >= 4 && NOTE_TEMPLATES.every((t) => t.id && t.label && t.title));
 });

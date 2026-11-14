@@ -12,8 +12,9 @@ function renderNoteList() {
   $('note-items').replaceChildren(...items.map((n) => {
     const count = uses.get(n.id);
     const progress = checkProgress(n.body);
+    const titleEl = el('b', {}, ...(n.pinned ? [el('span', { className: 'pin-dot', ariaLabel: 'Pinned' }, '●')] : []), n.title || 'Untitled');
     const row = el('button', { type: 'button', className: 'note' + (n.id === selectedNoteId ? ' sel' : ''), id: 'note-' + n.id },
-      el('b', {}, n.title || 'Untitled'), el('span', {}, noteLine(n) + (progress.total ? ` · ${progress.done}/${progress.total} done` : '') + (count ? ` · ${count} ${count === 1 ? 'task' : 'tasks'}` : '')));
+      titleEl, el('span', {}, noteLine(n) + (progress.total ? ` · ${progress.done}/${progress.total} done` : '') + (count ? ` · ${count} ${count === 1 ? 'task' : 'tasks'}` : '')));
     row.onclick = () => openNote(n.id, 'body');
     return el('li', {}, row);
   }));
@@ -25,6 +26,7 @@ function renderNoteList() {
   if (cur) {
     const when = cur.updatedAt ? fmt(cur.updatedAt, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '';
     $('note-meta').textContent = (when ? `Edited ${when} · ` : '') + `${cur.body.length} characters`;
+    if ($('note-pin')) $('note-pin').textContent = cur.pinned ? 'Unpin note' : 'Pin note';
   }
   const linked = cur ? todos.filter((t) => t.noteId === cur.id) : [];
   $('note-links').hidden = !linked.length;
@@ -325,6 +327,32 @@ async function newNote() {
   $('note-title').focus();
 }
 
+async function newFromTemplate(tpl) {
+  await leaveNote();
+  const created = { id: newNoteId(), title: tpl.title, body: tpl.body, html: plainToHtml(tpl.body), updatedAt: new Date().toISOString() };
+  try {
+    await invoke('save_notes', { notes: [created] });
+  } catch (e) {
+    return tell('Could not create the note: ' + e);
+  }
+  notes.push(created);
+  $('note-search').value = '';
+  showNote(created.id);
+  $('notes-view')?.classList.add('mob-editing');
+  $('note-body').focus();
+  caretToEnd($('note-body'));
+}
+
+async function togglePinNote() {
+  const n = currentNote();
+  if (!n) return;
+  n.pinned = !n.pinned;
+  n.updatedAt = new Date().toISOString();
+  noteDirty = true;
+  renderNoteList();
+  await flushNote();
+}
+
 async function deleteNote(id = selectedNoteId) {
   const n = notes.find((x) => x.id === id); // the Delete key on a list row means that row, even when it is not the open note
   if (!n) return;
@@ -380,7 +408,15 @@ function notesKeys(e) {
 }
 
 $('note-new').onclick = newNote;
+if ($('note-pin')) $('note-pin').onclick = togglePinNote;
 $('note-delete').onclick = () => deleteNote();
+if ($('note-tpls') && typeof NOTE_TEMPLATES !== 'undefined') {
+  $('note-tpls').replaceChildren(...NOTE_TEMPLATES.map((tpl) => {
+    const b = el('button', { type: 'button', className: 'note-tpl-btn' }, '+ ' + tpl.label);
+    b.onclick = () => newFromTemplate(tpl);
+    return b;
+  }));
+}
 if ($('note-back')) $('note-back').onclick = async () => { await leaveNote(); $('notes-view')?.classList.remove('mob-editing'); renderNoteList(); };
 $('note-search').oninput = renderNoteList;
 $('note-title').oninput = $('note-body').oninput = touchNote;

@@ -119,6 +119,7 @@
     <section class="note-list" aria-label="Notes">
       <div class="note-tools">
         <button id="note-new" class="primary" type="button"><span>New note</span><span class="arrow" aria-hidden="true">→</span></button>
+        <div class="note-tpls" id="note-tpls" role="group" aria-label="Note templates"></div>
         <input id="note-search" type="search" placeholder="Search notes (Ctrl+F)" aria-label="Search notes">
       </div>
       <ul id="note-items"></ul>
@@ -142,7 +143,7 @@
       </div>
       <div id="note-body" contenteditable="true" role="textbox" aria-multiline="true" aria-label="Note text" spellcheck="false" data-placeholder="Write here"></div>
       <div class="note-links" id="note-links" hidden><span>Linked from</span><div id="note-link-list"></div></div>
-      <div class="note-foot"><span id="note-meta"></span><button id="note-delete" class="linkish" type="button">Delete note</button></div>
+      <div class="note-foot"><span id="note-meta"></span><div class="note-foot-acts"><button id="note-pin" class="linkish" type="button">Pin note</button><button id="note-delete" class="linkish" type="button">Delete note</button></div></div>
     </section>
     <div id="note-hint" class="empty" hidden>No notes yet. Press Ctrl+N to write one.</div>
   </main>

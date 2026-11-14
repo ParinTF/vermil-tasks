@@ -234,7 +234,7 @@ const currentNote = () => notes.find((n) => n.id === selectedNoteId);
 const noteLine = (n) => (n.body || '').split('\n').map((l) => l.replace(/^\[[ x]\] /, '').trim()).find(Boolean) || 'No text'; // a checklist line without its box
 const visibleNotes = () => {
   const q = $('note-search').value.trim().toLowerCase();
-  return [...notes].sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || '')) // newest edit first
+  return sortNotes(notes)
     .filter((n) => (n.title + '\n' + n.body).toLowerCase().includes(q));
 };
 
