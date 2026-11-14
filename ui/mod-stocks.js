@@ -54,6 +54,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
             el('button', { id: 'st-save', className: 'primary', type: 'submit' }, el('span', {}, 'Save'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
             el('button', { className: 'ghost', type: 'button', textContent: 'Cancel', onclick: () => { $('st-pos').hidden = true; } })))));
     $('st-q').oninput = () => { clearTimeout(searchTimer); searchTimer = setTimeout(search, 350); };
+    mobileSheet(root(), root().querySelector('.st-side'), 'Add stock');
   }
 
   const symbols = () => data.items.map((i) => i.symbol);
@@ -228,6 +229,7 @@ const stocksApi = { // one place for the network calls, so a test can replace th
 
   function openPosition(r) {
     const have = data.items.find((i) => i.symbol === r.symbol);
+    if (typeof isMobile === 'function' && isMobile()) root().classList.add('sheet-open');
     $('st-pos').hidden = false;
     $('st-pos').dataset.symbol = r.symbol;
     $('st-pos').dataset.name = r.name || '';

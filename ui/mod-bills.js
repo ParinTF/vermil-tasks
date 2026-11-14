@@ -31,6 +31,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'bl-msg', className: 'bl-msg', role: 'status' }))));
     $('bl-next').value = today();
+    mobileSheet(root(), root().querySelector('.bl-side'), 'New bill');
   }
   const field = (label, ctl) => el('label', { className: 'bl-field' }, label, ctl);
 

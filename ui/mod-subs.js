@@ -29,6 +29,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'sb-msg', className: 'sb-msg', role: 'status' }))));
     $('sb-next').value = today();
+    mobileSheet(root(), root().querySelector('.sb-side'), 'New subscription');
   }
 
   function add(e) {

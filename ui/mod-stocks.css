@@ -102,3 +102,27 @@
   .sw-head, .st-list.sw-list li { grid-template-columns: minmax(90px, 1.2fr) 70px minmax(130px, 1fr) 32px; }
   .sw-head span:nth-child(5), .sw-head span:nth-child(6), .sw-prev, .sw-state { display: none; }
 }
+@media (max-width: 640px) {
+  .stocks-page { gap: 18px; padding-top: 12px; }
+  .st-head { flex-wrap: wrap; align-items: center; gap: 10px; }
+  .st-head h2 { font-size: 24px; }
+  .st-sum { gap: 10px; padding: 12px 0 14px; }
+  .st-sum b { font-size: 18px; }
+  .sw-head, .st-list.sw-list li { grid-template-columns: minmax(0, 1.2fr) auto auto auto; gap: 8px; }
+  .sw-head span:nth-child(5), .sw-head span:nth-child(6), .sw-prev, .sw-state { display: none; }
+  .sw-list .st-name { flex-direction: column; align-items: flex-start; gap: 1px; }
+  .sw-change { flex-direction: column; align-items: flex-end; gap: 2px; }
+  .st-list:not(.sw-list) li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; }
+  .st-list li { touch-action: pan-y; }
+  .st-price { justify-items: end; text-align: right; }
+  .st-act { opacity: 1; min-width: 28px; min-height: 28px; }
+  .st-acts { justify-self: end; }
+  .st-side {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    max-height: 86dvh; overflow-y: auto;
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper); border-top: 2px solid var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px #12110f55;
+  }
+  .stocks-page.sheet-open .st-side { display: block; animation: rise-in .25s var(--ease) both; }
+}

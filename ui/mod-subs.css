@@ -24,6 +24,28 @@
 .sb-field input:focus, .sb-field select:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
 .sb-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
 
+@media (max-width: 640px) {
+  .subs-page { gap: 18px; padding-top: 12px; }
+  .sb-head h2 { font-size: 24px; }
+  .sb-sum { gap: 10px; padding: 12px 0 14px; }
+  .sb-sum b { font-size: 18px; }
+  .sb-list li { grid-template-columns: minmax(0, 1fr) auto; gap: 6px 10px; padding: 12px 0; }
+  .sb-when { text-align: right; justify-items: end; }
+  .sb-list .linkish {
+    min-height: 32px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px;
+    font-size: 12.5px; font-weight: 600; color: var(--ink); text-decoration: none; justify-self: start;
+  }
+  .sb-del { opacity: 1; min-width: 32px; min-height: 32px; justify-self: end; }
+  .sb-side {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    max-height: 86dvh; overflow-y: auto;
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper); border-top: 2px solid var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px #12110f55;
+  }
+  .subs-page.sheet-open .sb-side { display: block; animation: rise-in .25s var(--ease) both; }
+}
+
 @media (min-width: 860px) {
   .subs-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(280px, 26vw, 380px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .sb-main { display: flex; flex-direction: column; min-height: 0; }

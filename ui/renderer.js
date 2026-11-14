@@ -191,7 +191,7 @@ function mobileSheet(page, side, label = 'Add') {
   const fab = el('button', { type: 'button', className: 'primary mob-fab', onclick: open },
     el('span', {}, '+ ' + label));
   page.append(backdrop, fab);
-  side.addEventListener('submit', () => { if (isMobile()) setTimeout(close, 30); });
+  side.addEventListener('submit', (e) => { if (isMobile() && e.target.id !== 'st-find' && e.target.id !== 'mo-bform') setTimeout(close, 30); });
   return { open, close };
 }
 

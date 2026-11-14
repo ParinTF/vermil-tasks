@@ -49,6 +49,7 @@
     $('mo-cur').value = data.cur;
     $('mo-cur').oninput = () => { data.cur = $('mo-cur').value.trim() || '฿'; save(); paint(); };
     $('mo-day').value = localDay(new Date());
+    mobileSheet(root(), root().querySelector('.mo-side'), 'Add entry');
   }
 
   function shiftMonthBy(n) {
