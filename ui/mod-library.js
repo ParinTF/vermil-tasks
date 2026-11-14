@@ -30,6 +30,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'lb-msg', className: 'lb-msg', role: 'status' }))));
     $('lb-status').value = 'want';
+    mobileSheet(root(), root().querySelector('.lb-side'), 'Add title');
   }
 
   function add(e) {

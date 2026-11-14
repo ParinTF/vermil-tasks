@@ -32,6 +32,7 @@
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'hb-msg', className: 'hb-msg', role: 'status' }))));
     paintDays();
+    mobileSheet(root(), root().querySelector('.hb-side'), 'New habit');
   }
 
   function paintDays() {

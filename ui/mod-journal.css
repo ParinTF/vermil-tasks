@@ -34,6 +34,25 @@
 .jr-list button span { color: var(--mute); font-size: 12px; }
 .jr-list button small { grid-column: 1 / -1; overflow: hidden; color: var(--mute); text-overflow: ellipsis; white-space: nowrap; }
 
+@media (max-width: 640px) {
+  .journal-page { gap: 18px; padding-top: 12px; }
+  .jr-head { flex-wrap: wrap; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .jr-head h2 { font-size: 24px; }
+  .jr-nav { gap: 8px; }
+  .jr-nav .linkish {
+    min-height: 36px; min-width: 36px; padding: 4px 12px;
+    border: 1px solid var(--line); border-radius: 999px;
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 13px; font-weight: 600; color: var(--ink); text-decoration: none;
+  }
+  .jr-nav #jr-prev, .jr-nav #jr-next { font-size: 20px; padding: 0 10px; }
+  .jr-mood button { min-height: 52px; padding: 10px 2px; }
+  .jr-mood small { font-size: 10px; letter-spacing: .04em; }
+  .jr-text { min-height: 140px; font-size: 16px; }
+  .jr-side { padding-top: 14px; border-top: 1px solid var(--ink); }
+  .jr-list button { padding: 12px 0; }
+}
+
 @media (min-width: 860px) {
   .journal-page { flex: 1; min-height: 0; grid-template-columns: minmax(0, 1fr) clamp(260px, 24vw, 340px); grid-template-rows: minmax(0, 1fr); gap: clamp(32px, 4vw, 64px); padding-top: clamp(12px, 2.5vh, 32px); }
   .jr-main { display: flex; flex-direction: column; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-right: 8px; }

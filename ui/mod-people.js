@@ -30,6 +30,7 @@
             el('button', { id: 'pp-save', className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
             el('button', { id: 'pp-cancel', className: 'ghost', type: 'button', hidden: true, textContent: 'Cancel', onclick: () => edit(null) })),
           el('div', { id: 'pp-msg', className: 'pp-msg', role: 'status' }))));
+    mobileSheet(root(), root().querySelector('.pp-side'), 'Add person');
   }
 
   const field = (label, ctl) => el('label', { className: 'pp-field' }, label, ctl);
@@ -45,7 +46,12 @@
     $('pp-gifts').value = p ? p.gifts : '';
     $('pp-save').firstChild.textContent = p ? 'Save' : 'Add';
     $('pp-cancel').hidden = !p;
-    if (p) $('pp-name').focus();
+    if (p) {
+      if (typeof isMobile === 'function' && isMobile()) root().classList.add('sheet-open');
+      $('pp-name').focus();
+    } else if (typeof isMobile === 'function' && isMobile()) {
+      root().classList.remove('sheet-open');
+    }
   }
 
   function submit(e) {
