@@ -367,6 +367,28 @@ $('form').onsubmit = async (e) => {
 $('cancel').onclick = resetForm;
 for (const name of TABS) $('tab-' + name).onclick = () => { tab = name; render(true); };
 $('search').oninput = () => render();
+if ($('mob-task-quick')) {
+  $('mob-task-quick').onsubmit = async (e) => {
+    e.preventDefault();
+    const raw = $('mob-quick-title').value.trim();
+    if (!raw) return;
+    const parsed = typeof parseQuickInput === 'function' ? parseQuickInput(raw, new Date()) : { title: raw, due: null };
+    const title = (parsed.title || raw).slice(0, 200);
+    const due = parsed.due || null;
+    $('mob-quick-title').value = '';
+    await commit([...todos, {
+      id: crypto.randomUUID(), title, due,
+      remindBefore: due && prefsNow.defaultRemind !== '' ? Number(prefsNow.defaultRemind) : null,
+      repeat: null, noteId: null, done: false, createdAt: new Date().toISOString(), completedAt: null,
+    }]);
+  };
+  $('mob-quick-more').onclick = () => {
+    const raw = $('mob-quick-title').value.trim();
+    if (raw) { $('title').value = raw; $('mob-quick-title').value = ''; }
+    $('tasks-view')?.classList.add('sheet-open');
+    $('title').focus();
+  };
+}
 
 const refreshTick = () => { if (tab !== 'history') renderTasks(); if (view !== 'tasks' && view !== 'home') registry[view]?.refresh?.(); };
 let refreshTimer;

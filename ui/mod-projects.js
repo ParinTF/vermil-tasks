@@ -21,6 +21,7 @@
           el('label', { className: 'pj-field' }, 'Client', el('input', { id: 'pj-client', maxLength: 60, autocomplete: 'off', placeholder: 'Optional' })),
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'pj-msg', className: 'pj-msg', role: 'status' }))));
+    mobileSheet(root(), $('pj-form'), 'New project');
   }
 
   function addProject(e) {

@@ -85,6 +85,36 @@ function syncViews() {
   layoutTabs();
 }
 
+function openDrawer() {
+  const dlg = $('mob-drawer');
+  if (!dlg) return;
+  if (dlg.open) { dlg.close(); return; }
+  const go = (id) => { dlg.close(); setView(id); };
+  const groups = PACKS.map((p) => {
+    const mods = MODULES.filter((m) => m.pack === p.id && m.view && started.has(m.id));
+    if (!mods.length) return null;
+    return el('div', { className: 'drw-group' },
+      el('div', { className: 'drw-head' }, p.name),
+      ...mods.map((m) => el('button', {
+        type: 'button', className: 'drw-item' + (view === m.id ? ' active' : ''),
+        onclick: () => go(m.id),
+      }, el('span', {}, m.name), el('small', {}, m.view !== m.name ? m.view : ''))));
+  }).filter(Boolean);
+  dlg.replaceChildren(
+    el('div', { className: 'drw-top' },
+      el('span', { className: 'brand' }, 'Vermil', el('i', {})),
+      el('button', { type: 'button', className: 'mob-sheet-close', ariaLabel: 'Close menu', onclick: () => dlg.close() }, '✕')),
+    el('nav', { className: 'drw-nav', ariaLabel: 'All views' },
+      el('button', { type: 'button', className: 'drw-item' + (view === 'home' ? ' active' : ''), onclick: () => go('home') }, el('span', {}, 'Home'), el('small', {}, 'Modules & Today')),
+      ...groups),
+    el('div', { className: 'drw-foot' },
+      el('button', { type: 'button', className: 'drw-act', onclick: () => { dlg.close(); openPalette(); } }, '⌕ Search & commands'),
+      el('button', { type: 'button', className: 'drw-act', onclick: () => go('settings') }, '⚙ Settings')));
+  dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
+  dlg.showModal();
+}
+if ($('menu-btn')) $('menu-btn').onclick = openDrawer;
+
 // With many modules on, the tab bar shows the tabs that fit (always Home and the one you are on) and puts the rest in a
 // More menu, so the bar never overflows however many are installed.
 function layoutTabs() {
@@ -95,7 +125,19 @@ function layoutTabs() {
   const tabs = [...bar.querySelectorAll('button[role=tab]')];
   for (const t of tabs) t.hidden = false;
   more.hidden = true;
-  if (typeof isMobile === 'function' && isMobile()) return;
+  if (typeof isMobile === 'function' && isMobile()) {
+    const maxTabs = 4;
+    if (tabs.length <= maxTabs) return;
+    const active = tabs.findIndex((t) => t.ariaSelected === 'true');
+    const keep = new Set([0, 1, 2]);
+    if (active >= 3) keep.add(active); else keep.add(3);
+    tabs.forEach((t, i) => { t.hidden = !keep.has(i); });
+    more.textContent = '☰ More';
+    more.hidden = false;
+    more.onclick = openDrawer;
+    return;
+  }
+  more.onclick = toggleTabMenu;
   const gap = parseFloat(getComputedStyle(bar).columnGap) || 22;
   const widths = tabs.map((t) => t.offsetWidth);
   const all = widths.reduce((n, w) => n + w + gap, -gap);

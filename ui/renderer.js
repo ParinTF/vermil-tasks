@@ -183,9 +183,14 @@ function mobileSheet(page, side, label = 'Add') {
     page.classList.add('sheet-open');
     side.querySelector('input:not([type=hidden]):not([type=checkbox]), textarea, select')?.focus();
   };
+  const submitForm = () => {
+    const f = side.tagName === 'FORM' ? side : (side.querySelector('form:not([hidden])') || side.querySelector('form'));
+    if (f) f.requestSubmit();
+  };
   const head = el('div', { className: 'mob-sheet-head' },
+    el('button', { type: 'button', className: 'mob-sheet-close', ariaLabel: 'Close', onclick: close }, '✕'),
     el('span', { className: 'mob-sheet-title' }, label),
-    el('button', { type: 'button', className: 'mob-sheet-close', ariaLabel: 'Close', onclick: close }, '✕'));
+    el('button', { type: 'button', className: 'primary mob-sheet-save', onclick: submitForm }, 'Save →'));
   side.prepend(head);
   const backdrop = el('div', { className: 'mob-backdrop', onclick: close });
   const fab = el('button', { type: 'button', className: 'primary mob-fab', onclick: open },

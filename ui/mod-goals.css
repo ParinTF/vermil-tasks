@@ -35,7 +35,6 @@
   .gl-head h2 { font-size: 24px; }
   .gl-hand button { width: 36px; height: 36px; font-size: 18px; }
   .gl-del { opacity: 1; min-width: 28px; min-height: 28px; }
-  .gl-two { grid-template-columns: 1fr; gap: 14px; }
   .gl-side {
     display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     max-height: 86dvh; overflow-y: auto;

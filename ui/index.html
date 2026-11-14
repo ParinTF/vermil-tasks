@@ -12,6 +12,7 @@
 <body>
   <!-- the window has no native title bar: this bar drags the window and holds its controls -->
   <header class="top" data-tauri-drag-region>
+    <button id="menu-btn" class="mob-menu-btn" type="button" aria-label="All modules menu" title="Menu" hidden>☰</button>
     <span class="brand">Vermil<i></i><small id="version"></small></span>
     <div class="views" role="tablist" aria-label="Views"></div>
     <button id="update" class="update" type="button" hidden></button>
@@ -89,6 +90,11 @@
     </div>
 
       <section class="board">
+        <form id="mob-task-quick" class="mob-quick-task" hidden>
+          <input id="mob-quick-title" maxlength="200" autocomplete="off" placeholder="Quick add a task…">
+          <button type="submit" class="primary mob-quick-add">Add</button>
+          <button type="button" id="mob-quick-more" class="mob-quick-opts" aria-label="More task options" title="Due date, repeat, note…">⋯</button>
+        </form>
         <nav role="tablist">
           <button id="tab-pending" role="tab">To do<sup id="n-pending"></sup></button>
           <button id="tab-today" role="tab">Today<sup id="n-today"></sup></button>
@@ -184,6 +190,8 @@
     <input id="pal-q" type="text" autocomplete="off" spellcheck="false" placeholder="Search tasks, notes and days, or run a command" role="combobox" aria-expanded="true" aria-controls="pal-list" aria-autocomplete="list">
     <ul id="pal-list" role="listbox"></ul>
   </dialog>
+
+  <dialog id="mob-drawer" class="mob-drawer" aria-label="Navigation menu"></dialog>
 
   <script src="logic.js"></script>
   <script src="renderer.js"></script>

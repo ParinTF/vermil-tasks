@@ -51,6 +51,7 @@
     $('tt-m-day').value = today();
     enhanceSelect($('tt-project'), { empty: 'Add a project first' }); // the app's own drop-down, not the native popup
     enhanceSelect($('tt-m-project'), { empty: 'Add a project first' });
+    mobileSheet(root(), root().querySelector('.tt-side'), 'Projects');
   }
   const field = (label, ctl) => el('label', { className: 'tt-field' }, label, ctl);
 
