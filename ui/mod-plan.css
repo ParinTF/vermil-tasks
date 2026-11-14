@@ -37,4 +37,13 @@
   .pl-main { min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-right: 8px; }
   .pl-side { min-height: 0; overflow-y: auto; scrollbar-width: thin; }
 }
-@media (max-width: 520px) { .pl-day { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .plan-page { gap: 18px; padding-top: 14px; }
+  .pl-head h2 { font-size: 26px; }
+  .pl-nav { gap: 8px; }
+  .pl-nav .linkish { min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-weight: 600; color: var(--ink); display: inline-flex; align-items: center; }
+  .pl-day { grid-template-columns: 1fr; gap: 6px; padding: 12px 0; }
+  .pl-key { display: none; }
+  .pl-task { min-height: 38px; padding: 8px 10px; border-radius: 6px; background: color-mix(in srgb, var(--ink) 3%, transparent); }
+  .pl-side { order: -1; padding: 12px 14px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--ink) 2%, transparent); }
+}

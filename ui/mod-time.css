@@ -57,3 +57,13 @@
   .tt-side { min-height: 0; overflow-y: auto; }
 }
 @media (max-width: 1000px) { .tt-form { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .time-page { gap: 20px; padding-top: 14px; }
+  .tt-head h2 { font-size: 26px; }
+  .tt-clock { font-size: 40px; }
+  .tt-add .dd { max-width: none; flex: 1 1 100%; }
+  .tt-line { grid-template-columns: minmax(0, 1fr) auto auto 28px 28px; gap: 8px; }
+  .tt-x, .tt-pen { opacity: 1; min-width: 28px; min-height: 28px; }
+  .tt-two { grid-template-columns: 1fr; }
+  .time-chip { max-width: 118px; margin-right: 4px; padding: 4px 8px; border: 1px solid var(--accent); border-radius: 999px; font-size: 11.5px; }
+}
