@@ -98,14 +98,14 @@ function openDrawer() {
       ...mods.map((m) => el('button', {
         type: 'button', className: 'drw-item' + (view === m.id ? ' active' : ''),
         onclick: () => go(m.id),
-      }, el('span', {}, m.name), el('small', {}, m.view !== m.name ? m.view : ''))));
+      }, m.name)));
   }).filter(Boolean);
   dlg.replaceChildren(
     el('div', { className: 'drw-top' },
       el('span', { className: 'brand' }, 'Vermil', el('i', {})),
       el('button', { type: 'button', className: 'mob-sheet-close', ariaLabel: 'Close menu', onclick: () => dlg.close() }, '✕')),
     el('nav', { className: 'drw-nav', ariaLabel: 'All views' },
-      el('button', { type: 'button', className: 'drw-item' + (view === 'home' ? ' active' : ''), onclick: () => go('home') }, el('span', {}, 'Home'), el('small', {}, 'Modules & Today')),
+      el('button', { type: 'button', className: 'drw-item' + (view === 'home' ? ' active' : ''), onclick: () => go('home') }, 'Home'),
       ...groups),
     el('div', { className: 'drw-foot' },
       el('button', { type: 'button', className: 'drw-act', onclick: () => { dlg.close(); openGuide(0); } }, '? Guide'),

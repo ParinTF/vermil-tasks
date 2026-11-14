@@ -164,7 +164,7 @@ form { display: grid; gap: 22px; }
 .field textarea::placeholder { color: color-mix(in srgb, var(--ink) 25%, transparent); }
 .actions { display: flex; align-items: center; gap: 20px; margin-top: 6px; }
 .primary {
-  display: inline-flex; gap: 12px; padding: 14px 28px; border: 0; border-radius: 999px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 12px; padding: 14px 28px; border: 0; border-radius: 999px;
   background: var(--ink); color: var(--paper); font-weight: 600;
   transition: background .35s var(--ease);
 }
@@ -462,6 +462,7 @@ dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
 .home-head { max-width: 760px; margin-bottom: 34px; }
 .home-head-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 18px; }
 .guide-btn {
+  display: inline-flex; align-items: center; justify-content: center;
   padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px;
   background: color-mix(in srgb, var(--ink) 4%, transparent); font: inherit;
   font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
@@ -561,7 +562,8 @@ dialog.guide-dlg {
 .guide-kit-info b { font-size: 14.5px; font-weight: 700; }
 .guide-kit-info span { font-size: 12.5px; color: var(--mute); }
 .guide-kit-badge {
-  flex: none; padding: 4px 10px; border-radius: 999px;
+  flex: none; display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 10px; border-radius: 999px;
   background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700;
 }
 .guide-kit.on .guide-kit-badge { background: var(--accent); color: var(--on-accent); }
@@ -655,12 +657,14 @@ dialog.guide-dlg {
   }
   .drw-foot {
     padding-top: 12px; border-top: 1px solid var(--line);
-    display: flex; gap: 8px;
+    display: flex; gap: 6px;
   }
   .drw-act {
-    flex: 1; min-height: 38px; padding: 6px 10px;
+    flex: 1; min-width: 0; min-height: 36px; padding: 6px 8px;
+    display: inline-flex; align-items: center; justify-content: center;
     border: 1px solid var(--line); border-radius: 999px;
-    background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
+    background: none; font: inherit; font-size: 12.5px; font-weight: 600;
+    color: var(--ink); white-space: nowrap;
   }
   /* Thumb-friendly Bottom Navigation Bar (4 primary tabs + More drawer button) */
   .views {
@@ -705,7 +709,7 @@ dialog.guide-dlg {
   .pack summary { grid-template-columns: minmax(0, 1fr) auto; gap: 3px 12px; padding: 12px 0; }
   .pack-name { font-size: 19px; }
   .pack-about, .pack-count { grid-column: 1 / -1; font-size: 12.5px; }
-  .pack-all { grid-column: 2; grid-row: 1; min-height: 34px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-size: 12px; font-weight: 600; color: var(--ink); }
+  .pack-all { grid-column: 2; grid-row: 1; display: inline-flex; align-items: center; justify-content: center; min-height: 34px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-size: 12px; font-weight: 600; color: var(--ink); }
   .mod-grid { grid-template-columns: 1fr; gap: 8px; padding: 4px 0 12px; }
   .pack .mod-card {
     padding: 12px; border: 1px solid var(--line); border-radius: 10px;
@@ -719,7 +723,7 @@ dialog.guide-dlg {
   /* Footer & bottom-sheet dialogs */
   .foot { margin-top: 24px; padding-top: 14px; gap: 8px 14px; }
   #shortcuts { display: none; }
-  .foot button { min-height: 36px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-weight: 600; color: var(--ink); }
+  .foot button { display: inline-flex; align-items: center; justify-content: center; min-height: 36px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-weight: 600; color: var(--ink); line-height: 1.2; }
   dialog:not(.mob-drawer) {
     width: 100%; max-width: 100%; margin: auto 0 0;
     padding: 18px 16px calc(20px + env(safe-area-inset-bottom, 0px));
@@ -760,8 +764,9 @@ dialog.guide-dlg {
     min-height: 34px; padding: 6px 14px; font-size: 13px;
   }
   .mob-sheet-close {
-    min-width: 34px; min-height: 34px; border: 0; border-radius: 50%;
-    background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); font-size: 14px;
+    display: inline-flex; align-items: center; justify-content: center;
+    min-width: 34px; min-height: 34px; padding: 0; border: 0; border-radius: 50%;
+    background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); font-size: 14px; line-height: 1;
   }
   /* Tasks view on mobile: 1-line compact header, inline Quick-Add bar, and compact 2-col bottom sheet */
   #tasks-view.grid { gap: 8px; padding-top: 8px; }
@@ -779,19 +784,21 @@ dialog.guide-dlg {
     margin-bottom: 10px; padding: 6px 0 10px; border-bottom: 1px solid var(--ink);
   }
   #mob-quick-title {
-    flex: 1; min-width: 0; padding: 8px 10px;
+    flex: 1; min-width: 0; height: 38px; box-sizing: border-box; padding: 0 12px;
     border: 1px solid var(--line); border-radius: 8px;
     background: color-mix(in srgb, var(--ink) 3%, transparent);
-    font-size: 15px; font-weight: 500;
+    font-size: 14.5px; font-weight: 500;
   }
   .mob-quick-add {
-    min-width: 38px; min-height: 38px; padding: 0 12px;
-    font-size: 18px; line-height: 1;
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    height: 38px; min-height: 38px; padding: 0 16px;
+    font-size: 14px; font-weight: 600; line-height: 1;
   }
   .mob-quick-opts {
-    min-width: 38px; min-height: 38px; padding: 0 10px;
+    flex: none; display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; min-width: 38px; min-height: 38px; padding: 0;
     border: 1px solid var(--line); border-radius: 8px;
-    background: none; font: inherit; font-size: 16px; font-weight: 700; color: var(--mute);
+    background: none; font: inherit; font-size: 16px; font-weight: 700; line-height: 1; color: var(--mute);
   }
   #tasks-view .compose {
     display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
@@ -812,7 +819,7 @@ dialog.guide-dlg {
   #search { padding-block: 9px; margin-bottom: 4px; font-size: 14px; }
   .item { grid-template-columns: 26px minmax(0, 1fr); gap: 4px 10px; padding: 11px 0; }
   .item .tools { grid-column: 2; flex-wrap: wrap; gap: 5px 7px; margin-top: 3px; opacity: 1; }
-  .item .tools button { min-height: 30px; padding: 3px 10px; border: 1px solid var(--line); border-radius: 999px; font-size: 11.5px; }
+  .item .tools button { display: inline-flex; align-items: center; justify-content: center; min-height: 30px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 11.5px; line-height: 1.2; }
   /* Notes view on mobile: master-detail list vs full-screen editor */
   .notes-page { gap: 16px; padding-top: 14px; }
   .notes-page:not(.mob-editing) .note-editor { display: none !important; }
