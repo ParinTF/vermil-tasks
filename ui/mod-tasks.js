@@ -74,6 +74,9 @@ function resetForm() {
   $('remind').value = prefsNow.defaultRemind;
   $('submit').textContent = 'Add task';
   $('cancel').hidden = true;
+  $('tasks-view')?.classList.remove('sheet-open');
+  const st = document.querySelector('#tasks-view .mob-sheet-title');
+  if (st) st.textContent = 'New task';
 }
 
 function notesBlock(t) {
@@ -141,6 +144,9 @@ function pendingItem(t) {
     for (const h of taskFields) h.fill(t);
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
+    const st = document.querySelector('#tasks-view .mob-sheet-title');
+    if (st) st.textContent = 'Edit task';
+    $('tasks-view')?.classList.add('sheet-open');
     $('title').focus();
   };
   return li;
@@ -495,6 +501,7 @@ defineModule('tasks', {
   },
   start() {
     $('remind').value = prefsNow.defaultRemind;
+    mobileSheet($('tasks-view'), document.querySelector('#tasks-view .compose'), 'New task');
     shortcutGroups.push(tasksGroup);
     metricHooks.push(tasksMetrics);
     document.querySelector('.marquee').hidden = false;

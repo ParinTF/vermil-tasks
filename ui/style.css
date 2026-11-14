@@ -649,6 +649,31 @@ kbd.k { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px s
     min-width: 36px; min-height: 36px; border: 0; border-radius: 50%;
     background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); font-size: 15px;
   }
+  /* Tasks view on mobile: compact hero, task list first, compose form in slide-up bottom sheet */
+  #tasks-view.grid { gap: 12px; padding-top: 10px; }
+  .hero { padding-block: 4px 10px; border-bottom: 1px solid var(--line); }
+  .hero .eyebrow { display: none; }
+  .hero h1 { font-size: 26px; display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px; }
+  .hero .line { display: inline; padding: 0; margin: 0; }
+  .hero .stats { margin-top: 4px; font-size: 13px; }
+  #tasks-view .compose {
+    display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    max-height: 86dvh; overflow-y: auto;
+    padding: 18px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    background: var(--paper); border-top: 2px solid var(--ink); border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 48px #12110f55;
+  }
+  #tasks-view.sheet-open .compose { display: block; animation: rise-in .25s var(--ease) both; }
+  #tasks-view .compose h2 { display: none; }
+  .row { grid-template-columns: 1fr; gap: 14px; }
+  .board nav { gap: 18px; overflow-x: auto; scrollbar-width: none; }
+  .board nav::-webkit-scrollbar { display: none; }
+  .board nav button { font-size: 18px; padding-bottom: 10px; white-space: nowrap; }
+  #search { padding-block: 12px; font-size: 15px; }
+  .item { grid-template-columns: 28px minmax(0, 1fr); gap: 6px 12px; padding: 14px 0; }
+  .item .tools { grid-column: 2; flex-wrap: wrap; gap: 6px 8px; margin-top: 4px; opacity: 1; }
+  .item .tools button { min-height: 32px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; }
+  .empty { padding: 32px 0; font-size: 24px; }
 }
 
 /* keep this block last: it overrides the base rules above */
