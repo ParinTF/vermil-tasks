@@ -253,7 +253,7 @@ function toggleItem(li) {
   if (li.getAttribute('data-done') === '1') li.removeAttribute('data-done'); else li.setAttribute('data-done', '1');
   touchNote();
 }
-const inGutter = (e, li) => e.clientX - li.getBoundingClientRect().left < 32; // the column the circle sits in
+const inGutter = (e, li) => e.clientX - li.getBoundingClientRect().left < 38; // the column the circle sits in
 editor().addEventListener('mousedown', (e) => { const li = e.target.closest?.('ul.check > li'); if (li && inGutter(e, li)) e.preventDefault(); }); // the click ticks, it does not move the caret
 editor().addEventListener('click', (e) => { const li = e.target.closest?.('ul.check > li'); if (li && inGutter(e, li)) toggleItem(li); });
 editor().addEventListener('input', (e) => { // a new line after a ticked item starts unticked
@@ -308,6 +308,7 @@ async function openNote(id, focus) {
     await leaveNote();
     showNote(id);
   }
+  $('notes-view')?.classList.add('mob-editing');
   if (focus) {
     $('note-' + focus).focus();
     if (focus === 'body') caretToEnd($('note-body'));
@@ -320,6 +321,7 @@ async function newNote() {
   notes.push(draftNote);
   $('note-search').value = '';
   showNote(draftNote.id);
+  $('notes-view')?.classList.add('mob-editing');
   $('note-title').focus();
 }
 
@@ -339,6 +341,7 @@ async function deleteNote(id = selectedNoteId) {
   }
   if (draftNote && draftNote.id === n.id) draftNote = null;
   notes = notes.filter((x) => x.id !== n.id);
+  if (isMobile()) $('notes-view')?.classList.remove('mob-editing');
   if (n.id === selectedNoteId) showNote(next ? next.id : null); else renderNoteList();
 }
 
@@ -378,6 +381,7 @@ function notesKeys(e) {
 
 $('note-new').onclick = newNote;
 $('note-delete').onclick = () => deleteNote();
+if ($('note-back')) $('note-back').onclick = async () => { await leaveNote(); $('notes-view')?.classList.remove('mob-editing'); renderNoteList(); };
 $('note-search').oninput = renderNoteList;
 $('note-title').oninput = $('note-body').oninput = touchNote;
 addEventListener('blur', flushNote); // the window lost focus: do not leave typing unsaved
@@ -395,7 +399,7 @@ defineModule('notes', {
   },
   start() { shortcutGroups.push(notesGroup); fillNoteLinks(); render(); }, // tasks gain the Linked note menu and Open buttons
   stop() { shortcutGroups.splice(shortcutGroups.indexOf(notesGroup), 1); fillNoteLinks(); render(); },
-  show() { if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList(); },
+  show() { $('notes-view')?.classList.remove('mob-editing'); if (!currentNote() && notes.length) showNote((visibleNotes()[0] || notes[0]).id); else renderNoteList(); },
   refresh: renderNoteList,
   keys: notesKeys,
   flush: flushNote, leave: leaveNote, open: openNote, newNote,

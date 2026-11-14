@@ -544,7 +544,7 @@ kbd.k { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px s
 }
 
 /* ── mobile shell, Home, dialogs & bottom-sheet helper (<= 640px) ── */
-.mob-sheet-head, .mob-fab, .mob-backdrop { display: none; }
+.mob-sheet-head, .mob-fab, .mob-backdrop, .mob-note-bar { display: none; }
 @media (max-width: 640px) {
   :root { --pad: 16px; }
   body { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); overflow-wrap: anywhere; }
@@ -674,6 +674,27 @@ kbd.k { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px s
   .item .tools { grid-column: 2; flex-wrap: wrap; gap: 6px 8px; margin-top: 4px; opacity: 1; }
   .item .tools button { min-height: 32px; padding: 4px 11px; border: 1px solid var(--line); border-radius: 999px; font-size: 12px; }
   .empty { padding: 32px 0; font-size: 24px; }
+  /* Notes view on mobile: master-detail list vs full-screen editor */
+  .notes-page { gap: 16px; padding-top: 14px; }
+  .notes-page:not(.mob-editing) .note-editor { display: none !important; }
+  .notes-page.mob-editing .note-list, .notes-page.mob-editing #note-hint { display: none !important; }
+  .note-tools { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .note-tools .primary { order: 2; flex: none; padding: 10px 18px; font-size: 13.5px; }
+  #note-search { order: 1; flex: 1; padding: 10px 0; font-size: 15px; }
+  .note { padding: 14px 0; }
+  .mob-note-bar { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .mob-note-back {
+    min-height: 38px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px;
+    background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--ink);
+  }
+  .fmt { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 8px; padding-bottom: 10px; }
+  .fmt::-webkit-scrollbar { display: none; }
+  .fmt button { min-width: 38px; height: 38px; flex: none; }
+  .fmt .sw { width: 26px; height: 26px; min-width: 26px; margin: 6px 4px; }
+  #note-body { min-height: 52dvh; font-size: 16px; }
+  #note-body ul.check li { padding-left: 38px; }
+  #note-body ul.check li::before { width: 22px; height: 22px; top: calc((1.7em - 22px) / 2); }
+  .note-foot button { min-height: 36px; padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; }
 }
 
 /* keep this block last: it overrides the base rules above */
