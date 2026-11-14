@@ -108,7 +108,8 @@ function openDrawer() {
       el('button', { type: 'button', className: 'drw-item' + (view === 'home' ? ' active' : ''), onclick: () => go('home') }, el('span', {}, 'Home'), el('small', {}, 'Modules & Today')),
       ...groups),
     el('div', { className: 'drw-foot' },
-      el('button', { type: 'button', className: 'drw-act', onclick: () => { dlg.close(); openPalette(); } }, '⌕ Search & commands'),
+      el('button', { type: 'button', className: 'drw-act', onclick: () => { dlg.close(); openGuide(0); } }, '? Guide'),
+      el('button', { type: 'button', className: 'drw-act', onclick: () => { dlg.close(); openPalette(); } }, '⌕ Search'),
       el('button', { type: 'button', className: 'drw-act', onclick: () => go('settings') }, '⚙ Settings')));
   dlg.onclick = (e) => { if (e.target === dlg) dlg.close(); };
   dlg.showModal();
@@ -242,8 +243,11 @@ function renderHome() {
   };
   home.replaceChildren(
     el('header', { className: 'home-head' },
-      el('p', { className: 'eyebrow' }, 'Vermil'),
-      el('h2', { className: 'home-h' }, started.size ? 'Your workspace' : 'Pick what you need'),
+      el('div', { className: 'home-head-top' },
+        el('div', {},
+          el('p', { className: 'eyebrow' }, 'Vermil'),
+          el('h2', { className: 'home-h' }, started.size ? 'Your workspace' : 'Pick what you need')),
+        el('button', { type: 'button', className: 'guide-btn', onclick: () => openGuide(0) }, '? How it works')),
       el('p', { className: 'home-sub' }, started.size
         ? 'Add or remove modules any time. A module you remove is not loaded at all, and your data stays.'
         : 'Vermil starts empty. Add only the modules you want: the rest are never loaded, so the app stays light.')),
@@ -351,10 +355,169 @@ async function paintSync() {
 // another computer's changes were taken: start again from the new data (typing in a note is saved first)
 window.__TAURI__.event.listen('synced', () => { registry.notes?.flush?.(); setTimeout(() => location.reload(), 300); });
 
+// ── First-time onboarding & interactive feature guide ──
+const GUIDE_KITS = [
+  { id: 'core', name: 'Core Essentials', mods: ['tasks', 'notes', 'calendar'], desc: 'Tasks, rich Notes & Month/Day Calendar' },
+  { id: 'daily', name: 'Daily Life & Money', mods: ['habits', 'money', 'journal'], desc: 'Daily Habits, Expenses & Mood Journal' },
+  { id: 'plan', name: 'Planning & Goals', mods: ['shopping', 'countdown', 'goals'], desc: 'Shopping & Meals, Countdowns & Goals' },
+];
+
+const GUIDE_STEPS = [
+  {
+    tag: 'Welcome to Vermil',
+    title: 'One light app. Only the tools you choose.',
+    lead: 'Every feature is an optional module on Home. Modules that are off are never loaded, and if you ever remove one later, your saved data stays safe.',
+    kits: true,
+    items: [
+      ['5 Organized Packs', 'Open Work, Money, Life, Plan or Smart on the Home screen to add or remove individual modules any time.'],
+      ['Today at a Glance', 'Every active module adds a live summary tile to the Today strip at the top of Home.'],
+    ],
+  },
+  {
+    tag: 'Getting Around',
+    title: 'Switch views in one tap',
+    lead: 'Whether on phone or desktop, every module you enable is one tap or keystroke away.',
+    items: [
+      ['Bottom Bar & Top Tabs', 'Your primary views (Home, Tasks, Notes, Calendar) stay pinned at the bottom on mobile, or on the top bar on desktop (Ctrl+1–9).'],
+      ['☰ All Modules Drawer', 'Tap ☰ (top-left) or ☰ MORE (bottom-right) on mobile to open the slide-out drawer with every enabled module grouped by pack.'],
+      ['⌕ Search & Converter (Ctrl+K)', 'Tap ⌕ to search tasks & notes, jump to any date, run commands, or convert units & currencies ("100 usd to thb", "5 km to mi").'],
+    ],
+  },
+  {
+    tag: 'Tasks, Focus & Time',
+    title: 'Capture tasks without scrolling',
+    lead: 'Add tasks in seconds with smart date words, reminders, focus timers and project tracking.',
+    items: [
+      ['Instant Quick-Add Bar', 'At the top of Tasks, type "Call Bob tomorrow 9am" (or "พรุ่งนี้ 9:00") and tap Add — Vermil sets the due date automatically.'],
+      ['⋯ Detail Sheet & Top Save', 'Tap ⋯ (or the floating + button on any module) for repeats, reminders, projects and linked notes. Tap Save → right at the top of the sheet anytime.'],
+      ['Focus, Time & Week Plan', 'Run a Pomodoro timer on any task, log billable hours by project in Time Tracker, or schedule your 7-day week in Week plan.'],
+    ],
+  },
+  {
+    tag: 'Notes, Calendar & Life',
+    title: 'Rich notes, visual schedule & daily trackers',
+    lead: 'Keep your notes, schedule, money and daily habits in one calm place.',
+    items: [
+      ['Notes with Checklists & Colours', 'Write notes with 4 text sizes, 5 theme-aware colours and interactive checklists (☑). Link a note to one or more tasks.'],
+      ['Month & Hour-by-Hour Calendar', 'See tasks, bill renewals and countdowns (◆) on a monthly grid, or switch to Day view to time-block your hours.'],
+      ['Money, Life & Plan Modules', 'Track monthly Expenses & Budgets, Subscriptions, Bills, Stocks, daily Habits (with a year heatmap), Health, Journal, Library, People, Shopping & Travel.'],
+    ],
+  },
+  {
+    tag: 'Smart & Private Data',
+    title: 'Your data stays on your device',
+    lead: 'Everything is saved locally in one clean JSON file — no account or cloud subscription required.',
+    items: [
+      ['Smart Pack (Levels, Rules, Insights & AI)', 'Earn XP & levels as you finish tasks, set Automations ("when bill paid → add expense"), spot cross-module patterns in Insights, or connect your own Gemini key in Assistant.'],
+      ['Theme, Accent & Font (⚙ Settings)', 'Open Settings to switch between Light, Dark or Auto theme, and pick your favourite accent colour and font.'],
+      ['One-File Backup & Folder Sync', 'Export or import a full JSON backup anytime from the footer, or set up automatic weekly backups and shared-folder sync in Settings.'],
+    ],
+  },
+];
+
+let guideStep = 0;
+function markGuideSeen() {
+  try { localStorage.setItem('guide-seen', '1'); } catch {}
+  if (!moduleData._guide) saveModule('_guide', true).catch(() => {});
+}
+
+function openGuide(step = 0) {
+  const dlg = $('guide');
+  if (!dlg) return;
+  guideStep = Math.max(0, Math.min(GUIDE_STEPS.length - 1, step));
+  const paint = () => {
+    const s = GUIDE_STEPS[guideStep];
+    const last = guideStep === GUIDE_STEPS.length - 1;
+    const closeGuide = () => { markGuideSeen(); dlg.close(); };
+    const kitNodes = s.kits ? [
+      el('div', { className: 'guide-kits' },
+        el('div', { className: 'guide-kits-label' }, 'Quick-start kits — tap to switch on:'),
+        ...GUIDE_KITS.map((k) => {
+          const allOn = k.mods.every((id) => started.has(id));
+          const btn = el('button', {
+            type: 'button',
+            className: 'guide-kit' + (allOn ? ' on' : ''),
+            onclick: async () => {
+              for (const id of k.mods) {
+                const m = byId(id);
+                if (m && !started.has(id)) await setModule(m, true);
+              }
+              renderHome();
+              paint();
+            },
+          },
+            el('div', { className: 'guide-kit-info' },
+              el('b', {}, k.name),
+              el('span', {}, k.desc)),
+            el('span', { className: 'guide-kit-badge' }, allOn ? '✓ Installed' : '+ Enable'));
+          return btn;
+        }))
+    ] : [];
+
+    dlg.replaceChildren(
+      el('div', { className: 'guide-top' },
+        el('span', { className: 'eyebrow' }, `Step ${guideStep + 1} of ${GUIDE_STEPS.length} · ${s.tag}`),
+        el('button', { type: 'button', className: 'mob-sheet-close', ariaLabel: 'Close guide', onclick: closeGuide }, '✕')),
+      el('div', { className: 'guide-dots', role: 'tablist', ariaLabel: 'Guide steps' },
+        ...GUIDE_STEPS.map((st, i) => el('button', {
+          type: 'button', role: 'tab', className: 'guide-dot' + (i === guideStep ? ' active' : ''),
+          ariaSelected: String(i === guideStep), ariaLabel: `Step ${i + 1}: ${st.tag}`,
+          onclick: () => { guideStep = i; paint(); },
+        }))),
+      el('div', { className: 'guide-body' },
+        el('h2', { id: 'guide-title' }, s.title),
+        el('p', { className: 'guide-lead' }, s.lead),
+        ...kitNodes,
+        el('div', { className: 'guide-cards' },
+          ...s.items.map(([head, text]) => el('div', { className: 'guide-card' },
+            el('b', {}, head),
+            el('p', {}, text))))),
+      el('div', { className: 'guide-foot' },
+        guideStep > 0
+          ? el('button', { type: 'button', className: 'ghost', onclick: () => { guideStep--; paint(); } }, '← Back')
+          : el('button', { type: 'button', className: 'ghost', onclick: closeGuide }, 'Skip'),
+        el('button', {
+          type: 'button', className: 'primary', autofocus: true,
+          onclick: async () => {
+            if (!last) { guideStep++; paint(); return; }
+            if (!started.size) {
+              for (const id of ['tasks', 'notes', 'calendar']) await setModule(byId(id), true);
+              renderHome();
+            }
+            closeGuide();
+          },
+        },
+          el('span', {}, last ? (started.size ? 'Start using Vermil' : 'Start with Tasks, Notes & Calendar') : 'Next'),
+          el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))));
+  };
+  paint();
+  if (!dlg.open) dlg.showModal();
+}
+
+// Fallback for browsers without declarative <dialog closedby="any"> support
+if ($('guide') && !('closedBy' in HTMLDialogElement.prototype)) {
+  $('guide').addEventListener('click', (event) => {
+    const dialog = $('guide');
+    if (event.target !== dialog) return;
+    const rect = dialog.getBoundingClientRect();
+    const isDialogContent = (
+      rect.top <= event.clientY &&
+      event.clientY <= rect.top + rect.height &&
+      rect.left <= event.clientX &&
+      event.clientX <= rect.left + rect.width
+    );
+    if (isDialogContent) return;
+    markGuideSeen();
+    dialog.close();
+  });
+}
+$('guide')?.addEventListener('close', markGuideSeen);
+
 // at start: read what is saved, then start the modules that are on (one that fails to load is skipped, not fatal)
 invoke('get_modules').then(async (saved) => {
   Object.assign(moduleData, saved);
-  if (!Array.isArray(moduleData._on)) { // first start with modules: whoever already has tasks or notes keeps the three views they had
+  const firstStart = !Array.isArray(moduleData._on);
+  if (firstStart) { // first start with modules: whoever already has tasks or notes keeps the three views they had
     const [t, n] = await Promise.all([invoke('get_todos'), invoke('get_notes')]);
     moduleData._on = t.length || n.length ? ['tasks', 'notes', 'calendar'] : [];
     if (moduleData._on.length) await invoke('save_module', { id: '_on', value: moduleData._on });
@@ -368,4 +531,7 @@ invoke('get_modules').then(async (saved) => {
   let last = '';
   try { last = localStorage.getItem('last-view') || ''; } catch {}
   if (again) setView('settings'); else if (prefsNow.startPage === 'last' && last && last !== 'home') setView(last);
+  let seen = !!moduleData._guide;
+  try { seen = seen || localStorage.getItem('guide-seen') === '1'; } catch {}
+  if (!seen && !again && !todos.length) openGuide(0);
 });

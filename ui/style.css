@@ -435,7 +435,7 @@ dialog {
   background: color-mix(in srgb, var(--paper) 92%, var(--ink)); color: var(--ink); /* a shade off the page, so the card shows in dark too */ box-shadow: 0 24px 80px #12110f55;
 }
 dialog::backdrop { background: #12110f73; }
-dialog p { margin: 0 0 28px; font-size: 20px; font-weight: 600; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
+#dlg p { margin: 0 0 28px; font-size: 20px; font-weight: 600; line-height: 1.4; white-space: pre-line; overflow-wrap: anywhere; }
 dialog[open] { animation: rise-in .35s var(--ease) both; }
 
 /* ── command palette (Ctrl+K) ── */
@@ -460,6 +460,13 @@ dialog.mods h2 { margin: 0 0 6px; font-size: 24px; font-weight: 700; }
 /* ── Home: one card per module ── */
 .home-page { display: block; padding-top: 28px; }
 .home-head { max-width: 760px; margin-bottom: 34px; }
+.home-head-top { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 8px 18px; }
+.guide-btn {
+  padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 4%, transparent); font: inherit;
+  font-size: 13px; font-weight: 600; color: var(--ink); cursor: pointer;
+}
+.guide-btn:hover { border-color: var(--ink); }
 .home-h { margin: 6px 0 12px; font-size: clamp(40px, 6vw, 84px); font-weight: 700; letter-spacing: -.03em; line-height: 1.02; }
 .home-sub { max-width: 58ch; margin: 0; font-size: 15px; line-height: 1.5; color: var(--mute); }
 .mod-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: 0 44px; }
@@ -508,7 +515,9 @@ button.dash-tile:hover b { text-decoration: underline; text-underline-offset: 5p
 .bk-row { display: flex; align-items: baseline; gap: 18px; margin-top: 12px; font-size: 13px; }
 .bk-msg { overflow-wrap: anywhere; color: var(--mute); }
 
-/* ── keyboard shortcuts list ── */
+/* ── keyboard shortcuts list & onboarding feature guide ── */
+dialog:modal { overscroll-behavior: contain; }
+dialog::backdrop { overflow: hidden; overscroll-behavior: contain; }
 dialog.keys { width: min(880px, calc(100vw - 48px)); max-height: calc(100vh - 48px); padding: 26px 32px 22px; overflow-y: auto; }
 dialog.keys:focus { outline: 0; }
 dialog.keys h2 { margin: 0; font-size: 26px; font-weight: 700; }
@@ -523,6 +532,52 @@ kbd.k { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px s
 .sk-or { margin: 0 7px; font-size: 12px; font-style: normal; color: var(--mute); }
 .sk-keys { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 0; }
 .sk { white-space: nowrap; }
+
+dialog.guide-dlg {
+  width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 32px);
+  padding: 24px 28px 22px; overflow-y: auto;
+}
+.guide-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.guide-top .eyebrow { margin: 0; color: var(--accent-text); }
+.guide-dots { display: flex; gap: 8px; margin-bottom: 16px; }
+.guide-dot {
+  flex: 1; height: 4px; padding: 0; border: 0; border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 16%, transparent); cursor: pointer;
+}
+.guide-dot.active { background: var(--accent); }
+.guide-body h2 { margin: 0 0 8px; font-size: 26px; font-weight: 700; letter-spacing: -.02em; line-height: 1.15; }
+.guide-lead { margin: 0 0 16px; font-size: 14.5px; line-height: 1.5; color: var(--mute); }
+.guide-kits { display: flex; flex-direction: column; gap: 8px; margin-bottom: 16px; }
+.guide-kits-label { font-size: 11px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
+.guide-kit {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px;
+  background: color-mix(in srgb, var(--ink) 2.5%, transparent);
+  font: inherit; text-align: left; color: var(--ink); cursor: pointer;
+}
+.guide-kit:hover { border-color: var(--ink); }
+.guide-kit.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.guide-kit-info { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.guide-kit-info b { font-size: 14.5px; font-weight: 700; }
+.guide-kit-info span { font-size: 12.5px; color: var(--mute); }
+.guide-kit-badge {
+  flex: none; padding: 4px 10px; border-radius: 999px;
+  background: var(--ink); color: var(--paper); font-size: 12px; font-weight: 700;
+}
+.guide-kit.on .guide-kit-badge { background: var(--accent); color: var(--on-accent); }
+.guide-cards { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.guide-card {
+  padding: 11px 14px; border-left: 2px solid var(--ink);
+  background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 0 8px 8px 0;
+}
+.guide-card b { display: block; margin-bottom: 3px; font-size: 14px; font-weight: 700; color: var(--ink); }
+.guide-card p { margin: 0; font-size: 13px; line-height: 1.45; color: var(--mute); }
+.guide-foot {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding-top: 14px; border-top: 1px solid var(--line);
+}
+.guide-foot .primary { min-height: 40px; padding: 8px 18px; font-size: 13.5px; }
+.guide-foot .ghost { min-height: 40px; padding: 8px 14px; font-size: 13.5px; }
 
 /* ── motion ── */
 @keyframes rise { from { transform: translateY(105%); } }
@@ -667,10 +722,16 @@ kbd.k { display: inline-block; min-width: 1.7em; padding: 1px 6px; border: 1px s
   .foot button { min-height: 36px; padding: 5px 12px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-weight: 600; color: var(--ink); }
   dialog:not(.mob-drawer) {
     width: 100%; max-width: 100%; margin: auto 0 0;
-    padding: 20px 18px calc(22px + env(safe-area-inset-bottom, 0px));
+    padding: 18px 16px calc(20px + env(safe-area-inset-bottom, 0px));
     border-radius: 16px 16px 0 0; border-bottom: 0;
   }
-  dialog p { font-size: 16px; margin-bottom: 18px; }
+  #dlg p { font-size: 16px; margin-bottom: 18px; }
+  dialog.guide-dlg { max-height: 88dvh; }
+  .guide-body h2 { font-size: 21px; margin-bottom: 6px; }
+  .guide-lead { font-size: 13.5px; margin-bottom: 12px; }
+  .guide-card { padding: 9px 12px; }
+  .guide-card b { font-size: 13.5px; }
+  .guide-card p { font-size: 12.5px; margin: 0; }
   dialog .actions .primary, dialog .actions .ghost { min-height: 40px; }
   dialog.pal {
     width: 100%; max-width: 100%; margin: auto 0 0;

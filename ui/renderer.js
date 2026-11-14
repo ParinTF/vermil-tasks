@@ -319,6 +319,7 @@ function paletteResults(q) {
     go('Open settings', 'Ctrl+,', () => setView('settings')),
     go('Switch theme', 'T', () => $('theme').click()),
     go('Keyboard shortcuts', '?', openShortcuts),
+    go('App guide & feature tour', '', () => typeof openGuide === 'function' && openGuide(0)),
   ];
   if (!q.trim()) return commands;
   const found = [
@@ -415,7 +416,9 @@ function openShortcuts() {
       el('ul', {}, ...g.items.map(([keys, what]) => el('li', {},
         el('span', { className: 'sk-keys' }, ...[].concat(keys).flatMap((k, i) => [...(i ? [el('i', { className: 'sk-or' }, 'or')] : []), keyChips(k)])),
         el('span', {}, what))))))),
-    el('div', { className: 'actions' }, el('button', { type: 'button', className: 'ghost', onclick: () => dlg.close() }, 'Close')));
+    el('div', { className: 'actions' },
+      el('button', { type: 'button', className: 'primary', onclick: () => { dlg.close(); if (typeof openGuide === 'function') openGuide(0); } }, el('span', {}, 'App guide'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
+      el('button', { type: 'button', className: 'ghost', onclick: () => dlg.close() }, 'Close')));
   dlg.tabIndex = -1;
   dlg.showModal();
   dlg.focus(); // the focus would otherwise jump to Close at the bottom and scroll there
