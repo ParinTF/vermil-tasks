@@ -3,6 +3,7 @@
 // Task data and saving (todos, commit) live in the core so every module can use them.
 const TABS = ['pending', 'today', 'week', 'history'];
 let tab = 'pending';
+let activeTag = '';
 let editingId = null;
 let marqueeKey;
 const openNotes = new Set(); // ids whose notes are expanded, so a re-render does not collapse them
@@ -28,6 +29,7 @@ function complete(t) {
       ...t, id: crypto.randomUUID(), series, done: false, completedAt: null,
       createdAt: new Date().toISOString(), hideUntil: day, snoozeUntil: null,
       due: t.due ? day + t.due.slice(10) : null, // same time of day
+      ...(Array.isArray(t.subtasks) && t.subtasks.length ? { subtasks: t.subtasks.map((s) => ({ ...s, done: false })) } : {}),
     });
   }
   return next;
@@ -104,15 +106,41 @@ function removeButton(t) {
   return btn;
 }
 
+function subtasksBlock(t) {
+  if (!Array.isArray(t.subtasks) || !t.subtasks.length) return '';
+  return el('ul', { className: 'subtasks' }, ...t.subtasks.map((s, idx) => {
+    const cb = el('input', {
+      type: 'checkbox', checked: !!s.done, disabled: !!t.done,
+      ariaLabel: `Subtask: ${s.title}`,
+      onchange: () => {
+        const nextSubs = t.subtasks.map((x, i) => (i === idx ? { ...x, done: cb.checked } : x));
+        commit(todos.map((x) => (x.id === t.id ? { ...x, subtasks: nextSubs } : x)));
+      },
+    });
+    return el('li', { className: s.done ? 'done' : '' }, cb, el('span', {}, s.title));
+  }));
+}
+
+function tagsNodes(t) {
+  const tags = typeof taskTags === 'function' ? taskTags(t) : (t.tags || []);
+  if (!tags.length) return [];
+  return [el('span', { className: 'task-tags' }, ...tags.map((tg) => el('button', {
+    type: 'button', className: 'task-tag' + (activeTag === tg ? ' on' : ''),
+    onclick: (e) => { e.stopPropagation(); activeTag = activeTag === tg ? '' : tg; render(); },
+  }, '#' + tg)))];
+}
+
 function pendingItem(t) {
   const later = isLater(t);
   const overdue = !later && isOverdue(t);
+  const subProg = typeof subtaskProgress === 'function' ? subtaskProgress(t.subtasks) : null;
   const parts = [
     later ? backLabel(t.hideUntil) : '',
     t.due ? (overdue ? 'Overdue ' : 'Due ') + fmt(t.due, { dateStyle: 'medium', timeStyle: 'short' }) : '',
     t.due && t.remindBefore != null ? remindLabel[t.remindBefore] : '',
     t.snoozeUntil > Date.now() ? 'snoozed to ' + fmt(t.snoozeUntil, { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '',
     t.repeat || '',
+    subProg ? `${subProg.done}/${subProg.total} steps` : '',
     streaks.get(t.id) > 1 ? streaks.get(t.id) + '-day streak' : '',
     ...rowInfo.map((f) => f(t)),
   ].filter(Boolean);
@@ -123,9 +151,9 @@ function pendingItem(t) {
   const edit = el('button', { type: 'button', className: 'act-edit', textContent: 'Edit' });
   const pin = el('button', { type: 'button', className: 'act-pin', textContent: t.pinned ? 'Unpin' : 'Pin' });
   pin.onclick = () => commit(todos.map((x) => (x.id === t.id ? { ...x, pinned: !t.pinned } : x)));
-  const title = el('span', { className: 'title' }, ...(t.pinned ? [el('i', { className: 'pin-dot', title: 'Pinned' })] : []), t.title);
+  const title = el('span', { className: 'title' }, ...(t.pinned ? [el('i', { className: 'pin-dot', title: 'Pinned' })] : []), t.title, ...tagsNodes(t));
   const li = el('li', { className: 'item' + (later ? ' later' : ''), id: 'r-' + t.id }, lead,
-    el('div', {}, title, meta, notesBlock(t)),
+    el('div', {}, title, meta, subtasksBlock(t), notesBlock(t)),
     el('div', { className: 'tools' }, ...rowTools.map((f) => f(t)), pin, edit, removeButton(t)));
   lead.onchange = () => {
     lead.disabled = true;
@@ -141,6 +169,8 @@ function pendingItem(t) {
     $('due').value = t.repeat ? (t.due || '').slice(11, 16) : t.due || '';
     $('remind').value = t.remindBefore == null ? '' : String(t.remindBefore);
     $('note-link').value = t.noteId || '';
+    if ($('task-tags')) $('task-tags').value = (typeof taskTags === 'function' ? taskTags(t) : (t.tags || [])).join(', ');
+    if ($('task-subtasks')) $('task-subtasks').value = Array.isArray(t.subtasks) ? t.subtasks.map((s) => (s.done ? '[x] ' : '') + s.title).join('\n') : '';
     for (const h of taskFields) h.fill(t);
     $('submit').textContent = 'Save';
     $('cancel').hidden = false;
@@ -157,8 +187,8 @@ function historyItem(t) {
   restore.onclick = () => commit(todos.map((x) => (x.id === t.id ? { ...x, done: false, completedAt: null, hideUntil: null } : x)));
   return el('li', { className: 'item', id: 'r-' + t.id },
     el('span', { className: 'tick', ariaHidden: 'true' }, '✓'),
-    el('div', {}, el('span', { className: 'title' }, t.title),
-      el('div', { className: 'meta' }, 'Done at ' + fmt(t.completedAt, { timeStyle: 'short' }) + (t.repeat ? ' · ' + t.repeat : '')), notesBlock(t)),
+    el('div', {}, el('span', { className: 'title' }, t.title, ...tagsNodes(t)),
+      el('div', { className: 'meta' }, 'Done at ' + fmt(t.completedAt, { timeStyle: 'short' }) + (t.repeat ? ' · ' + t.repeat : '')), subtasksBlock(t), notesBlock(t)),
     el('div', { className: 'tools' }, restore, removeButton(t)));
 }
 
@@ -295,7 +325,29 @@ function renderTasks(enter = false) {
   const empty = (text) => list.append(el('div', { className: 'empty' }, text));
 
   const q = $('search').value.trim().toLowerCase();
-  const match = (t) => { const note = noteOf(t); return (t.title + '\n' + (note ? note.title + '\n' + note.body : '')).toLowerCase().includes(q); };
+  const pool = tab === 'history' ? done : open;
+  const allTags = [...new Set(pool.flatMap((t) => (typeof taskTags === 'function' ? taskTags(t) : (t.tags || []))))].sort();
+  if (activeTag && !allTags.includes(activeTag)) activeTag = '';
+  const tagBar = $('tag-bar');
+  if (tagBar) {
+    tagBar.hidden = !allTags.length;
+    if (allTags.length) {
+      tagBar.replaceChildren(
+        el('button', { type: 'button', className: 'tag-pill' + (!activeTag ? ' on' : ''), onclick: () => { activeTag = ''; render(); } }, 'All'),
+        ...allTags.map((tg) => el('button', {
+          type: 'button', className: 'tag-pill' + (activeTag === tg ? ' on' : ''),
+          onclick: () => { activeTag = activeTag === tg ? '' : tg; render(); },
+        }, '#' + tg)));
+    }
+  }
+  const match = (t) => {
+    const tags = typeof taskTags === 'function' ? taskTags(t) : (t.tags || []);
+    if (activeTag && !tags.includes(activeTag)) return false;
+    if (!q) return true;
+    const note = noteOf(t);
+    const subText = Array.isArray(t.subtasks) ? t.subtasks.map((s) => s.title).join('\n') : '';
+    return (t.title + '\n' + tags.map((x) => '#' + x).join(' ') + '\n' + subText + '\n' + (note ? note.title + '\n' + note.body : '')).toLowerCase().includes(q);
+  };
   if (tab !== 'history') {
     const shown = (tab === 'pending' ? open : open.filter((t) => inView(tab, t.due, now))).filter(match);
     const shownLater = tab === 'pending' ? later.filter(match) : []; // waiting copies of finished repeating tasks live only in To do
@@ -328,8 +380,13 @@ function renderTasks(enter = false) {
 
 $('form').onsubmit = async (e) => {
   e.preventDefault();
-  const title = $('title').value.trim();
-  if (!title) return;
+  const rawTitle = $('title').value.trim();
+  if (!rawTitle) return;
+  const old = todos.find((t) => t.id === editingId);
+  const tagInfo = typeof extractTags === 'function' ? extractTags(rawTitle, $('task-tags')?.value || '') : { title: rawTitle, tags: [] };
+  const title = tagInfo.title;
+  const tags = tagInfo.tags;
+  const subtasks = typeof parseSubtasks === 'function' && $('task-subtasks') ? parseSubtasks($('task-subtasks').value, old?.subtasks) : (old?.subtasks || []);
   const choice = $('note-link').value;
   let created = null;
   if (choice === NEW_NOTE) { // "New note…": a note named like the task, written in the Notes page right after
@@ -343,11 +400,10 @@ $('form').onsubmit = async (e) => {
     fillNoteLinks();
   }
   // due stays in datetime-local form ("2026-11-12T09:00"): Date parses it as local time and it sorts as text
-  const old = todos.find((t) => t.id === editingId);
   let due = $('due').value || null;
   if (due && $('repeat').value) due = repeatDue($('repeat').value, due.slice(0, 5), new Date(), old && old.repeat && old.due ? old.due.slice(0, 10) : null);
   const fields = {
-    title, due,
+    title, due, tags, subtasks,
     remindBefore: due && $('remind').value !== '' ? Number($('remind').value) : null,
     repeat: $('repeat').value || null,
     ...Object.assign({}, ...taskFields.map((h) => h.read(old))),
@@ -372,12 +428,13 @@ if ($('mob-task-quick')) {
     e.preventDefault();
     const raw = $('mob-quick-title').value.trim();
     if (!raw) return;
-    const parsed = typeof parseQuickInput === 'function' ? parseQuickInput(raw, new Date()) : { title: raw, due: null };
-    const title = (parsed.title || raw).slice(0, 200);
+    const tagInfo = typeof extractTags === 'function' ? extractTags(raw) : { title: raw, tags: [] };
+    const parsed = typeof parseQuickInput === 'function' ? parseQuickInput(tagInfo.title, new Date()) : { title: tagInfo.title, due: null };
+    const title = (parsed.title || tagInfo.title || raw).slice(0, 200);
     const due = parsed.due || null;
     $('mob-quick-title').value = '';
     await commit([...todos, {
-      id: crypto.randomUUID(), title, due,
+      id: crypto.randomUUID(), title, due, tags: tagInfo.tags, subtasks: [],
       remindBefore: due && prefsNow.defaultRemind !== '' ? Number(prefsNow.defaultRemind) : null,
       repeat: null, noteId: null, done: false, createdAt: new Date().toISOString(), completedAt: null,
     }]);

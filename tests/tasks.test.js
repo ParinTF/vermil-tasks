@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { nextOccurrence, streak, inView, dailyCounts, niceMax, repeatDue, withRepeats } = require('../ui/logic.js');
+const { nextOccurrence, streak, inView, dailyCounts, niceMax, repeatDue, withRepeats, parseSubtasks, subtaskProgress, extractTags, taskTags } = require('../ui/logic.js');
 
 const wed = new Date(2026, 10, 11); // Wednesday 11 Nov 2026
 const at10 = new Date(2026, 10, 11, 10, 0);
@@ -110,4 +110,26 @@ test('repeat: an open repeating task shows on every day it comes back, from toda
   assert.deepEqual(days(withRepeats([task('monthly', '2026-01-31T09:00')], '2026-02-01', '2026-04-30', '2026-01-31')), ['2026-02-28', '2026-03-31', '2026-04-30']); // the 31st lands on the last day of a short month
   assert.deepEqual(days(withRepeats([task('daily', '2026-11-05T09:00')], '2026-11-08', '2026-11-13', '2026-11-12')), ['2026-11-12', '2026-11-13']); // an overdue one stays on its own day; the copies start today
   assert.deepEqual(withRepeats([task('daily', '2026-11-11T09:00', { done: true }), task('', '2026-11-11T09:00'), task('daily', null)], '2026-11-01', '2026-11-30', '2026-11-11').filter((t) => t.ghost), []);
+});
+
+test('subtasks: parses lines, keeps done state when editing, and counts progress', () => {
+  const first = parseSubtasks('- Draft outline\n[x] Send invite\n[ ] Book room');
+  assert.deepEqual(first.map((s) => ({ title: s.title, done: s.done })), [
+    { title: 'Draft outline', done: false },
+    { title: 'Send invite', done: true },
+    { title: 'Book room', done: false },
+  ]);
+  assert.deepEqual(subtaskProgress(first), { done: 1, total: 3 });
+  const edited = parseSubtasks('Draft outline\nSend invite\nPrepare slides', first);
+  assert.equal(edited[0].done, false);
+  assert.equal(edited[1].done, true);
+  assert.equal(edited[2].done, false);
+  assert.equal(subtaskProgress([]), null);
+});
+
+test('tags: extracts inline #tags and merges with tag field', () => {
+  const res = extractTags('Send Q4 report #work #urgent', 'finance, work');
+  assert.equal(res.title, 'Send Q4 report');
+  assert.deepEqual(res.tags, ['work', 'urgent', 'finance']);
+  assert.deepEqual(taskTags({ title: 'Call client #sales', tags: ['urgent', 'sales'] }), ['urgent', 'sales']);
 });

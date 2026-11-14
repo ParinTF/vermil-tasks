@@ -81,6 +81,14 @@
             </select>
           </label>
           </div>
+          <div class="row">
+            <label class="field">Tags
+              <input id="task-tags" maxlength="120" autocomplete="off" placeholder="e.g. work, urgent">
+            </label>
+            <label class="field">Subtasks
+              <textarea id="task-subtasks" rows="1" placeholder="One step per line"></textarea>
+            </label>
+          </div>
           <div class="actions">
             <button class="primary"><span id="submit">Add task</span><span class="arrow" aria-hidden="true">→</span></button>
             <button id="cancel" class="ghost" type="button" hidden>Cancel</button>
@@ -102,6 +110,7 @@
           <button id="tab-history" role="tab">History<sup id="n-history"></sup></button>
         </nav>
         <input id="search" type="search" placeholder="Search (Ctrl+F)" aria-label="Search">
+        <div id="tag-bar" class="tag-bar" hidden></div>
         <div id="list"></div>
       </section>
   </main>

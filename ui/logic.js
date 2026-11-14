@@ -1111,4 +1111,60 @@ function insightSentence(f, a, b) {
   return `${f.lag ? 'After days with more' : 'On days with more'} ${a.label}, ${b.label}${f.lag ? ' the next day' : ''} tends to be ${f.higher ? 'higher' : 'lower'} (${num(f.hi)} vs ${num(f.lo)}, ${f.n} days)`;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence };
+// ── Task subtasks & tags ──
+function parseSubtasks(text, prev = []) {
+  const old = Array.isArray(prev) ? [...prev] : [];
+  const used = new Set();
+  const out = [];
+  for (const raw of String(text || '').split(/\r?\n/)) {
+    let s = raw.trim();
+    if (!s) continue;
+    let forced = null;
+    if (/^\[[xX]\]\s+/.test(s)) { forced = true; s = s.replace(/^\[[xX]\]\s+/, ''); }
+    else if (/^\[\s?\]\s+/.test(s)) { forced = false; s = s.replace(/^\[\s?\]\s+/, ''); }
+    else if (/^[-*•]\s+/.test(s)) s = s.replace(/^[-*•]\s+/, '');
+    const title = s.trim().slice(0, 160);
+    if (!title) continue;
+    const hit = old.findIndex((p, i) => !used.has(i) && String(p.title || '').toLowerCase() === title.toLowerCase());
+    if (hit >= 0) used.add(hit);
+    const keep = hit >= 0 ? old[hit] : null;
+    out.push({
+      id: (keep && keep.id) || `sub-${out.length + 1}`,
+      title,
+      done: forced !== null ? forced : !!(keep && keep.done),
+    });
+    if (out.length >= 30) break;
+  }
+  return out;
+}
+
+function subtaskProgress(subtasks) {
+  if (!Array.isArray(subtasks) || !subtasks.length) return null;
+  const total = subtasks.length;
+  const done = subtasks.filter((s) => s && s.done).length;
+  return { done, total };
+}
+
+function extractTags(title, tagInput = '') {
+  const rawTitle = String(title || '').trim();
+  const fromTitle = [];
+  const stripped = rawTitle.replace(/(?:^|\s)#([\p{L}\p{N}_-]{1,24})/gu, (_, tag) => {
+    fromTitle.push(tag.toLowerCase());
+    return ' ';
+  }).replace(/\s+/g, ' ').trim();
+  const fromInput = String(tagInput || '')
+    .split(/[\s,]+/)
+    .map((w) => w.replace(/^#+/, '').trim().toLowerCase().slice(0, 24))
+    .filter((w) => /^[\p{L}\p{N}_-]+$/u.test(w));
+  const tags = [...new Set([...fromTitle, ...fromInput])].slice(0, 8);
+  return { title: stripped || rawTitle, tags };
+}
+
+function taskTags(t) {
+  if (!t) return [];
+  const saved = Array.isArray(t.tags) ? t.tags.map((x) => String(x || '').replace(/^#+/, '').trim().toLowerCase()).filter(Boolean) : [];
+  const inline = extractTags(t.title || '').tags;
+  return [...new Set([...saved, ...inline])];
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
