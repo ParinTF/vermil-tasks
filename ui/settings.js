@@ -76,9 +76,9 @@ function appearanceSection() {
     stRow('Font', ...fontOpts),
     fontName,
     el('p', { className: 'st-preview' }, el('b', {}, 'Your day, in one place'), ' The quick brown fox jumps over the lazy dog. ', el('span', {}, 'ตัวอย่างข้อความภาษาไทย 0123456789')),
-    stRow('Size', stPicker('Size', [['0.9', '90%'], ['1', '100%'], ['1.1', '110%'], ['1.25', '125%']], String(sizeNow), (v) => { sizeNow = Number(v); invoke('set_zoom', { factor: sizeNow }).then(renderSettings, (e) => tell('Could not change the size: ' + e)); })),
-    stRow('Motion', stPicker('Motion', [['', 'Follow Windows'], ['off', 'Off']], p.motion, (v) => { setPrefs({ motion: v }); renderSettings(); })),
-    stRow('Top ticker', stPicker('Top ticker', [['on', 'Show'], ['off', 'Hide']], p.ticker ? 'on' : 'off', (v) => { setPrefs({ ticker: v === 'on' }); renderSettings(); })),
+    ...(isAndroid ? [] : [stRow('Size', stPicker('Size', [['0.9', '90%'], ['1', '100%'], ['1.1', '110%'], ['1.25', '125%']], String(sizeNow), (v) => { sizeNow = Number(v); invoke('set_zoom', { factor: sizeNow }).then(renderSettings, (e) => tell('Could not change the size: ' + e)); }))]),
+    stRow('Motion', stPicker('Motion', [['', isAndroid ? 'Follow system' : 'Follow Windows'], ['off', 'Off']], p.motion, (v) => { setPrefs({ motion: v }); renderSettings(); })),
+    ...(isAndroid ? [] : [stRow('Top ticker', stPicker('Top ticker', [['on', 'Show'], ['off', 'Hide']], p.ticker ? 'on' : 'off', (v) => { setPrefs({ ticker: v === 'on' }); renderSettings(); }))]),
     reset);
 }
 
@@ -142,8 +142,7 @@ function generalSection() {
     return li;
   });
   return stSection('General',
-    el('div', { className: 'st-line' }, auto),
-    el('div', { className: 'st-line' }, on, time),
+    ...(isAndroid ? [] : [el('div', { className: 'st-line' }, auto), el('div', { className: 'st-line' }, on, time)]),
     stRow('Week starts on', stPicker('Week starts on', [['1', 'Monday'], ['0', 'Sunday']], String(p.weekStart), (v) => { setPrefs({ weekStart: Number(v) }); reloadToApply(); })),
     stRow('Clock', stPicker('Clock', [['24', '24-hour'], ['12', '12-hour']], p.h12 ? '12' : '24', (v) => { setPrefs({ h12: v === '12' }); reloadToApply(); })),
     stRow('Open on', stPicker('Open on', [['home', 'Home'], ['last', 'Where I left off']], p.startPage, (v) => { setPrefs({ startPage: v }); renderSettings(); })),
@@ -254,7 +253,7 @@ function dataSection() {
   return stSection('Data',
     el('div', { className: 'st-block' }, el('h4', { className: 'st-sub' }, 'Backup'), el('div', { id: 'bk-body' })),
     el('div', { className: 'st-block' }, el('h4', { className: 'st-sub' }, 'Sync between computers'), el('div', { id: 'sy-body' })),
-    info, el('div', { className: 'st-line' }, open),
+    info, ...(isAndroid ? [] : [el('div', { className: 'st-line' }, open)]),
     ...(rows.length ? [el('h4', { className: 'st-sub' }, 'What each module has saved'), el('ul', { id: 'st-own', className: 'st-own' }, ...rows)] : []));
 }
 
@@ -267,10 +266,10 @@ function aboutSection() {
     invoke('check_update').then((v) => { msg.textContent = v ? `Version ${v} is ready: use the button in the top bar.` : 'You have the latest version.'; if (v) checkUpdate(); }, () => { msg.textContent = 'Could not reach the update server. Are you online?'; });
   };
   const auto = stCheck('st-update-auto', 'Look for updates by itself', readPrefs().updateCheck, (e) => setPrefs({ updateCheck: e.target.checked }));
-  return stSection('About', el('p', { className: 'st-fine', id: 'st-version' }, `Vermil ${$('version').textContent}. Updates come from the project’s releases and are never forced.`), el('div', { className: 'st-line' }, auto), el('div', { className: 'st-line' }, check, msg));
+  return stSection('About', el('p', { className: 'st-fine', id: 'st-version' }, `Vermil ${$('version').textContent}. Updates come from the project’s releases and are never forced.`), ...(isAndroid ? [] : [el('div', { className: 'st-line' }, auto), el('div', { className: 'st-line' }, check, msg)]));
 }
 
-const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection, shortcutsSection, dataSection, aboutSection];
+const SETTINGS_SECTIONS = [appearanceSection, generalSection, notificationsSection, ...(isAndroid ? [] : [shortcutsSection]), dataSection, aboutSection];
 
 // one section is shown at a time, chosen from a row of tabs; a module's section (the Assistant's) gets its own tab
 let settingsTab = 'Appearance';

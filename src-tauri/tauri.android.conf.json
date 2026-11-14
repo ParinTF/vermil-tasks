@@ -1,0 +1,11 @@
+{
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Vermil",
+        "backgroundColor": "#f4f1ea"
+      }
+    ]
+  }
+}

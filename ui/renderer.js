@@ -162,10 +162,38 @@ $('theme').onclick = () => {
   showTheme();
 };
 
-const win = window.__TAURI__.window.getCurrentWindow();
-$('win-min').onclick = () => win.minimize();
-$('win-max').onclick = () => win.toggleMaximize();
-$('win-close').onclick = () => { registry.notes?.flush?.(); win.close(); }; // the backend turns this into "hide to tray"
+const isAndroid = /Android/i.test(navigator.userAgent);
+const isMobile = () => matchMedia('(max-width: 640px)').matches;
+if (isAndroid) document.documentElement.classList.add('android');
+
+const win = window.__TAURI__.window?.getCurrentWindow?.();
+if (!win || isAndroid || /iPhone|iPad/i.test(navigator.userAgent)) {
+  document.querySelector('.win')?.setAttribute('hidden', '');
+} else {
+  $('win-min').onclick = () => win.minimize?.();
+  $('win-max').onclick = () => win.toggleMaximize?.();
+  $('win-close').onclick = () => { registry.notes?.flush?.(); win.close?.(); }; // the backend turns this into "hide to tray"
+}
+
+// On narrow mobile screens, a module's creation/side panel can act as a slide-up bottom sheet triggered by a floating button.
+function mobileSheet(page, side, label = 'Add') {
+  if (!page || !side || side.querySelector('.mob-sheet-head')) return;
+  const close = () => page.classList.remove('sheet-open');
+  const open = () => {
+    page.classList.add('sheet-open');
+    side.querySelector('input:not([type=hidden]):not([type=checkbox]), textarea, select')?.focus();
+  };
+  const head = el('div', { className: 'mob-sheet-head' },
+    el('span', { className: 'mob-sheet-title' }, label),
+    el('button', { type: 'button', className: 'mob-sheet-close', ariaLabel: 'Close', onclick: close }, '✕'));
+  side.prepend(head);
+  const backdrop = el('div', { className: 'mob-backdrop', onclick: close });
+  const fab = el('button', { type: 'button', className: 'primary mob-fab', onclick: open },
+    el('span', {}, '+ ' + label));
+  page.append(backdrop, fab);
+  side.addEventListener('submit', () => { if (isMobile()) setTimeout(close, 30); });
+  return { open, close };
+}
 
 // Offer new versions without interrupting: the button appears only when the release feed has one.
 let lastUpdateCheck = 0;
@@ -228,9 +256,10 @@ async function setView(next) {
   else try { localStorage.setItem('last-view', next); } catch {}
   await registry.notes?.leave?.(); // typing in a note is saved before the view changes
   view = next;
-  for (const n of document.querySelectorAll('main[id$="-view"]')) n.hidden = n.id !== view + '-view';
+  for (const n of document.querySelectorAll('main[id$="-view"]')) { n.hidden = n.id !== view + '-view'; n.classList.remove('sheet-open'); }
   for (const b of document.querySelectorAll('.views button[role=tab]')) b.ariaSelected = String(b.id === 'view-' + view);
   if (typeof layoutTabs === 'function') layoutTabs(); // the tab you are on is always in the bar
+  if (isMobile()) document.getElementById('view-' + view)?.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (view === 'home') return renderHome();
   if (view === 'settings') return renderSettings();
   return registry[view]?.show?.(); // any other view belongs to its module
@@ -343,6 +372,7 @@ $('pal-q').onkeydown = (e) => {
   else if (e.key === 'Enter') { e.preventDefault(); runPalette(palIndex); }
 };
 $('pal').onclick = (e) => { if (e.target === $('pal')) $('pal').close(); }; // the backdrop
+if ($('search-btn')) $('search-btn').onclick = openPalette;
 
 // ── keyboard ──
 // The shortcut list: groups of [keys, what]. keys is one combo ("Ctrl+K") or alternatives (["↑", "↓"]).

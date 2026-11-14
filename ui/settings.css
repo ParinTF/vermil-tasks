@@ -52,7 +52,19 @@
 @media (min-width: 860px) {
   .settings-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; padding-top: clamp(12px, 2.5vh, 32px); }
 }
-@media (max-width: 600px) {
-  .st-row { grid-template-columns: 1fr; gap: 6px; }
+@media (max-width: 640px) {
+  .settings-page { padding-top: 14px; }
+  .st-head { margin-bottom: 10px; }
+  .st-head h2 { font-size: 28px; }
+  #st-back { min-height: 40px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; text-decoration: none; font-weight: 600; color: var(--ink); }
+  .st-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; gap: 18px; padding-bottom: 10px; margin-inline: calc(var(--pad) * -1); padding-inline: var(--pad); }
+  .st-nav::-webkit-scrollbar { display: none; }
+  .st-tab { flex: none; min-height: 38px; padding: 6px 0 8px; }
+  .st-sec { gap: 16px; padding: 16px 0 22px; }
+  .st-row { grid-template-columns: 1fr; gap: 8px; }
+  .st-opt { min-height: 38px; padding: 8px 16px; }
+  .st-swatch { width: 34px; height: 34px; }
+  .st-custom { margin-left: 0; }
   .st-note, #st-font { margin-left: 0; padding-left: 0; }
+  .st-tabs li { min-height: 38px; padding: 6px 12px; }
 }

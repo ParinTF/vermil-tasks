@@ -5,14 +5,20 @@ mod assistant;
 use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
 use std::{collections::HashMap, fs, path::PathBuf, sync::Mutex, time::Duration};
+use tauri::{AppHandle, Emitter, Manager, State};
+#[cfg(desktop)]
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    AppHandle, Emitter, Manager, State, WindowEvent,
+    WindowEvent,
 };
+#[cfg(desktop)]
 use tauri_plugin_autostart::ManagerExt as _;
+#[cfg(desktop)]
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
+#[cfg(desktop)]
 use tauri_plugin_updater::UpdaterExt;
+#[cfg(desktop)]
 use tauri_winrt_notification::{Scenario, Toast};
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -110,6 +116,7 @@ const HOTKEYS: [(&str, &str); 3] = [("quick", "Ctrl+Alt+T"), ("note", "Ctrl+Alt+
 struct Widget {
     tiles: Mutex<String>, // the latest tiles as JSON, so the widget has something to show the moment it opens
     enabled: Mutex<bool>, // the Today widget module is on
+    #[cfg(desktop)]
     placed: Mutex<bool>,  // put in the corner once, then left where the user drags it
 }
 
@@ -123,6 +130,7 @@ fn show_widget(app: &AppHandle) {
     if !*state.enabled.lock().unwrap() {
         return;
     }
+    #[cfg(desktop)]
     if let Some(win) = app.get_webview_window("widget") {
         let mut placed = state.placed.lock().unwrap();
         if !*placed {
@@ -138,6 +146,7 @@ fn show_widget(app: &AppHandle) {
     }
 }
 
+#[cfg(desktop)]
 fn toggle_widget(app: &AppHandle) {
     if let Some(win) = app.get_webview_window("widget") {
         if win.is_visible().unwrap_or(false) { let _ = win.hide(); } else { show_widget(app); }
@@ -149,8 +158,11 @@ fn widget_enable(app: AppHandle, state: State<Widget>, on: bool) {
     *state.enabled.lock().unwrap() = on;
     if on {
         show_widget(&app);
-    } else if let Some(win) = app.get_webview_window("widget") {
-        let _ = win.hide();
+    } else {
+        #[cfg(desktop)]
+        if let Some(win) = app.get_webview_window("widget") {
+            let _ = win.hide();
+        }
     }
 }
 
@@ -239,6 +251,7 @@ fn summary_counts(todos: &[Todo], now: DateTime<Local>) -> (usize, usize, usize)
     (due_today, overdue, open)
 }
 
+#[cfg(any(desktop, test))]
 fn summary_text(due_today: usize, overdue: usize, open: usize) -> (String, String) {
     let title = match (due_today, overdue) {
         (0, 0) => "Nothing due today".to_string(),
@@ -318,6 +331,7 @@ fn save(file: &PathBuf, data: &Data) -> Result<(), String> {
 }
 
 /// When a snooze button's action should fire again; None for anything that is not a snooze action.
+#[cfg(any(desktop, test))]
 fn snooze_time(action: &str, now: chrono::DateTime<Local>) -> Option<i64> {
     let at = match action {
         "10" => now + chrono::Duration::minutes(10),
@@ -331,6 +345,7 @@ fn snooze_time(action: &str, now: chrono::DateTime<Local>) -> Option<i64> {
     Some(at.timestamp_millis())
 }
 
+#[cfg(desktop)]
 fn snooze(app: &AppHandle, id: &str, until: i64) {
     let store = app.state::<Store>();
     {
@@ -344,28 +359,32 @@ fn snooze(app: &AppHandle, id: &str, until: i64) {
 }
 
 /// Toasts need a registered app id: the installer registers ours, a build run from target/ borrows PowerShell's.
+#[cfg(desktop)]
 fn toast_app_id(app: &AppHandle) -> String {
     let dev = std::env::current_exe().map(|p| p.to_string_lossy().contains(r"\target\")).unwrap_or(false);
     if dev { Toast::POWERSHELL_APP_ID.to_string() } else { app.config().identifier.clone() }
 }
 
 /// One quiet toast a day: what is due, what is overdue, how much is open. Clicking it opens the app.
-fn notify_summary(app: &AppHandle, due_today: usize, overdue: usize, open: usize) {
-    let (title, text) = summary_text(due_today, overdue, open);
-    let handle = app.clone();
-    let _ = Toast::new(&toast_app_id(app))
-        .title(&title)
-        .text1(&text)
-        .on_activated(move |_| {
-            show(&handle);
-            Ok(())
-        })
-        .show();
+fn notify_summary(#[allow(unused)] app: &AppHandle, #[allow(unused)] due_today: usize, #[allow(unused)] overdue: usize, #[allow(unused)] open: usize) {
+    #[cfg(desktop)]
+    {
+        let (title, text) = summary_text(due_today, overdue, open);
+        let handle = app.clone();
+        let _ = Toast::new(&toast_app_id(app))
+            .title(&title)
+            .text1(&text)
+            .on_activated(move |_| {
+                show(&handle);
+                Ok(())
+            })
+            .show();
+    }
 }
 
 /// A plain toast for a module (the focus timer): clicking it brings the window up.
 #[tauri::command]
-fn toast(app: AppHandle, store: State<Store>, title: String, text: String, module: Option<String>, test: Option<bool>) {
+fn toast(#[allow(unused)] app: AppHandle, store: State<Store>, #[allow(unused)] title: String, #[allow(unused)] text: String, module: Option<String>, test: Option<bool>) {
     if test != Some(true) {
         let data = store.data.lock().unwrap();
         let muted = module.as_deref().is_some_and(|m| data.mute.iter().any(|x| x == m));
@@ -373,37 +392,43 @@ fn toast(app: AppHandle, store: State<Store>, title: String, text: String, modul
             return;
         }
     }
-    let handle = app.clone();
-    let _ = Toast::new(&toast_app_id(&app))
-        .title(&title.chars().take(100).collect::<String>())
-        .text1(&text.chars().take(200).collect::<String>())
-        .on_activated(move |_| {
-            show(&handle);
-            Ok(())
-        })
-        .show();
+    #[cfg(desktop)]
+    {
+        let handle = app.clone();
+        let _ = Toast::new(&toast_app_id(&app))
+            .title(&title.chars().take(100).collect::<String>())
+            .text1(&text.chars().take(200).collect::<String>())
+            .on_activated(move |_| {
+                show(&handle);
+                Ok(())
+            })
+            .show();
+    }
 }
 
 /// Shows a reminder that stays on screen until answered, with snooze buttons.
-fn notify(app: &AppHandle, todo: &Todo) {
-    let app_id = toast_app_id(app);
-    let due = todo.due.as_deref().and_then(parse_due).map(|d| d.format("%d/%m/%Y %H:%M").to_string());
-    let (handle, id) = (app.clone(), todo.id.clone());
-    let _ = Toast::new(&app_id)
-        .title(&format!("Reminder: {}", todo.title))
-        .text1(&format!("Due {}", due.unwrap_or_default()))
-        .scenario(Scenario::Reminder)
-        .add_button("10 min", "10")
-        .add_button("1 hour", "60")
-        .add_button("Tomorrow", "tomorrow")
-        .on_activated(move |action| {
-            match action.as_deref().and_then(|a| snooze_time(a, Local::now())) {
-                Some(until) => snooze(&handle, &id, until),
-                None => show(&handle), // clicked the reminder itself
-            }
-            Ok(())
-        })
-        .show();
+fn notify(#[allow(unused)] app: &AppHandle, #[allow(unused)] todo: &Todo) {
+    #[cfg(desktop)]
+    {
+        let app_id = toast_app_id(app);
+        let due = todo.due.as_deref().and_then(parse_due).map(|d| d.format("%d/%m/%Y %H:%M").to_string());
+        let (handle, id) = (app.clone(), todo.id.clone());
+        let _ = Toast::new(&app_id)
+            .title(&format!("Reminder: {}", todo.title))
+            .text1(&format!("Due {}", due.unwrap_or_default()))
+            .scenario(Scenario::Reminder)
+            .add_button("10 min", "10")
+            .add_button("1 hour", "60")
+            .add_button("Tomorrow", "tomorrow")
+            .on_activated(move |action| {
+                match action.as_deref().and_then(|a| snooze_time(a, Local::now())) {
+                    Some(until) => snooze(&handle, &id, until),
+                    None => show(&handle), // clicked the reminder itself
+                }
+                Ok(())
+            })
+            .show();
+    }
 }
 
 fn check_reminders(app: &AppHandle) {
@@ -462,13 +487,14 @@ fn get_zoom(store: State<Store>) -> f64 {
 }
 
 #[tauri::command]
-fn set_zoom(app: AppHandle, store: State<Store>, factor: f64) -> Result<(), String> {
+fn set_zoom(#[allow(unused)] app: AppHandle, store: State<Store>, factor: f64) -> Result<(), String> {
     if !valid_zoom(factor) {
         return Err("that size is not available".into());
     }
     let mut data = store.data.lock().unwrap();
     data.zoom = Some(factor);
     save(&store.file, &data)?;
+    #[cfg(desktop)]
     if let Some(win) = app.get_webview_window("main") {
         win.set_zoom(factor).map_err(|e| e.to_string())?;
     }
@@ -617,18 +643,26 @@ fn convert_legacy_notes(todos: Vec<Todo>) -> Converted {
 
 /// Returns the newer version number when the release feed has one.
 #[tauri::command]
-async fn check_update(app: AppHandle) -> Result<Option<String>, String> {
-    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
-    Ok(update.map(|u| u.version))
+async fn check_update(#[allow(unused)] app: AppHandle) -> Result<Option<String>, String> {
+    #[cfg(desktop)]
+    {
+        let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+        Ok(update.map(|u| u.version))
+    }
+    #[cfg(not(desktop))]
+    Ok(None)
 }
 
 /// Downloads the signed installer, runs it, and restarts into the new version.
 #[tauri::command]
-async fn install_update(app: AppHandle) -> Result<(), String> {
-    let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
-    if let Some(update) = update {
-        update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
-        app.restart();
+async fn install_update(#[allow(unused)] app: AppHandle) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let update = app.updater().map_err(|e| e.to_string())?.check().await.map_err(|e| e.to_string())?;
+        if let Some(update) = update {
+            update.download_and_install(|_, _| {}, || {}).await.map_err(|e| e.to_string())?;
+            app.restart();
+        }
     }
     Ok(())
 }
@@ -886,6 +920,7 @@ fn export_text(app: AppHandle, name: String, text: String) -> Result<String, Str
 }
 
 /// Plain base64 (the engine hands the PDF over this way); anything that is not base64 is an error.
+#[cfg(any(desktop, test))]
 fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
     let mut out = Vec::with_capacity(text.len() / 4 * 3);
     let (mut acc, mut bits) = (0u32, 0u32);
@@ -913,40 +948,47 @@ fn base64_decode(text: &str) -> Result<Vec<u8>, String> {
 /// Saves the page on screen (the Review) as a PDF in Downloads, printed by the web engine itself so there is no print dialog
 /// and no browser date line: `header` and `footer` are the HTML of the running header and footer of every page.
 #[tauri::command]
-async fn save_page_pdf(app: AppHandle, name: String, header: String, footer: String) -> Result<String, String> {
-    use webview2_com::{CallDevToolsProtocolMethodCompletedHandler, Microsoft::Web::WebView2::Win32::ICoreWebView2};
-    if header.len() > 200_000 || footer.len() > 20_000 {
-        return Err("the header is too large".into());
+async fn save_page_pdf(#[allow(unused)] app: AppHandle, #[allow(unused)] name: String, #[allow(unused)] header: String, #[allow(unused)] footer: String) -> Result<String, String> {
+    #[cfg(not(desktop))]
+    {
+        Err("PDF export is only available on Windows".into())
     }
-    let win = app.get_webview_window("main").ok_or("no window")?;
-    let params = serde_json::json!({ "printBackground": true, "preferCSSPageSize": true, "displayHeaderFooter": true, "headerTemplate": header, "footerTemplate": footer }).to_string();
-    let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
-    win.with_webview(move |wv| unsafe {
-        let tx_done = tx.clone();
-        let started = (|| -> Result<(), String> {
-            let core: ICoreWebView2 = wv.controller().CoreWebView2().map_err(|e| e.to_string())?;
-            let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |err, json| {
-                let _ = tx_done.send(if err.is_ok() { Ok(json) } else { Err(format!("{err:?}")) });
-                Ok(())
-            }));
-            core.CallDevToolsProtocolMethod(&windows::core::HSTRING::from("Page.printToPDF"), &windows::core::HSTRING::from(params), &handler).map_err(|e| e.to_string())
-        })();
-        if let Err(e) = started {
-            let _ = tx.send(Err(e));
+    #[cfg(desktop)]
+    {
+        use webview2_com::{CallDevToolsProtocolMethodCompletedHandler, Microsoft::Web::WebView2::Win32::ICoreWebView2};
+        if header.len() > 200_000 || footer.len() > 20_000 {
+            return Err("the header is too large".into());
         }
-    }).map_err(|e| e.to_string())?;
-    let json = tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(40)))
-        .await.map_err(|e| e.to_string())?.map_err(|_| "printing took too long".to_string())??;
-    let data = serde_json::from_str::<serde_json::Value>(&json).ok().and_then(|v| v["data"].as_str().map(String::from)).ok_or("the engine returned no PDF")?;
-    let bytes = base64_decode(&data)?;
-    if !bytes.starts_with(b"%PDF") {
-        return Err("the engine returned something that is not a PDF".into());
+        let win = app.get_webview_window("main").ok_or("no window")?;
+        let params = serde_json::json!({ "printBackground": true, "preferCSSPageSize": true, "displayHeaderFooter": true, "headerTemplate": header, "footerTemplate": footer }).to_string();
+        let (tx, rx) = std::sync::mpsc::channel::<Result<String, String>>();
+        win.with_webview(move |wv| unsafe {
+            let tx_done = tx.clone();
+            let started = (|| -> Result<(), String> {
+                let core: ICoreWebView2 = wv.controller().CoreWebView2().map_err(|e| e.to_string())?;
+                let handler = CallDevToolsProtocolMethodCompletedHandler::create(Box::new(move |err, json| {
+                    let _ = tx_done.send(if err.is_ok() { Ok(json) } else { Err(format!("{err:?}")) });
+                    Ok(())
+                }));
+                core.CallDevToolsProtocolMethod(&windows::core::HSTRING::from("Page.printToPDF"), &windows::core::HSTRING::from(params), &handler).map_err(|e| e.to_string())
+            })();
+            if let Err(e) = started {
+                let _ = tx.send(Err(e));
+            }
+        }).map_err(|e| e.to_string())?;
+        let json = tauri::async_runtime::spawn_blocking(move || rx.recv_timeout(Duration::from_secs(40)))
+            .await.map_err(|e| e.to_string())?.map_err(|_| "printing took too long".to_string())??;
+        let data = serde_json::from_str::<serde_json::Value>(&json).ok().and_then(|v| v["data"].as_str().map(String::from)).ok_or("the engine returned no PDF")?;
+        let bytes = base64_decode(&data)?;
+        if !bytes.starts_with(b"%PDF") {
+            return Err("the engine returned something that is not a PDF".into());
+        }
+        let dir = app.path().download_dir().map_err(|e| e.to_string())?;
+        let base = safe_file_name(&name);
+        let file = dir.join(format!("{}-{}.pdf", if base.is_empty() { "Vermil" } else { &base }, Local::now().format("%Y-%m-%d-%H%M%S")));
+        fs::write(&file, bytes).map_err(|e| e.to_string())?;
+        Ok(file.display().to_string())
     }
-    let dir = app.path().download_dir().map_err(|e| e.to_string())?;
-    let base = safe_file_name(&name);
-    let file = dir.join(format!("{}-{}.pdf", if base.is_empty() { "Vermil" } else { &base }, Local::now().format("%Y-%m-%d-%H%M%S")));
-    fs::write(&file, bytes).map_err(|e| e.to_string())?;
-    Ok(file.display().to_string())
 }
 
 #[derive(Serialize)]
@@ -998,14 +1040,22 @@ fn export_todos(app: AppHandle, store: State<Store>) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn get_autostart(app: AppHandle) -> bool {
-    app.autolaunch().is_enabled().unwrap_or(false)
+fn get_autostart(#[allow(unused)] app: AppHandle) -> bool {
+    #[cfg(desktop)]
+    { app.autolaunch().is_enabled().unwrap_or(false) }
+    #[cfg(not(desktop))]
+    false
 }
 
 #[tauri::command]
-fn set_autostart(app: AppHandle, on: bool) -> Result<(), String> {
-    let launcher = app.autolaunch();
-    (if on { launcher.enable() } else { launcher.disable() }).map_err(|e| e.to_string())
+fn set_autostart(#[allow(unused)] app: AppHandle, #[allow(unused)] on: bool) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let launcher = app.autolaunch();
+        (if on { launcher.enable() } else { launcher.disable() }).map_err(|e| e.to_string())
+    }
+    #[cfg(not(desktop))]
+    Ok(())
 }
 
 /// Adds a task typed into the quick-add bar and tells the main window to reload.
@@ -1243,12 +1293,13 @@ fn quick_note(app: AppHandle, store: State<Store>, text: String) -> Result<(), S
     Ok(())
 }
 
-/// The shortcut text for a name: what the user chose, else the default.
+///The shortcut text for a name: what the user chose, else the default.
 fn hotkey_text(data: &Data, name: &str) -> String {
     data.hotkeys.get(name).cloned().unwrap_or_else(|| HOTKEYS.iter().find(|(n, _)| *n == name).map(|(_, d)| d.to_string()).unwrap_or_default())
 }
 
 /// A global shortcut needs a modifier (Ctrl, Alt or Shift), or it would take a plain key away from every program.
+#[cfg(desktop)]
 fn parse_hotkey(text: &str) -> Result<Shortcut, String> {
     let sc: Shortcut = text.parse().map_err(|_| "that is not a key combination".to_string())?;
     if sc.mods.is_empty() {
@@ -1271,9 +1322,14 @@ fn data_info(store: State<Store>) -> DataInfo {
 
 /// Shows the data folder in Explorer.
 #[tauri::command]
-fn open_data_folder(store: State<Store>) -> Result<(), String> {
-    let dir = store.file.parent().ok_or("no folder")?;
-    std::process::Command::new("explorer").arg(dir).spawn().map(|_| ()).map_err(|e| e.to_string())
+fn open_data_folder(#[allow(unused)] store: State<Store>) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let dir = store.file.parent().ok_or("no folder")?;
+        std::process::Command::new("explorer").arg(dir).spawn().map(|_| ()).map_err(|e| e.to_string())
+    }
+    #[cfg(not(desktop))]
+    Err("Not available on mobile".into())
 }
 
 #[derive(Serialize)]
@@ -1284,62 +1340,74 @@ struct HotkeyInfo {
 }
 
 #[tauri::command]
-fn get_hotkeys(app: AppHandle, store: State<Store>) -> Vec<HotkeyInfo> {
+fn get_hotkeys(#[allow(unused)] app: AppHandle, store: State<Store>) -> Vec<HotkeyInfo> {
     let data = store.data.lock().unwrap();
     HOTKEYS.iter().map(|(name, _)| {
         let keys = hotkey_text(&data, name);
+        #[cfg(desktop)]
         let ok = parse_hotkey(&keys).is_ok_and(|s| app.global_shortcut().is_registered(s));
+        #[cfg(not(desktop))]
+        let ok = false;
         HotkeyInfo { name: name.to_string(), keys, ok }
     }).collect()
 }
 
 /// Changes one shortcut. If another program owns the new one, the old one stays and the error says why.
 #[tauri::command]
-fn set_hotkey(app: AppHandle, store: State<Store>, name: String, keys: String) -> Result<(), String> {
-    if !HOTKEYS.iter().any(|(n, _)| *n == name) {
-        return Err("unknown shortcut".into());
-    }
-    let new = parse_hotkey(&keys)?;
-    let mut data = store.data.lock().unwrap();
-    for (other, _) in HOTKEYS.iter().filter(|(n, _)| *n != name) {
-        if parse_hotkey(&hotkey_text(&data, other)).is_ok_and(|s| s == new) {
-            return Err("another Vermil shortcut already uses that".into());
+fn set_hotkey(#[allow(unused)] app: AppHandle, #[allow(unused)] store: State<Store>, #[allow(unused)] name: String, #[allow(unused)] keys: String) -> Result<(), String> {
+    #[cfg(not(desktop))]
+    { Ok(()) }
+    #[cfg(desktop)]
+    {
+        if !HOTKEYS.iter().any(|(n, _)| *n == name) {
+            return Err("unknown shortcut".into());
         }
-    }
-    let old = parse_hotkey(&hotkey_text(&data, &name)).ok();
-    if old == Some(new) {
-        return Ok(());
-    }
-    if let Some(o) = old {
-        let _ = app.global_shortcut().unregister(o);
-    }
-    if app.global_shortcut().register(new).is_err() {
+        let new = parse_hotkey(&keys)?;
+        let mut data = store.data.lock().unwrap();
+        for (other, _) in HOTKEYS.iter().filter(|(n, _)| *n != name) {
+            if parse_hotkey(&hotkey_text(&data, other)).is_ok_and(|s| s == new) {
+                return Err("another Vermil shortcut already uses that".into());
+            }
+        }
+        let old = parse_hotkey(&hotkey_text(&data, &name)).ok();
+        if old == Some(new) {
+            return Ok(());
+        }
         if let Some(o) = old {
-            let _ = app.global_shortcut().register(o);
+            let _ = app.global_shortcut().unregister(o);
         }
-        return Err("another program already uses that combination".into());
+        if app.global_shortcut().register(new).is_err() {
+            if let Some(o) = old {
+                let _ = app.global_shortcut().register(o);
+            }
+            return Err("another program already uses that combination".into());
+        }
+        data.hotkeys.insert(name, keys);
+        save(&store.file, &data)
     }
-    data.hotkeys.insert(name, keys);
-    save(&store.file, &data)
 }
 
 /// Back to Ctrl+Alt+T, N and W.
 #[tauri::command]
-fn reset_hotkeys(app: AppHandle, store: State<Store>) -> Result<(), String> {
-    let mut data = store.data.lock().unwrap();
-    for (name, _) in HOTKEYS {
-        if let Ok(s) = parse_hotkey(&hotkey_text(&data, name)) {
-            let _ = app.global_shortcut().unregister(s);
+fn reset_hotkeys(#[allow(unused)] app: AppHandle, #[allow(unused)] store: State<Store>) -> Result<(), String> {
+    #[cfg(desktop)]
+    {
+        let mut data = store.data.lock().unwrap();
+        for (name, _) in HOTKEYS {
+            if let Ok(s) = parse_hotkey(&hotkey_text(&data, name)) {
+                let _ = app.global_shortcut().unregister(s);
+            }
         }
+        data.hotkeys.clear();
+        save(&store.file, &data)?;
+        drop(data);
+        register_hotkeys(&app);
     }
-    data.hotkeys.clear();
-    save(&store.file, &data)?;
-    drop(data);
-    register_hotkeys(&app);
     Ok(())
 }
 
 /// Registers whatever is not registered yet; true when all three are.
+#[cfg(desktop)]
 fn register_hotkeys(app: &AppHandle) -> bool {
     let store = app.state::<Store>();
     let texts: Vec<String> = { let data = store.data.lock().unwrap(); HOTKEYS.iter().map(|(n, _)| hotkey_text(&data, n)).collect() };
@@ -1348,16 +1416,23 @@ fn register_hotkeys(app: &AppHandle) -> bool {
 
 /// False when another program already owns the quick-add shortcut.
 #[tauri::command]
-fn quick_shortcut(app: AppHandle, store: State<Store>) -> bool {
-    let keys = hotkey_text(&store.data.lock().unwrap(), "quick");
-    parse_hotkey(&keys).is_ok_and(|s| app.global_shortcut().is_registered(s))
+fn quick_shortcut(#[allow(unused)] app: AppHandle, #[allow(unused)] store: State<Store>) -> bool {
+    #[cfg(desktop)]
+    {
+        let keys = hotkey_text(&store.data.lock().unwrap(), "quick");
+        parse_hotkey(&keys).is_ok_and(|s| app.global_shortcut().is_registered(s))
+    }
+    #[cfg(not(desktop))]
+    true
 }
 
+#[cfg(desktop)]
 fn show_quick(app: &AppHandle) {
     show_quick_as(app, "task")
 }
 
 /// Opens the quick bar in "task" or "note" mode.
+#[cfg(desktop)]
 fn show_quick_as(app: &AppHandle, mode: &str) {
     if let Some(win) = app.get_webview_window("quick") {
         let _ = app.emit_to("quick", "quick-mode", mode);
@@ -1367,7 +1442,8 @@ fn show_quick_as(app: &AppHandle, mode: &str) {
     }
 }
 
-fn show(app: &AppHandle) {
+fn show(#[allow(unused)] app: &AppHandle) {
+    #[cfg(desktop)]
     if let Some(win) = app.get_webview_window("main") {
         let _ = win.show();
         let _ = win.unminimize();
@@ -1375,8 +1451,11 @@ fn show(app: &AppHandle) {
     }
 }
 
-fn main() {
-    tauri::Builder::default()
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
+pub fn run() {
+    let builder = tauri::Builder::default();
+    #[cfg(desktop)]
+    let builder = builder
         // a second instance would fire every reminder twice
         .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
             // `vermil-tasks.exe --quick` opens the quick-add bar of the running app
@@ -1406,13 +1485,14 @@ fn main() {
         // launched at sign-in with --hidden, so it starts in the tray
         .plugin(tauri_plugin_autostart::init(tauri_plugin_autostart::MacosLauncher::LaunchAgent, Some(vec!["--hidden"])))
         .plugin(tauri_plugin_updater::Builder::new().build())
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, save_page_pdf, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .on_window_event(|window, event| {
             if let WindowEvent::CloseRequested { api, .. } = event {
                 api.prevent_close();
                 let _ = window.hide(); // stay in the tray so reminders keep firing
             }
-        })
+        });
+    builder
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, save_page_pdf, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;
@@ -1423,62 +1503,66 @@ fn main() {
                 fs::copy(&old, &file)?;
             }
             app.manage(Store { data: Mutex::new(load(&file)), file });
+            #[cfg(desktop)]
             if let (Some(z), Some(win)) = (app.state::<Store>().data.lock().unwrap().zoom.filter(|z| valid_zoom(*z)), app.get_webview_window("main")) {
                 let _ = win.set_zoom(z);
             }
             app.manage(Widget::default());
             app.manage(SyncState::default());
 
-            // reminders only fire while the app runs, so start with Windows by default;
-            // done once, after that the checkbox in the footer decides
-            if !cfg!(debug_assertions) {
-                let store = app.state::<Store>();
-                let mut data = store.data.lock().unwrap();
-                if !data.autostart_set {
-                    let _ = app.autolaunch().enable();
-                    data.autostart_set = true;
-                    let _ = save(&store.file, &data);
-                }
-            }
-            // Right after an update the outgoing process can still hold the shortcut for a moment,
-            // so retry for a few seconds before giving up (it stays off if another program owns the keys).
-            let shortcuts = app.handle().clone();
-            std::thread::spawn(move || {
-                for _ in 0..8 {
-                    if register_hotkeys(&shortcuts) {
-                        break;
+            #[cfg(desktop)]
+            {
+                // reminders only fire while the app runs, so start with Windows by default;
+                // done once, after that the checkbox in the footer decides
+                if !cfg!(debug_assertions) {
+                    let store = app.state::<Store>();
+                    let mut data = store.data.lock().unwrap();
+                    if !data.autostart_set {
+                        let _ = app.autolaunch().enable();
+                        data.autostart_set = true;
+                        let _ = save(&store.file, &data);
                     }
-                    std::thread::sleep(Duration::from_millis(500));
                 }
-            });
-            if !std::env::args().any(|a| a == "--hidden") {
-                show(app.handle());
-            }
+                // Right after an update the outgoing process can still hold the shortcut for a moment,
+                // so retry for a few seconds before giving up (it stays off if another program owns the keys).
+                let shortcuts = app.handle().clone();
+                std::thread::spawn(move || {
+                    for _ in 0..8 {
+                        if register_hotkeys(&shortcuts) {
+                            break;
+                        }
+                        std::thread::sleep(Duration::from_millis(500));
+                    }
+                });
+                if !std::env::args().any(|a| a == "--hidden") {
+                    show(app.handle());
+                }
 
-            let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
-            let quick = MenuItem::with_id(app, "quick", "Quick add", true, None::<&str>)?;
-            let quick_note = MenuItem::with_id(app, "quick-note", "Quick note", true, None::<&str>)?;
-            let widget_item = MenuItem::with_id(app, "widget", "Today widget", true, None::<&str>)?;
-            let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
-            TrayIconBuilder::new()
-                .icon(app.default_window_icon().unwrap().clone())
-                .tooltip("Vermil")
-                .menu(&Menu::with_items(app, &[&open, &quick, &quick_note, &widget_item, &quit])?)
-                .show_menu_on_left_click(false)
-                .on_menu_event(|app, event| match event.id.as_ref() {
-                    "open" => show(app),
-                    "quick" => show_quick(app),
-                    "quick-note" => show_quick_as(app, "note"),
-                    "widget" => toggle_widget(app),
-                    "quit" => app.exit(0),
-                    _ => {}
-                })
-                .on_tray_icon_event(|tray, event| {
-                    if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
-                        show(tray.app_handle());
-                    }
-                })
-                .build(app)?;
+                let open = MenuItem::with_id(app, "open", "Open", true, None::<&str>)?;
+                let quick = MenuItem::with_id(app, "quick", "Quick add", true, None::<&str>)?;
+                let quick_note = MenuItem::with_id(app, "quick-note", "Quick note", true, None::<&str>)?;
+                let widget_item = MenuItem::with_id(app, "widget", "Today widget", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                TrayIconBuilder::new()
+                    .icon(app.default_window_icon().unwrap().clone())
+                    .tooltip("Vermil")
+                    .menu(&Menu::with_items(app, &[&open, &quick, &quick_note, &widget_item, &quit])?)
+                    .show_menu_on_left_click(false)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "open" => show(app),
+                        "quick" => show_quick(app),
+                        "quick-note" => show_quick_as(app, "note"),
+                        "widget" => toggle_widget(app),
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .on_tray_icon_event(|tray, event| {
+                        if let TrayIconEvent::Click { button: MouseButton::Left, button_state: MouseButtonState::Up, .. } = event {
+                            show(tray.app_handle());
+                        }
+                    })
+                    .build(app)?;
+            }
 
             let handle = app.handle().clone();
             std::thread::spawn(move || loop {
@@ -1490,6 +1574,11 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running Vermil");
+}
+
+#[allow(dead_code)]
+fn main() {
+    run();
 }
 
 #[cfg(test)]

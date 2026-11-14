@@ -95,6 +95,7 @@ function layoutTabs() {
   const tabs = [...bar.querySelectorAll('button[role=tab]')];
   for (const t of tabs) t.hidden = false;
   more.hidden = true;
+  if (typeof isMobile === 'function' && isMobile()) return;
   const gap = parseFloat(getComputedStyle(bar).columnGap) || 22;
   const widths = tabs.map((t) => t.offsetWidth);
   const all = widths.reduce((n, w) => n + w + gap, -gap);
@@ -207,7 +208,7 @@ function renderHome() {
     ...homeHooks.flatMap((f) => { try { const x = f(); return x ? [x] : []; } catch (e) { console.error('home hook', e); return []; } }), // a hook may return nothing
     ...todayStrip(),
     ...PACKS.map((p) => {
-      const mods = MODULES.filter((m) => m.pack === p.id);
+      const mods = MODULES.filter((m) => m.pack === p.id && (!isAndroid || m.id !== 'widget'));
       const on = mods.filter((m) => started.has(m.id));
       const all = el('button', { type: 'button', className: 'linkish pack-all', ariaLabel: `Add all of ${p.name}`, hidden: on.length === mods.length }, 'Add all');
       all.onclick = async (e) => {

@@ -1,10 +1,14 @@
 {
   "name": "vermil-tasks",
-  "version": "3.3.3",
+  "version": "3.3.4",
   "description": "Vermil: tasks, notes, calendar and a set of optional modules, in one light Windows app",
   "private": true,
   "scripts": {
+    "tauri": "tauri",
     "start": "tauri dev",
+    "android": "tauri android dev",
+    "android:apk": "tauri android build --debug --apk --target aarch64",
+    "android:install": "adb install -r src-tauri/gen/android/app/build/outputs/apk/universal/debug/app-universal-debug.apk && adb shell am start -n com.vermil.tasks/.MainActivity",
     "test": "cargo test --manifest-path src-tauri/Cargo.toml && node --test \"tests/*.test.js\"",
     "test:mod": "node -e \"const a = process.argv.slice(1).map((m) => m.includes('/') || m.endsWith('.js') ? m : `tests/${m}.test.js`); require('node:child_process').execFileSync(process.execPath, ['--test', ...(a.length ? a : ['tests/*.test.js'])], { stdio: 'inherit' })\"",
     "screenshots": "node tests/screenshots.mjs",
