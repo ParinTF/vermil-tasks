@@ -19,6 +19,7 @@
             el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { mode = 'browse'; paint(); } }, 'All cards'))),
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
         el('div', { id: 'fc-decks', className: 'tag-bar', hidden: true }),
+        el('details', { id: 'fc-packs', className: 'fc-packs', hidden: true }),
         el('div', { id: 'fc-stage' })),
       el('aside', { className: 'fc-side', ariaLabel: 'Add a flashcard' },
         el('form', { id: 'fc-form', onsubmit: add },
@@ -77,6 +78,62 @@
     paint();
   }
 
+  const packs = () => (typeof TOEIC_PACKS !== 'undefined' ? TOEIC_PACKS : []);
+  const packItems = (p) => p.cards.map(([front, back, example]) => ({ deck: p.deck, front, back, example }));
+  const packRemaining = (p) => {
+    const have = new Set(data.cards.map((c) => String(c.front || '').trim().toLowerCase()));
+    return p.cards.filter(([front]) => !have.has(String(front || '').trim().toLowerCase())).length;
+  };
+
+  function loadPack(p) {
+    const res = importCardPack(data.cards, packItems(p), today());
+    data.cards = res.cards;
+    activeDeck = p.deck;
+    mode = 'study';
+    revealed = false;
+    if (res.added) save();
+    if ($('fc-msg')) $('fc-msg').textContent = res.added ? `Loaded ${res.added} TOEIC chunks into "${p.deck}".` : `"${p.deck}" is already loaded.`;
+    paint();
+  }
+
+  function loadAllPacks() {
+    const allItems = packs().flatMap(packItems);
+    const res = importCardPack(data.cards, allItems, today());
+    data.cards = res.cards;
+    activeDeck = '';
+    mode = 'study';
+    revealed = false;
+    if (res.added) save();
+    if ($('fc-msg')) $('fc-msg').textContent = res.added ? `Loaded all ${res.added} TOEIC chunks.` : 'All TOEIC packs are already loaded.';
+    if ($('fc-packs')) $('fc-packs').open = false;
+    paint();
+  }
+
+  function paintPacks() {
+    const box = $('fc-packs');
+    const list = packs();
+    if (!box || !list.length) return;
+    box.hidden = false;
+    const total = list.reduce((n, p) => n + p.cards.length, 0);
+    const leftAll = list.reduce((n, p) => n + packRemaining(p), 0);
+    if (!data.cards.length) box.open = true;
+    const allBtn = el('button', { type: 'button', className: 'fc-pack-all' + (!leftAll ? ' loaded' : ''), onclick: loadAllPacks },
+      leftAll ? `Add all ${leftAll} remaining TOEIC chunks →` : `✓ All ${total} TOEIC chunks loaded`);
+    const grid = el('div', { className: 'fc-pack-grid' }, ...list.map((p) => {
+      const rem = packRemaining(p);
+      return el('button', {
+        type: 'button',
+        className: 'fc-pack-btn' + (rem === 0 ? ' loaded' : ''),
+        onclick: () => loadPack(p),
+      }, el('b', {}, (rem === 0 ? '✓ ' : '+ ') + p.label), el('small', {}, rem === 0 ? `${p.cards.length} ready` : `${rem} of ${p.cards.length} new`));
+    }));
+    box.replaceChildren(
+      el('summary', {},
+        el('span', {}, `TOEIC Chunk Packs · ${total} chunks`),
+        el('small', {}, leftAll ? `${leftAll} available` : 'All installed')),
+      el('div', { className: 'fc-pack-body' }, allBtn, grid));
+  }
+
   function paint() {
     const t = today();
     $('fc-m-study').ariaSelected = String(mode === 'study');
@@ -96,6 +153,7 @@
         el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => { activeDeck = ''; revealed = false; paint(); } }, 'All decks'),
         ...s.decks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => { activeDeck = activeDeck === d ? '' : d; revealed = false; paint(); } }, d)));
     }
+    paintPacks();
 
     const stage = $('fc-stage');
     if (mode === 'study') {
@@ -151,7 +209,16 @@
   }
 
   const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Again, Hard, Good, Easy'], ['N', 'New card']] };
-  const commandFn = () => [{ label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } }];
+  const commandFn = () => [
+    { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } },
+    { label: 'TOEIC: Load all 400 chunks', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(); } },
+    ...packs().map((p) => ({
+      label: `TOEIC: Add ${p.label} (${p.cards.length} chunks)`,
+      hint: 'Flashcards',
+      kind: 'Command',
+      run: async () => { await setView('cards'); loadPack(p); },
+    })),
+  ];
 
   defineModule('cards', {
     summary() {
@@ -163,7 +230,10 @@
       const rev = data.cards.filter((c) => c.lastReviewed && c.lastReviewed >= since && c.lastReviewed <= until).length;
       return { title: 'Flashcards', lines: [`${rev} card${rev === 1 ? '' : 's'} reviewed`] };
     },
-    start() {
+    async start() {
+      if (typeof TOEIC_PACKS === 'undefined' && !$('script-toeic-pack')) {
+        await loadFile('script', { src: 'toeic-pack.js', id: 'script-toeic-pack' }).catch(() => {});
+      }
       data = { cards: [], ...(moduleData.cards || {}) };
       build();
       paint();

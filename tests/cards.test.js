@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, importCardPack, xpAward } = require('../ui/logic.js');
+const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 
 test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Again', () => {
   assert.deepEqual(CARD_BOX_DAYS, [1, 3, 7, 14, 30]);
@@ -63,4 +64,32 @@ test('deckSummary counts due, mastered (s >= 10 or Box 4-5) and sorted deck name
   });
   const xp = xpAward({ total: 0, day: '', today: {}, keys: {}, log: [] }, 'card-reviewed', { key: 'card:1:2026-11-15' }, '2026-11-15');
   assert.equal(xp.gained, 2);
+});
+
+test('TOEIC_PACKS has 400 unique, valid chunk cards and importCardPack deduplicates cleanly', () => {
+  const seenFront = new Set();
+  const all = [];
+  for (const p of TOEIC_PACKS) {
+    assert.ok(p.id && p.label && p.deck && Array.isArray(p.cards) && p.cards.length >= 35);
+    for (const [front, back, example] of p.cards) {
+      assert.ok(front && front.includes('___'), `Missing ___ gap in: ${front}`);
+      assert.ok(back && back.trim().length > 0, `Empty back for: ${front}`);
+      assert.ok(example && example.trim().length > 0, `Empty example for: ${front}`);
+      const key = front.trim().toLowerCase();
+      assert.ok(!seenFront.has(key), `Duplicate front found: ${front}`);
+      seenFront.add(key);
+      all.push({ deck: p.deck, front, back, example });
+    }
+  }
+  assert.equal(all.length, 400);
+
+  let seq = 0;
+  const first = importCardPack([], all, '2026-11-16', () => `t-${++seq}`);
+  assert.equal(first.added, 400);
+  assert.equal(first.cards.length, 400);
+  assert.equal(first.cards[0].next, '2026-11-16');
+
+  const second = importCardPack(first.cards, all, '2026-11-16', () => `t-${++seq}`);
+  assert.equal(second.added, 0);
+  assert.equal(second.cards.length, 400);
 });

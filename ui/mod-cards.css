@@ -33,6 +33,20 @@
 .fc-done-box h3 { margin: 0 0 6px; font-size: 20px; }
 .fc-done-box p { margin: 0; font-size: 14px; color: var(--mute); }
 
+.fc-packs { margin: 8px 0 14px; border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px; background: color-mix(in srgb, var(--ink) 2%, transparent); }
+.fc-packs summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; cursor: pointer; font-size: 13px; font-weight: 600; color: var(--ink); list-style: none; }
+.fc-packs summary::-webkit-details-marker { display: none; }
+.fc-packs summary small { font-size: 12px; color: var(--accent-text); font-variant-numeric: tabular-nums; }
+.fc-pack-body { display: grid; gap: 10px; margin-top: 12px; }
+.fc-pack-all { justify-self: start; padding: 8px 16px; border: 1px solid var(--accent); border-radius: 999px; background: var(--accent); font: inherit; font-size: 13px; font-weight: 700; color: var(--on-accent); cursor: pointer; }
+.fc-pack-all.loaded { border-color: var(--line); background: none; color: var(--mute); }
+.fc-pack-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.fc-pack-btn { display: grid; gap: 2px; padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--paper); font: inherit; text-align: left; color: var(--ink); cursor: pointer; }
+.fc-pack-btn:hover { border-color: var(--ink); }
+.fc-pack-btn b { font-size: 13px; font-weight: 600; }
+.fc-pack-btn small { font-size: 11.5px; color: var(--mute); }
+.fc-pack-btn.loaded b { color: var(--mute); }
+
 .fc-list { margin: 0; padding: 0; list-style: none; }
 .fc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .fc-row-main { display: grid; gap: 3px; min-width: 180px; flex: 1; }
@@ -56,6 +70,7 @@
   .fc-sum b { font-size: 18px; }
   .fc-card { padding: 18px; }
   .fc-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .fc-pack-grid { grid-template-columns: 1fr; }
   .fc-side {
     display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     max-height: 86dvh; overflow-y: auto;

@@ -202,7 +202,7 @@ nav sup { margin-left: 5px; font-size: .42em; font-weight: 600; font-variant-num
   background: none; font: inherit; font-size: 11.5px; font-weight: 600; color: var(--mute); cursor: pointer;
 }
 .tag-pill:hover, .task-tag:hover { border-color: var(--ink); color: var(--ink); }
-.tag-pill.on, .task-tag.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.tag-pill.on, .tag-pill.active, .task-tag.on { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
 .task-tags { display: inline-flex; flex-wrap: wrap; gap: 5px; margin-left: 8px; vertical-align: middle; }
 .subtasks { margin: 8px 0 2px; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 5px; }
 .subtasks li { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--ink); }
