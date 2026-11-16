@@ -1,15 +1,16 @@
 // Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler (Again / Hard / Good / Easy) with context examples.
 // Data: { cards: [{ id, deck, front, back, example?, s?, d?, ivl?, lapses?, box, next, lastReviewed, reviews }] }.
 (() => {
-  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0 };
+  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {} };
   let mode = 'study'; // 'study' | 'quiz' | 'browse'
   let activeDeck = '';
   let revealed = false;
-  let quizSource = 'toeic'; // 'toeic' (curated Part 5 grammar+traps) | 'cards' (1,000 chunks / own cards)
+  let quizSource = 'sets'; // 'sets' (20 x 50-question sets) | 'topic' (by topic) | 'cards' (1,000 chunks / own cards)
+  let quizSet = 1;
   let quizTag = '';
   let quizCount = 10;
   let quizSyncFsrs = true;
-  let quizState = null; // { questions, answers, index }
+  let quizState = null; // { source, set, questions, answers, index, recorded }
   const save = () => saveModule('cards', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('cards-view');
   const today = () => localDay(new Date());
@@ -121,14 +122,40 @@
     paint();
   }
 
-  function startQuiz(source = quizSource, tag = quizTag, count = quizCount) {
+  function startQuiz(source = quizSource, { set = quizSet, tag = quizTag, count = quizCount } = {}) {
     quizSource = source;
+    quizSet = Number(set) || 1;
     quizTag = tag;
     quizCount = count;
-    const questions = quizSource === 'toeic'
-      ? buildCuratedQuiz(typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [], { count: quizCount, tag: quizTag })
-      : buildCardQuiz(data.cards, { count: quizCount, deck: activeDeck });
-    quizState = { questions, answers: new Array(questions.length).fill(null), index: 0 };
+    const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+    const questions = quizSource === 'sets'
+      ? buildCuratedQuiz(curated, { count: 0, set: quizSet, shuffle: false })
+      : quizSource === 'topic'
+        ? buildCuratedQuiz(curated, { count: quizCount, tag: quizTag })
+        : buildCardQuiz(data.cards, { count: quizCount, deck: activeDeck });
+    quizState = { source: quizSource, set: quizSet, questions, answers: new Array(questions.length).fill(null), index: 0, recorded: false };
+    paint();
+  }
+
+  function advanceQuiz() {
+    if (!quizState) return;
+    quizState.index++;
+    if (quizState.index >= quizState.questions.length && quizState.source === 'sets' && quizState.set && !quizState.recorded) {
+      quizState.recorded = true;
+      const sc = scoreQuiz(quizState.questions, quizState.answers);
+      const key = String(quizState.set);
+      const prev = data.quizScores?.[key];
+      data.quizScores = {
+        ...(data.quizScores || {}),
+        [key]: {
+          last: sc.correct,
+          best: Math.max(prev?.best || 0, sc.correct),
+          total: sc.total,
+          pct: Math.max(prev?.pct || 0, sc.pct),
+        },
+      };
+      save();
+    }
     paint();
   }
 
@@ -155,35 +182,58 @@
   function paintQuiz(stage) {
     const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
     const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
+    const setNums = [...new Set(curated.map((x) => Number(x.set)).filter((n) => n > 0))].sort((a, b) => a - b);
+    const doneSets = setNums.filter((n) => data.quizScores?.[String(n)]).length;
     const fsrsChk = el('input', { type: 'checkbox', checked: quizSyncFsrs });
     fsrsChk.onchange = () => { quizSyncFsrs = fsrsChk.checked; };
-    const topicSel = quizSource === 'toeic'
+    const topicSel = quizSource === 'topic'
       ? el('select', {
           id: 'fc-qz-topic',
           className: 'fc-qz-sel',
           ariaLabel: 'Grammar topic filter',
-          onchange: (e) => startQuiz('toeic', e.target.value, quizCount),
+          onchange: (e) => startQuiz('topic', { tag: e.target.value, count: quizCount }),
         }, el('option', { value: '' }, `All topics (${curated.length})`), ...tags.map((tg) => el('option', { value: tg, selected: quizTag === tg }, tg)))
       : null;
 
+    const setGrid = quizSource === 'sets' && setNums.length
+      ? el('div', { className: 'fc-qz-set-grid', role: 'group', ariaLabel: 'TOEIC Test Sets 1 to 20' },
+          ...setNums.map((n) => {
+            const rec = data.quizScores?.[String(n)];
+            return el('button', {
+              type: 'button',
+              className: 'fc-qz-set-btn' + (quizSet === n ? ' active' : '') + (rec ? ' done' : ''),
+              onclick: () => startQuiz('sets', { set: n }),
+            }, el('b', {}, `Set ${n}`), ...(rec ? [el('small', {}, `${rec.best}/${rec.total}`)] : []));
+          }))
+      : null;
+
+    const optsRow = quizSource === 'sets'
+      ? el('div', { className: 'fc-qz-opts' },
+          el('span', { className: 'fc-qz-info' }, `Set ${quizSet} · ${quizState?.questions?.length || 50} Qs`),
+          el('span', { className: 'fc-qz-sub' }, `${doneSets}/${setNums.length} sets scored`),
+          el('button', { type: 'button', className: 'linkish fc-qz-new', onclick: () => startQuiz('sets', { set: quizSet }) }, `Restart Set ${quizSet} ↻`))
+      : el('div', { className: 'fc-qz-opts' },
+          ...(topicSel ? [topicSel] : [el('label', { className: 'fc-qz-sync' }, fsrsChk, ' Update FSRS')]),
+          ...[[10, '10 Qs'], [20, '20 Qs'], [0, 'All']].map(([n, lbl]) => el('button', {
+            type: 'button',
+            className: 'tag-pill' + (quizCount === n ? ' active' : ''),
+            onclick: () => startQuiz(quizSource, { tag: quizTag, count: n }),
+          }, lbl)),
+          el('button', { type: 'button', className: 'linkish fc-qz-new', onclick: () => startQuiz(quizSource, { tag: quizTag, count: quizCount }) }, 'New set ↻'));
+
     const toolbar = el('div', { className: 'fc-qz-bar' },
       el('div', { className: 'fc-qz-sources', role: 'group', ariaLabel: 'Test bank' },
-        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'toeic' ? ' active' : ''), onclick: () => startQuiz('toeic', quizTag, quizCount) }, `TOEIC Grammar & Traps (${curated.length})`),
-        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => startQuiz('cards', '', quizCount) }, `My Decks / Chunks (${data.cards.length})`)),
-      el('div', { className: 'fc-qz-opts' },
-        ...(topicSel ? [topicSel] : [el('label', { className: 'fc-qz-sync' }, fsrsChk, ' Update FSRS')]),
-        ...[[10, '10 Qs'], [20, '20 Qs'], [0, 'All']].map(([n, lbl]) => el('button', {
-          type: 'button',
-          className: 'tag-pill' + (quizCount === n ? ' active' : ''),
-          onclick: () => startQuiz(quizSource, quizTag, n),
-        }, lbl)),
-        el('button', { type: 'button', className: 'linkish fc-qz-new', onclick: () => startQuiz(quizSource, quizTag, quizCount) }, 'New set ↻')));
+        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'sets' ? ' active' : ''), onclick: () => startQuiz('sets', { set: quizSet }) }, `20 Test Sets (${curated.length})`),
+        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'topic' ? ' active' : ''), onclick: () => startQuiz('topic', { tag: quizTag, count: quizCount }) }, `By Topic (${tags.length})`),
+        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => startQuiz('cards', { count: quizCount }) }, `My Decks / Chunks (${data.cards.length})`)),
+      optsRow,
+      ...(setGrid ? [setGrid] : []));
     const finishMount = () => { if (topicSel && typeof enhanceSelect === 'function') enhanceSelect(topicSel); };
 
     if (!quizState || !quizState.questions.length) {
       stage.replaceChildren(toolbar, el('div', { className: 'fc-done-box' },
         el('h3', {}, quizSource === 'cards' ? 'Need at least 4 cards in your decks' : 'No questions found'),
-        el('p', {}, quizSource === 'cards' ? 'Load one of the TOEIC Chunk Packs above or add 4 cards to test yourself.' : 'Switch topics above to start a test.')));
+        el('p', {}, quizSource === 'cards' ? 'Load one of the TOEIC Chunk Packs above or add 4 cards to test yourself.' : 'Switch topics or select a test set above to begin.')));
       finishMount();
       return;
     }
@@ -198,18 +248,22 @@
         type: 'button', className: 'primary',
         onclick: () => {
           const qs = sc.missed.map((m) => m.question);
-          quizState = { questions: qs, answers: new Array(qs.length).fill(null), index: 0 };
+          quizState = { source: 'retry', set: quizSet, questions: qs, answers: new Array(qs.length).fill(null), index: 0, recorded: false };
           paint();
         },
       }, el('span', {}, `Retry ${sc.missed.length} missed`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')) : null;
+      const nextSetBtn = quizSource === 'sets' && quizSet < (setNums[setNums.length - 1] || 20)
+        ? el('button', { type: 'button', className: 'fc-grade', onclick: () => startQuiz('sets', { set: quizSet + 1 }) }, el('b', {}, `Next: Set ${quizSet + 1} →`))
+        : null;
 
       stage.replaceChildren(toolbar,
         el('div', { className: 'fc-qz-summary' },
           el('div', { className: 'fc-qz-scoreline' },
-            el('div', {}, el('small', {}, 'Test score'), el('b', {}, `${sc.correct} / ${sc.total} (${sc.pct}%)`)),
+            el('div', {}, el('small', {}, quizSource === 'sets' ? `Set ${quizSet} score` : 'Test score'), el('b', {}, `${sc.correct} / ${sc.total} (${sc.pct}%)`)),
             el('div', { className: 'fc-qz-sum-acts' },
               ...(retryBtn ? [retryBtn] : []),
-              el('button', { type: 'button', className: 'fc-grade', onclick: () => startQuiz(quizSource, quizTag, quizCount) }, el('b', {}, 'Start another test')))),
+              ...(nextSetBtn ? [nextSetBtn] : []),
+              el('button', { type: 'button', className: 'fc-grade', onclick: () => startQuiz(quizSource, { set: quizSet, tag: quizTag, count: quizCount }) }, el('b', {}, quizSource === 'sets' ? `Retake Set ${quizSet}` : 'Start another test')))),
           ...(sc.missed.length
             ? [el('ul', { className: 'fc-qz-review' }, ...sc.missed.map(({ question: q, pick }) => el('li', { className: 'fc-qz-rev-item' },
                 el('div', { className: 'fc-qz-rev-meta' }, el('span', { className: 'task-tag' }, q.tag)),
@@ -227,12 +281,12 @@
     const nextBtn = el('button', {
       type: 'button',
       className: 'primary fc-qz-next',
-      onclick: () => { quizState.index++; paint(); },
+      onclick: advanceQuiz,
     }, el('span', {}, index + 1 < questions.length ? 'Next question (Enter)' : 'Finish & see score'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'));
 
     const cardEl = el('div', { className: 'fc-card fc-qz-card' },
       el('div', { className: 'fc-card-meta' },
-        el('span', {}, `${q.tag} · Q${index + 1}/${questions.length}`),
+        el('span', {}, `${q.set && quizSource === 'sets' ? `Set ${q.set} · ` : ''}${q.tag} · Q${index + 1}/${questions.length}`),
         el('span', {}, `Score: ${sc.correct}/${sc.answered}`)),
       el('div', { className: 'fc-qz-q' }, q.q),
       el('div', { className: 'fc-qz-choices' }, ...q.choices.map((ch, ci) => {
@@ -314,11 +368,11 @@
 
     if (activeDeck && !s.decks.includes(activeDeck)) activeDeck = '';
     const deckBar = $('fc-decks');
-    deckBar.hidden = !s.decks.length || (mode === 'quiz' && quizSource === 'toeic');
+    deckBar.hidden = !s.decks.length || (mode === 'quiz' && quizSource !== 'cards');
     if (s.decks.length) {
       deckBar.replaceChildren(
-        el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => { activeDeck = ''; revealed = false; if (mode === 'quiz') startQuiz('cards', '', quizCount); else paint(); } }, 'All decks'),
-        ...s.decks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => { activeDeck = activeDeck === d ? '' : d; revealed = false; if (mode === 'quiz') startQuiz('cards', '', quizCount); else paint(); } }, d)));
+        el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => { activeDeck = ''; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); } }, 'All decks'),
+        ...s.decks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => { activeDeck = activeDeck === d ? '' : d; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); } }, d)));
     }
     if (mode !== 'quiz') paintPacks();
     else if ($('fc-packs')) $('fc-packs').hidden = true;
@@ -389,8 +443,9 @@
   const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['Enter', 'Next quiz question'], ['N', 'New card']] };
   const commandFn = () => [
     { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } },
-    { label: 'TOEIC: Practice Test (with explanations)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('toeic', '', 10); } },
-    { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('cards', '', 10); } },
+    { label: 'TOEIC: Practice Test (20 Sets · 1,000 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
+    { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
+    { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
     { label: `TOEIC: Load all ${packs().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(); } },
     ...packs().map((p) => ({
       label: `TOEIC: Add ${p.label} (${p.cards.length} chunks)`,
@@ -419,7 +474,7 @@
       if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
         await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' }).catch(() => {});
       }
-      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, ...(moduleData.cards || {}) };
+      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, ...(moduleData.cards || {}) };
       build();
       paint();
       commandHooks.push(commandFn);
@@ -447,7 +502,7 @@
         if (!q) return;
         const answered = quizState.answers[curIdx] !== null && quizState.answers[curIdx] !== undefined;
         if (!answered && num >= 1 && num <= 4) { e.preventDefault(); answerQuiz(num - 1); }
-        else if (answered && (e.key === 'Enter' || e.code === 'Space')) { e.preventDefault(); quizState.index++; paint(); }
+        else if (answered && (e.key === 'Enter' || e.code === 'Space')) { e.preventDefault(); advanceQuiz(); }
         return;
       }
       if (mode === 'study' && e.code === 'Space') { e.preventDefault(); if (!revealed) { revealed = true; paint(); } }

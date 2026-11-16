@@ -106,16 +106,29 @@ test('TOEIC_PACKS has 1000 unique, valid chunk cards across 20 packs and studyQu
   assert.equal(paced.queue[0].id, 'r1');
 });
 
-test('Quiz builder generates 4-choice questions with explanations and validates curated TOEIC_QUIZ', () => {
+test('Quiz builder generates 4-choice questions with explanations and validates 1,000-question 20-set TOEIC_QUIZ', () => {
   const seenIds = new Set();
-  assert.equal(TOEIC_QUIZ.length, 60);
+  const seenPrompts = new Set();
+  const setCounts = {};
+  const ansCounts = [0, 0, 0, 0];
+  assert.equal(TOEIC_QUIZ.length, 1000);
   for (const item of TOEIC_QUIZ) {
     assert.ok(item.id && !seenIds.has(item.id), `Duplicate id ${item.id}`);
     seenIds.add(item.id);
+    const key = item.q.trim().toLowerCase();
+    assert.ok(!seenPrompts.has(key), `Duplicate prompt: ${item.q}`);
+    seenPrompts.add(key);
+    assert.ok(item.set >= 1 && item.set <= 20, `Invalid set on ${item.id}`);
+    setCounts[item.set] = (setCounts[item.set] || 0) + 1;
     assert.ok(item.q.includes('___') && item.choices.length === 4);
+    assert.equal(new Set(item.choices).size, 4, `Duplicate choices in ${item.id}`);
     assert.ok(item.ans >= 0 && item.ans < 4);
-    assert.ok(item.why && item.why.length > 20);
+    ansCounts[item.ans]++;
+    assert.ok(item.why && item.why.length > 20 && !/\([A-D]\)/.test(item.why), `Bad why on ${item.id}`);
   }
+  assert.equal(Object.keys(setCounts).length, 20);
+  for (let s = 1; s <= 20; s++) assert.equal(setCounts[s], 50, `Set ${s} must have 50 questions`);
+  assert.deepEqual(ansCounts, [250, 250, 250, 250]);
 
   assert.deepEqual(stripGapCue('Please ___ the form. (กรอกให้ครบ)'), { stem: 'Please ___ the form.', cue: 'กรอกให้ครบ' });
   assert.equal(cleanChoiceLabel('dedicated to (+ noun/V-ing)'), 'dedicated to');
@@ -141,6 +154,10 @@ test('Quiz builder generates 4-choice questions with explanations and validates 
   assert.equal(sc.wrong, 1);
   assert.equal(sc.missed.length, 1);
 
+  const set1 = buildCuratedQuiz(TOEIC_QUIZ, { count: 0, set: 1, shuffle: false });
+  assert.equal(set1.length, 50);
+  assert.ok(set1.every((x) => x.set === 1));
+
   const filtered = buildCuratedQuiz(TOEIC_QUIZ, { count: 0, tag: 'Connector' });
-  assert.equal(filtered.length, 10);
+  assert.equal(filtered.length, 51);
 });

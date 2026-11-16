@@ -1476,9 +1476,10 @@ function buildCardQuiz(cards = [], { count = 10, deck = '', rng = Math.random } 
   return out;
 }
 
-function buildCuratedQuiz(items = [], { count = 10, tag = '', rng = Math.random } = {}) {
-  const pool = (items || []).filter((x) => x && (!tag || x.tag === tag));
-  return shuffleWith(pool, rng).slice(0, count > 0 ? Math.min(count, pool.length) : pool.length);
+function buildCuratedQuiz(items = [], { count = 10, tag = '', set = 0, shuffle = true, rng = Math.random } = {}) {
+  const pool = (items || []).filter((x) => x && (!set || x.set === set) && (!tag || x.tag === tag));
+  const picked = shuffle ? shuffleWith(pool, rng) : [...pool];
+  return picked.slice(0, count > 0 ? Math.min(count, picked.length) : picked.length);
 }
 
 function scoreQuiz(questions = [], answers = []) {
