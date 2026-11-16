@@ -1,7 +1,8 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
+const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 
 test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Again', () => {
   assert.deepEqual(CARD_BOX_DAYS, [1, 3, 7, 14, 30]);
@@ -103,4 +104,43 @@ test('TOEIC_PACKS has 1000 unique, valid chunk cards across 20 packs and studyQu
   assert.equal(paced.newShown, 15);
   assert.equal(paced.queue.length, 16);
   assert.equal(paced.queue[0].id, 'r1');
+});
+
+test('Quiz builder generates 4-choice questions with explanations and validates curated TOEIC_QUIZ', () => {
+  const seenIds = new Set();
+  assert.equal(TOEIC_QUIZ.length, 60);
+  for (const item of TOEIC_QUIZ) {
+    assert.ok(item.id && !seenIds.has(item.id), `Duplicate id ${item.id}`);
+    seenIds.add(item.id);
+    assert.ok(item.q.includes('___') && item.choices.length === 4);
+    assert.ok(item.ans >= 0 && item.ans < 4);
+    assert.ok(item.why && item.why.length > 20);
+  }
+
+  assert.deepEqual(stripGapCue('Please ___ the form. (กรอกให้ครบ)'), { stem: 'Please ___ the form.', cue: 'กรอกให้ครบ' });
+  assert.equal(cleanChoiceLabel('dedicated to (+ noun/V-ing)'), 'dedicated to');
+  assert.equal(cleanChoiceLabel('adhere to / abide by'), 'adhere to');
+
+  const deck = [
+    { id: 'c1', deck: 'Preps', front: 'Staff must ___ the rules. (ปฏิบัติตาม)', back: 'comply with', example: 'Everyone complied.' },
+    { id: 'c2', deck: 'Preps', front: 'The contract is ___ approval. (ขึ้นอยู่กับ)', back: 'subject to', example: 'Prices are subject to change.' },
+    { id: 'c3', deck: 'Preps', front: 'We are ___ this goal. (ทุ่มเทให้)', back: 'dedicated to (+ noun/V-ing)', example: 'Dedicated to service.' },
+    { id: 'c4', deck: 'Preps', front: 'App is ___ macOS. (เข้ากันได้)', back: 'compatible with', example: 'Works smoothly.' },
+  ];
+  const qs = buildCardQuiz(deck, { count: 4, deck: 'Preps', rng: () => 0.35 });
+  assert.equal(qs.length, 4);
+  for (const q of qs) {
+    assert.equal(q.choices.length, 4);
+    assert.equal(new Set(q.choices).size, 4);
+    assert.ok(!q.q.includes('(ปฏิบัติตาม)') && q.why.includes('คำตอบ:') && q.why.includes('ตัวเลือกอื่น:'));
+  }
+
+  const sc = scoreQuiz(qs, [qs[0].ans, (qs[1].ans + 1) % 4, qs[2].ans, null]);
+  assert.equal(sc.answered, 3);
+  assert.equal(sc.correct, 2);
+  assert.equal(sc.wrong, 1);
+  assert.equal(sc.missed.length, 1);
+
+  const filtered = buildCuratedQuiz(TOEIC_QUIZ, { count: 0, tag: 'Connector' });
+  assert.equal(filtered.length, 10);
 });

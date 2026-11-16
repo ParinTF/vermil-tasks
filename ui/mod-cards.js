@@ -2,9 +2,14 @@
 // Data: { cards: [{ id, deck, front, back, example?, s?, d?, ivl?, lapses?, box, next, lastReviewed, reviews }] }.
 (() => {
   let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0 };
-  let mode = 'study'; // 'study' | 'browse'
+  let mode = 'study'; // 'study' | 'quiz' | 'browse'
   let activeDeck = '';
   let revealed = false;
+  let quizSource = 'toeic'; // 'toeic' (curated Part 5 grammar+traps) | 'cards' (1,000 chunks / own cards)
+  let quizTag = '';
+  let quizCount = 10;
+  let quizSyncFsrs = true;
+  let quizState = null; // { questions, answers, index }
   const save = () => saveModule('cards', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('cards-view');
   const today = () => localDay(new Date());
@@ -18,6 +23,7 @@
           el('h2', {}, 'Flashcards'),
           el('div', { className: 'fc-modes', role: 'tablist', ariaLabel: 'Flashcards mode' },
             el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { mode = 'study'; revealed = false; paint(); } }, 'Study'),
+            el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (!quizState) startQuiz(); else paint(); } }, 'Test'),
             el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { mode = 'browse'; paint(); } }, 'All cards'))),
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
         el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
@@ -115,6 +121,146 @@
     paint();
   }
 
+  function startQuiz(source = quizSource, tag = quizTag, count = quizCount) {
+    quizSource = source;
+    quizTag = tag;
+    quizCount = count;
+    const questions = quizSource === 'toeic'
+      ? buildCuratedQuiz(typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [], { count: quizCount, tag: quizTag })
+      : buildCardQuiz(data.cards, { count: quizCount, deck: activeDeck });
+    quizState = { questions, answers: new Array(questions.length).fill(null), index: 0 };
+    paint();
+  }
+
+  function answerQuiz(idx) {
+    if (!quizState) return;
+    const i = quizState.index;
+    const q = quizState.questions[i];
+    if (!q || quizState.answers[i] !== null) return;
+    quizState.answers[i] = idx;
+    const ok = idx === q.ans;
+    const t = today();
+    if (quizSyncFsrs && q.cardId) {
+      const card = data.cards.find((c) => c.id === q.cardId);
+      if (card) {
+        const updated = fsrsReview(card, ok ? 3 : 1, t);
+        data.cards = data.cards.map((c) => (c.id === card.id ? updated : c));
+        save();
+      }
+    }
+    emit('card-reviewed', { key: `quiz:${q.id}:${t}` });
+    paint();
+  }
+
+  function paintQuiz(stage) {
+    const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+    const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
+    const fsrsChk = el('input', { type: 'checkbox', checked: quizSyncFsrs });
+    fsrsChk.onchange = () => { quizSyncFsrs = fsrsChk.checked; };
+    const topicSel = quizSource === 'toeic'
+      ? el('select', {
+          id: 'fc-qz-topic',
+          className: 'fc-qz-sel',
+          ariaLabel: 'Grammar topic filter',
+          onchange: (e) => startQuiz('toeic', e.target.value, quizCount),
+        }, el('option', { value: '' }, `All topics (${curated.length})`), ...tags.map((tg) => el('option', { value: tg, selected: quizTag === tg }, tg)))
+      : null;
+
+    const toolbar = el('div', { className: 'fc-qz-bar' },
+      el('div', { className: 'fc-qz-sources', role: 'group', ariaLabel: 'Test bank' },
+        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'toeic' ? ' active' : ''), onclick: () => startQuiz('toeic', quizTag, quizCount) }, `TOEIC Grammar & Traps (${curated.length})`),
+        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => startQuiz('cards', '', quizCount) }, `My Decks / Chunks (${data.cards.length})`)),
+      el('div', { className: 'fc-qz-opts' },
+        ...(topicSel ? [topicSel] : [el('label', { className: 'fc-qz-sync' }, fsrsChk, ' Update FSRS')]),
+        ...[[10, '10 Qs'], [20, '20 Qs'], [0, 'All']].map(([n, lbl]) => el('button', {
+          type: 'button',
+          className: 'tag-pill' + (quizCount === n ? ' active' : ''),
+          onclick: () => startQuiz(quizSource, quizTag, n),
+        }, lbl)),
+        el('button', { type: 'button', className: 'linkish fc-qz-new', onclick: () => startQuiz(quizSource, quizTag, quizCount) }, 'New set ↻')));
+    const finishMount = () => { if (topicSel && typeof enhanceSelect === 'function') enhanceSelect(topicSel); };
+
+    if (!quizState || !quizState.questions.length) {
+      stage.replaceChildren(toolbar, el('div', { className: 'fc-done-box' },
+        el('h3', {}, quizSource === 'cards' ? 'Need at least 4 cards in your decks' : 'No questions found'),
+        el('p', {}, quizSource === 'cards' ? 'Load one of the TOEIC Chunk Packs above or add 4 cards to test yourself.' : 'Switch topics above to start a test.')));
+      finishMount();
+      return;
+    }
+
+    const { questions, answers, index } = quizState;
+    const sc = scoreQuiz(questions, answers);
+    const LETTERS = ['A', 'B', 'C', 'D'];
+
+    // Summary screen when finished
+    if (index >= questions.length) {
+      const retryBtn = sc.missed.length ? el('button', {
+        type: 'button', className: 'primary',
+        onclick: () => {
+          const qs = sc.missed.map((m) => m.question);
+          quizState = { questions: qs, answers: new Array(qs.length).fill(null), index: 0 };
+          paint();
+        },
+      }, el('span', {}, `Retry ${sc.missed.length} missed`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')) : null;
+
+      stage.replaceChildren(toolbar,
+        el('div', { className: 'fc-qz-summary' },
+          el('div', { className: 'fc-qz-scoreline' },
+            el('div', {}, el('small', {}, 'Test score'), el('b', {}, `${sc.correct} / ${sc.total} (${sc.pct}%)`)),
+            el('div', { className: 'fc-qz-sum-acts' },
+              ...(retryBtn ? [retryBtn] : []),
+              el('button', { type: 'button', className: 'fc-grade', onclick: () => startQuiz(quizSource, quizTag, quizCount) }, el('b', {}, 'Start another test')))),
+          ...(sc.missed.length
+            ? [el('ul', { className: 'fc-qz-review' }, ...sc.missed.map(({ question: q, pick }) => el('li', { className: 'fc-qz-rev-item' },
+                el('div', { className: 'fc-qz-rev-meta' }, el('span', { className: 'task-tag' }, q.tag)),
+                el('p', { className: 'fc-qz-rev-q' }, q.q),
+                el('p', { className: 'fc-qz-rev-pick' }, `Your answer: (${LETTERS[pick]}) ${q.choices[pick]}  →  Correct: (${LETTERS[q.ans]}) ${q.choices[q.ans]}`),
+                el('p', { className: 'fc-qz-why' }, q.why))))]
+            : [el('p', { className: 'fc-qz-perfect' }, 'Perfect score — every question answered correctly!')])));
+      finishMount();
+      return;
+    }
+
+    const q = questions[index];
+    const picked = answers[index];
+    const answered = picked !== null && picked !== undefined;
+    const nextBtn = el('button', {
+      type: 'button',
+      className: 'primary fc-qz-next',
+      onclick: () => { quizState.index++; paint(); },
+    }, el('span', {}, index + 1 < questions.length ? 'Next question (Enter)' : 'Finish & see score'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'));
+
+    const cardEl = el('div', { className: 'fc-card fc-qz-card' },
+      el('div', { className: 'fc-card-meta' },
+        el('span', {}, `${q.tag} · Q${index + 1}/${questions.length}`),
+        el('span', {}, `Score: ${sc.correct}/${sc.answered}`)),
+      el('div', { className: 'fc-qz-q' }, q.q),
+      el('div', { className: 'fc-qz-choices' }, ...q.choices.map((ch, ci) => {
+        let cls = 'fc-qz-opt';
+        if (answered) {
+          if (ci === q.ans) cls += ' right';
+          else if (ci === picked) cls += ' wrong';
+          else cls += ' dim';
+        }
+        return el('button', {
+          type: 'button',
+          className: cls,
+          disabled: answered,
+          onclick: () => answerQuiz(ci),
+        }, el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, ch));
+      })),
+      ...(answered
+        ? [
+            el('div', { className: 'fc-qz-explain ' + (picked === q.ans ? 'ok' : 'bad') },
+              el('strong', {}, picked === q.ans ? `✓ Correct (${LETTERS[q.ans]})` : `✕ Incorrect — Correct answer is (${LETTERS[q.ans]}) ${q.choices[q.ans]}`),
+              el('div', { className: 'fc-qz-why' }, ...String(q.why || '').split('\n').map((line) => el('p', {}, line)))),
+            el('div', { className: 'fc-qz-foot' }, nextBtn),
+          ]
+        : []));
+    stage.replaceChildren(toolbar, cardEl);
+    finishMount();
+  }
+
   function paintPacks() {
     const box = $('fc-packs');
     const list = packs();
@@ -143,6 +289,7 @@
   function paint() {
     const t = today();
     $('fc-m-study').ariaSelected = String(mode === 'study');
+    if ($('fc-m-quiz')) $('fc-m-quiz').ariaSelected = String(mode === 'quiz');
     $('fc-m-browse').ariaSelected = String(mode === 'browse');
     const qAll = studyQueue(data.cards, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
     const s = deckSummary(data.cards, t);
@@ -152,27 +299,32 @@
       fig('Mastered (10+ days)', String(s.mastered)),
       fig('Total cards', String(s.total)));
 
-    $('fc-pace')?.replaceChildren(
-      el('span', { className: 'fc-pace-label' }, 'New / day:'),
-      ...[[20, '20'], [50, '50'], [0, 'All']].map(([lim, lbl]) => el('button', {
-        type: 'button',
-        className: 'tag-pill' + ((data.newLimit ?? 20) === lim ? ' active' : ''),
-        onclick: () => { data.newLimit = lim; data.extraToday = 0; save(); paint(); },
-      }, lbl)),
-      ...(qAll.newDue > qAll.newShown ? [el('small', { className: 'fc-pace-info' }, `${qAll.newDue} waiting`)] : []));
+    if ($('fc-pace')) {
+      $('fc-pace').hidden = mode !== 'study';
+      $('fc-pace').replaceChildren(
+        el('span', { className: 'fc-pace-label' }, 'New / day:'),
+        ...[[20, '20'], [50, '50'], [0, 'All']].map(([lim, lbl]) => el('button', {
+          type: 'button',
+          className: 'tag-pill' + ((data.newLimit ?? 20) === lim ? ' active' : ''),
+          onclick: () => { data.newLimit = lim; data.extraToday = 0; save(); paint(); },
+        }, lbl)),
+        ...(qAll.newDue > qAll.newShown ? [el('small', { className: 'fc-pace-info' }, `${qAll.newDue} waiting`)] : []));
+    }
     if ($('fc-search')) $('fc-search').hidden = mode !== 'browse';
 
     if (activeDeck && !s.decks.includes(activeDeck)) activeDeck = '';
     const deckBar = $('fc-decks');
-    deckBar.hidden = !s.decks.length;
+    deckBar.hidden = !s.decks.length || (mode === 'quiz' && quizSource === 'toeic');
     if (s.decks.length) {
       deckBar.replaceChildren(
-        el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => { activeDeck = ''; revealed = false; paint(); } }, 'All decks'),
-        ...s.decks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => { activeDeck = activeDeck === d ? '' : d; revealed = false; paint(); } }, d)));
+        el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => { activeDeck = ''; revealed = false; if (mode === 'quiz') startQuiz('cards', '', quizCount); else paint(); } }, 'All decks'),
+        ...s.decks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => { activeDeck = activeDeck === d ? '' : d; revealed = false; if (mode === 'quiz') startQuiz('cards', '', quizCount); else paint(); } }, d)));
     }
-    paintPacks();
+    if (mode !== 'quiz') paintPacks();
+    else if ($('fc-packs')) $('fc-packs').hidden = true;
 
     const stage = $('fc-stage');
+    if (mode === 'quiz') { paintQuiz(stage); return; }
     if (mode === 'study') {
       const qs = queueState();
       const due = qs.queue;
@@ -234,9 +386,11 @@
     }
   }
 
-  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Again, Hard, Good, Easy'], ['N', 'New card']] };
+  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['Enter', 'Next quiz question'], ['N', 'New card']] };
   const commandFn = () => [
     { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } },
+    { label: 'TOEIC: Practice Test (with explanations)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('toeic', '', 10); } },
+    { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('cards', '', 10); } },
     { label: `TOEIC: Load all ${packs().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(); } },
     ...packs().map((p) => ({
       label: `TOEIC: Add ${p.label} (${p.cards.length} chunks)`,
@@ -262,6 +416,9 @@
       if (typeof TOEIC_PACKS === 'undefined' && !$('script-toeic-pack')) {
         await loadFile('script', { src: 'toeic-pack.js', id: 'script-toeic-pack' }).catch(() => {});
       }
+      if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
+        await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' }).catch(() => {});
+      }
       data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, ...(moduleData.cards || {}) };
       build();
       paint();
@@ -280,14 +437,21 @@
       if (ctrl) return;
       if (e.key === 'Escape' && isField(t)) { t.blur(); return; }
       if (isField(t)) return;
-      if (e.code === 'KeyN') { e.preventDefault(); $('fc-front').focus(); }
-      else if (mode === 'study' && e.code === 'Space') { e.preventDefault(); if (!revealed) { revealed = true; paint(); } }
-      else if (mode === 'study' && revealed) {
-        const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
-        const pad = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'].indexOf(e.code);
-        const num = idx >= 0 ? idx + 1 : pad >= 0 ? pad + 1 : ['1', '2', '3', '4'].indexOf(e.key) + 1;
-        if (num >= 1 && num <= 4) { e.preventDefault(); gradeCurrent(num); }
+      if (e.code === 'KeyN') { e.preventDefault(); $('fc-front').focus(); return; }
+      const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+      const pad = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'].indexOf(e.code);
+      const num = idx >= 0 ? idx + 1 : pad >= 0 ? pad + 1 : ['1', '2', '3', '4'].indexOf(e.key) + 1;
+      if (mode === 'quiz' && quizState) {
+        const curIdx = quizState.index;
+        const q = quizState.questions[curIdx];
+        if (!q) return;
+        const answered = quizState.answers[curIdx] !== null && quizState.answers[curIdx] !== undefined;
+        if (!answered && num >= 1 && num <= 4) { e.preventDefault(); answerQuiz(num - 1); }
+        else if (answered && (e.key === 'Enter' || e.code === 'Space')) { e.preventDefault(); quizState.index++; paint(); }
+        return;
       }
+      if (mode === 'study' && e.code === 'Space') { e.preventDefault(); if (!revealed) { revealed = true; paint(); } }
+      else if (mode === 'study' && revealed && num >= 1 && num <= 4) { e.preventDefault(); gradeCurrent(num); }
     },
   });
 })();

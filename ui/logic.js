@@ -1405,4 +1405,102 @@ function importCardPack(existingCards = [], items = [], today, nextId) {
   return { cards: [...(existingCards || []), ...added], added: added.length };
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+// ── Flashcards Quiz & TOEIC Practice Test helpers ──
+function stripGapCue(front) {
+  const raw = String(front || '').trim();
+  const m = raw.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+  if (!m) return { stem: raw, cue: '' };
+  return { stem: m[1].trim(), cue: m[2].trim() };
+}
+
+function cleanChoiceLabel(back) {
+  return String(back || '')
+    .replace(/\s*\(\+[^)]*\)/g, '')
+    .split(/\s+\/\s+/)[0]
+    .trim();
+}
+
+function shuffleWith(list, rng = Math.random) {
+  const arr = [...list];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(rng() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
+function buildCardQuiz(cards = [], { count = 10, deck = '', rng = Math.random } = {}) {
+  const all = (cards || []).filter((c) => c && c.front && c.back);
+  const scoped = deck ? all.filter((c) => c.deck === deck) : all;
+  if (all.length < 4 || !scoped.length) return [];
+  const chosen = shuffleWith(scoped, rng).slice(0, Math.min(count > 0 ? count : scoped.length, scoped.length));
+  const out = [];
+  for (const target of chosen) {
+    const answerLabel = cleanChoiceLabel(target.back);
+    if (!answerLabel) continue;
+    const sameDeck = shuffleWith(all.filter((c) => c !== target && c.deck === target.deck), rng);
+    const otherDecks = shuffleWith(all.filter((c) => c !== target && c.deck !== target.deck), rng);
+    const seenLabels = new Set([answerLabel.toLowerCase()]);
+    const distractors = [];
+    for (const cand of [...sameDeck, ...otherDecks]) {
+      const lbl = cleanChoiceLabel(cand.back);
+      const low = lbl.toLowerCase();
+      if (!lbl || seenLabels.has(low)) continue;
+      seenLabels.add(low);
+      const { cue } = stripGapCue(cand.front);
+      distractors.push({ label: lbl, cue });
+      if (distractors.length === 3) break;
+    }
+    if (distractors.length < 3) continue;
+    const { stem, cue } = stripGapCue(target.front);
+    const opts = shuffleWith([
+      { label: answerLabel, correct: true },
+      ...distractors.map((d) => ({ label: d.label, correct: false })),
+    ], rng);
+    const ans = opts.findIndex((o) => o.correct);
+    const parts = [];
+    parts.push(`คำตอบ: "${target.back}"${cue ? ` — ${cue}` : ''}`);
+    if (target.example) parts.push(`ตัวอย่าง: ${target.example}`);
+    const otherNotes = distractors.map((d) => (d.cue ? `${d.label} (${d.cue})` : d.label)).join(' · ');
+    if (otherNotes) parts.push(`ตัวเลือกอื่น: ${otherNotes}`);
+    out.push({
+      id: target.id || stem,
+      cardId: target.id || null,
+      tag: target.deck || 'Flashcards',
+      q: stem,
+      choices: opts.map((o) => o.label),
+      ans,
+      why: parts.join('\n'),
+    });
+  }
+  return out;
+}
+
+function buildCuratedQuiz(items = [], { count = 10, tag = '', rng = Math.random } = {}) {
+  const pool = (items || []).filter((x) => x && (!tag || x.tag === tag));
+  return shuffleWith(pool, rng).slice(0, count > 0 ? Math.min(count, pool.length) : pool.length);
+}
+
+function scoreQuiz(questions = [], answers = []) {
+  const total = questions.length;
+  let answered = 0;
+  let correct = 0;
+  const missed = [];
+  for (let i = 0; i < total; i++) {
+    const pick = answers[i];
+    if (pick === null || pick === undefined || pick < 0) continue;
+    answered++;
+    if (pick === questions[i].ans) correct++;
+    else missed.push({ index: i, question: questions[i], pick });
+  }
+  return {
+    total,
+    answered,
+    correct,
+    wrong: answered - correct,
+    pct: total ? Math.round(correct / total * 100) : 0,
+    missed,
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
