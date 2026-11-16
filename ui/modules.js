@@ -11,7 +11,7 @@
 // Its data goes through saveModule(id, value) into the same data file. summary() returns { label, value, unit, sub, warn } for the Today strip on Home (or null).
 const MODULES = [
   { id: 'tasks', pack: 'work', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
-  { id: 'notes', pack: 'work', name: 'Notes', about: 'Quick notes with sizes, colours and checklists, linkable to tasks.', view: 'Notes', static: true, script: 'mod-notes.js' },
+  { id: 'notes', pack: 'work', name: 'Notes & Knowledge', subLabel: 'Notes', about: 'Rich notes with templates and checklists, saved Bookmarks to read later, and Spaced-Repetition Flashcards in one hub.', view: 'Notes', static: true, script: 'mod-notes.js' },
   { id: 'calendar', pack: 'work', name: 'Calendar & Plan', subLabel: 'Month & Day', about: 'Month grid, hour-by-hour day timeline, 7-day Week Plan and event Countdowns in one hub.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
   { id: 'pomodoro', pack: 'work', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
   { id: 'money', pack: 'money', name: 'Money & Bills', about: 'Online & Cash accounts, PayLater (BNPL), monthly expenses & budgets, subscriptions and household bills in one hub.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
@@ -23,7 +23,7 @@ const MODULES = [
   { id: 'travel', pack: 'plan', name: 'Travel', about: 'Trips with a packing list, a plan for each day and what it costs against your budget.', script: 'mod-travel.js', style: 'mod-travel.css', view: 'Travel' },
   { id: 'time', pack: 'work', name: 'Projects & Time', subLabel: 'Time & Reports', about: 'Kanban project boards (To do / Doing / Done), project timers, manual hours and weekly or monthly invoice reports in one hub.', script: 'mod-time.js', style: 'mod-time.css', view: 'Projects', requires: ['tasks'] },
   { id: 'projects', hub: 'time', pack: 'work', name: 'Projects', subLabel: 'Project Board', about: 'One page per project: its tasks and how far along they are, the time you put in and what it earns. Uses the Time Tracker projects.', script: 'mod-projects.js', style: 'mod-projects.css', view: 'Projects', requires: ['tasks', 'time'] },
-  { id: 'links', pack: 'work', name: 'Bookmarks', about: 'Save links, articles and videos to read later, organised by #tag and searchable from Ctrl+K.', script: 'mod-links.js', style: 'mod-links.css', view: 'Links' },
+  { id: 'links', hub: 'notes', pack: 'work', name: 'Bookmarks', subLabel: 'Bookmarks', about: 'Save links, articles and videos to read later, organised by #tag and searchable from Ctrl+K.', script: 'mod-links.js', style: 'mod-links.css', view: 'Links' },
   { id: 'plan', hub: 'calendar', pack: 'plan', name: 'Week plan', subLabel: 'Week Plan', about: 'Plan the week on one page: seven days with what is already on them, and the open tasks that still have no day. Press 1 to 7 to put a task on a day.', script: 'mod-plan.js', style: 'mod-plan.css', view: 'Plan', requires: ['tasks'] },
   { id: 'xp', pack: 'smart', name: 'Levels', about: 'XP and levels for what you do: tasks done, habits kept, focus, time, journal days and more. One band on Home, and a short message at each level.', script: 'mod-xp.js', style: 'mod-xp.css' },
   { id: 'widget', pack: 'smart', name: 'Today widget', about: 'A small window that stays on top with today\u2019s numbers. Ctrl+Alt+W (changeable in Settings) shows or hides it, a click opens the module.', script: 'mod-widget.js' },
@@ -35,7 +35,7 @@ const MODULES = [
   { id: 'insights', pack: 'smart', name: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
   { id: 'assistant', pack: 'smart', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
   { id: 'review', pack: 'smart', name: 'Review', about: 'A dashboard of your day, week, month or year from every module you use: numbers, charts and a summary you can copy.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
-  { id: 'cards', pack: 'smart', name: 'Flashcards', about: 'Spaced-repetition flashcards (5 Leitner boxes: 1, 3, 7, 14 and 30 days) to remember vocabulary, concepts and notes.', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
+  { id: 'cards', hub: 'notes', pack: 'smart', name: 'Flashcards', subLabel: 'Flashcards', about: 'Spaced-repetition flashcards (5 Leitner boxes: 1, 3, 7, 14 and 30 days) to remember vocabulary, concepts and notes.', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
 ];
 
 // Packages: Home shows the modules in a few sets instead of one long list. A new module names its set with `pack`.
