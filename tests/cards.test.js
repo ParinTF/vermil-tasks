@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, importCardPack, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 
 test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Again', () => {
@@ -66,7 +66,7 @@ test('deckSummary counts due, mastered (s >= 10 or Box 4-5) and sorted deck name
   assert.equal(xp.gained, 2);
 });
 
-test('TOEIC_PACKS has 400 unique, valid chunk cards and importCardPack deduplicates cleanly', () => {
+test('TOEIC_PACKS has 1000 unique, valid chunk cards across 20 packs and studyQueue paces daily new cards', () => {
   const seenFront = new Set();
   const all = [];
   for (const p of TOEIC_PACKS) {
@@ -81,15 +81,26 @@ test('TOEIC_PACKS has 400 unique, valid chunk cards and importCardPack deduplica
       all.push({ deck: p.deck, front, back, example });
     }
   }
-  assert.equal(all.length, 400);
+  assert.equal(TOEIC_PACKS.length, 20);
+  assert.equal(all.length, 1000);
 
   let seq = 0;
   const first = importCardPack([], all, '2026-11-16', () => `t-${++seq}`);
-  assert.equal(first.added, 400);
-  assert.equal(first.cards.length, 400);
-  assert.equal(first.cards[0].next, '2026-11-16');
+  assert.equal(first.added, 1000);
+  assert.equal(first.cards.length, 1000);
 
   const second = importCardPack(first.cards, all, '2026-11-16', () => `t-${++seq}`);
   assert.equal(second.added, 0);
-  assert.equal(second.cards.length, 400);
+  assert.equal(second.cards.length, 1000);
+
+  // studyQueue keeps FSRS due reviews uncapped while pacing unseen new cards per day
+  const mixed = [
+    { id: 'r1', next: '2026-11-15', lastReviewed: '2026-11-10' },
+    ...first.cards.slice(0, 50),
+  ];
+  const paced = studyQueue(mixed, '2026-11-16', { newLimit: 20, newDoneToday: 5 });
+  assert.equal(paced.reviewsDue, 1);
+  assert.equal(paced.newShown, 15);
+  assert.equal(paced.queue.length, 16);
+  assert.equal(paced.queue[0].id, 'r1');
 });
