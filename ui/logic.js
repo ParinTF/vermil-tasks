@@ -1504,4 +1504,175 @@ function scoreQuiz(questions = [], answers = []) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+// ETS TOEIC Reading conversion (raw 0..100 -> scaled 5..495) and official CEFR cutoffs
+const TOEIC_READING_ANCHORS = [
+  [0, 5], [10, 5], [15, 30], [25, 80], [40, 155],
+  [55, 235], [70, 325], [85, 415], [95, 475], [98, 495], [100, 495],
+];
+
+function toeicReadingScore(correct = 0, total = 100) {
+  if (!total || correct <= 0) return 5;
+  const raw = Math.max(0, Math.min(100, Math.round((correct / total) * 100)));
+  for (let i = 1; i < TOEIC_READING_ANCHORS.length; i++) {
+    const [x0, y0] = TOEIC_READING_ANCHORS[i - 1];
+    const [x1, y1] = TOEIC_READING_ANCHORS[i];
+    if (raw <= x1) {
+      const y = x1 === x0 ? y1 : y0 + ((raw - x0) / (x1 - x0)) * (y1 - y0);
+      return Math.max(5, Math.min(495, Math.round(y / 5) * 5));
+    }
+  }
+  return 495;
+}
+
+function toeicCefrBand(scaled = 5) {
+  if (scaled >= 455) return 'C1';
+  if (scaled >= 385) return 'B2';
+  if (scaled >= 275) return 'B1';
+  if (scaled >= 115) return 'A2';
+  return 'A1';
+}
+
+const EXAM_PERMS3 = [
+  [0, 1, 2], [0, 2, 1], [1, 0, 2],
+  [1, 2, 0], [2, 0, 1], [2, 1, 0],
+];
+
+function shuffleExamChoices(choices = [], ans = 0, seed = 0) {
+  if (!Array.isArray(choices) || choices.length !== 4) return { choices: [...(choices || [])], ans };
+  const targetPos = Math.abs(seed) % 4;
+  const wrong = choices.filter((_, idx) => idx !== ans);
+  const p = EXAM_PERMS3[Math.abs(seed * 7 + Math.floor(seed / 4)) % 6];
+  const ordered = [null, null, null, null];
+  ordered[targetPos] = choices[ans];
+  let wi = 0;
+  for (let pos = 0; pos < 4; pos++) {
+    if (pos !== targetPos) ordered[pos] = wrong[p[wi++]];
+  }
+  return { choices: ordered, ans: targetPos };
+}
+
+function buildMockExam(setNum = 1, { p5Pool = [], p6Passages = [], p7Groups = [] } = {}) {
+  const s = Number(setNum) || 1;
+  const pureP5 = (p5Pool || []).filter((x) => x && x.tag !== 'Part 6 Context');
+  const p5Items = pureP5.filter((_, idx) => idx % 30 === s - 1).slice(0, 30);
+  const out = [];
+  let qNum = 101;
+
+  p5Items.forEach((item) => {
+    const bal = shuffleExamChoices(item.choices, item.ans, s * 13 + qNum);
+    out.push({
+      id: `m${s}-q${qNum}`,
+      set: s,
+      num: qNum++,
+      part: 5,
+      tag: item.tag || 'Part 5',
+      q: item.q,
+      choices: bal.choices,
+      ans: bal.ans,
+      why: item.why,
+      groupId: null,
+      passages: null,
+    });
+  });
+
+  const p6List = (p6Passages || []).filter((p) => p && Number(p.set) === s);
+  p6List.forEach((p, gi) => {
+    const startNum = qNum;
+    const docs = [{ ...(p.doc || p), baseNum: startNum, kindLabel: p.label || p.doc?.label || 'Text Completion' }];
+    const groupId = p.id || `m${s}-p6-${gi + 1}`;
+    (p.questions || []).forEach((qq, qi) => {
+      const choices = qq.choices || qq[2];
+      const rawAns = qq.ans !== undefined ? qq.ans : qq[3];
+      const why = qq.why || qq[4];
+      const tag = qq.tag || qq[0] || 'Part 6';
+      const q = qq.q || qq[1] || `Blank [${startNum + qi}]`;
+      const bal = shuffleExamChoices(choices, rawAns, s * 17 + qNum);
+      out.push({
+        id: `m${s}-q${qNum}`,
+        set: s,
+        num: qNum++,
+        part: 6,
+        blankIndex: qi + 1,
+        tag,
+        q,
+        choices: bal.choices,
+        ans: bal.ans,
+        why,
+        groupId,
+        groupRange: `${startNum}–${startNum + (p.questions || []).length - 1}`,
+        passages: docs,
+      });
+    });
+  });
+
+  const p7List = (p7Groups || []).filter((g) => g && Number(g.set) === s);
+  p7List.forEach((g, gi) => {
+    const docs = g.docs || (g.doc ? [g.doc] : []);
+    const qs = g.questions || [];
+    const startNum = qNum;
+    const groupId = g.id || `m${s}-p7-${gi + 1}`;
+    qs.forEach((qq) => {
+      const choices = qq.choices || qq[2];
+      const rawAns = qq.ans !== undefined ? qq.ans : qq[3];
+      const why = qq.why || qq[4];
+      const tag = qq.tag || qq[0] || (docs.length >= 3 ? 'Triple Passage' : docs.length === 2 ? 'Double Passage' : 'Single Passage');
+      const q = qq.q || qq[1];
+      const bal = shuffleExamChoices(choices, rawAns, s * 29 + qNum);
+      out.push({
+        id: `m${s}-q${qNum}`,
+        set: s,
+        num: qNum++,
+        part: 7,
+        multi: docs.length > 1,
+        docCount: docs.length,
+        tag,
+        q,
+        choices: bal.choices,
+        ans: bal.ans,
+        why,
+        groupId,
+        groupRange: `${startNum}–${startNum + qs.length - 1}`,
+        passages: docs,
+      });
+    });
+  });
+
+  return out;
+}
+
+function scoreMockExam(questions = [], answers = [], elapsedSec = 0) {
+  const base = scoreQuiz(questions, answers);
+  const scaled = toeicReadingScore(base.correct, base.total || 100);
+  const band = toeicCefrBand(scaled);
+  const parts = {
+    5: { correct: 0, total: 0 },
+    6: { correct: 0, total: 0 },
+    7: { correct: 0, total: 0, singleCorrect: 0, singleTotal: 0, multiCorrect: 0, multiTotal: 0 },
+  };
+  for (let i = 0; i < questions.length; i++) {
+    const q = questions[i];
+    const p = parts[q.part] || parts[7];
+    const ok = answers[i] === q.ans;
+    p.total++;
+    if (ok) p.correct++;
+    if (q.part === 7) {
+      if (q.multi) {
+        parts[7].multiTotal++;
+        if (ok) parts[7].multiCorrect++;
+      } else {
+        parts[7].singleTotal++;
+        if (ok) parts[7].singleCorrect++;
+      }
+    }
+  }
+  return {
+    ...base,
+    scaled,
+    band,
+    elapsedSec,
+    parts,
+    missed: base.missed.map((m) => ({ ...m, num: m.question.num, part: m.question.part })),
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, shuffleExamChoices, buildMockExam, scoreMockExam, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };

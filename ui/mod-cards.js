@@ -1,16 +1,21 @@
 // Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler (Again / Hard / Good / Easy) with context examples.
 // Data: { cards: [{ id, deck, front, back, example?, s?, d?, ivl?, lapses?, box, next, lastReviewed, reviews }] }.
 (() => {
-  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {} };
+  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, mockProgress: {} };
   let mode = 'study'; // 'study' | 'quiz' | 'browse'
   let activeDeck = '';
   let revealed = false;
-  let quizSource = 'sets'; // 'sets' (20 x 50-question sets) | 'topic' (by topic) | 'cards' (1,000 chunks / own cards)
+  let quizSource = 'mock'; // 'mock' (30 x 100-Q Reading Mock) | 'sets' (20 x 50-Q Part 5) | 'topic' (1,000 Qs) | 'cards'
   let quizSet = 1;
   let quizTag = '';
   let quizCount = 10;
   let quizSyncFsrs = true;
   let quizState = null; // { source, set, questions, answers, index, recorded }
+  let mockExamMode = 'exam'; // 'exam' (75m timed, submit at end) | 'practice' (untimed, instant reveal)
+  let mockSession = null;
+  let loadingMockSet = 0;
+  let mockTimer = null;
+  const EXAM_SEC = 75 * 60;
   const save = () => saveModule('cards', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('cards-view');
   const today = () => localDay(new Date());
@@ -24,7 +29,7 @@
           el('h2', {}, 'Flashcards'),
           el('div', { className: 'fc-modes', role: 'tablist', ariaLabel: 'Flashcards mode' },
             el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { mode = 'study'; revealed = false; paint(); } }, 'Study'),
-            el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (!quizState) startQuiz(); else paint(); } }, 'Test'),
+            el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (quizSource !== 'mock' && !quizState) startQuiz(); else paint(); } }, 'Test'),
             el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { mode = 'browse'; paint(); } }, 'All cards'))),
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
         el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
@@ -122,8 +127,535 @@
     paint();
   }
 
+  function formatClock(sec = 0) {
+    const s = Math.max(0, Math.floor(sec));
+    const m = Math.floor(s / 60);
+    const r = s % 60;
+    return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
+  }
+
+  function persistMockProgress() {
+    if (!mockSession || mockSession.submitted) return;
+    const key = String(mockSession.set);
+    data.mockProgress = {
+      ...(data.mockProgress || {}),
+      [key]: {
+        answers: mockSession.answers,
+        flags: mockSession.flags,
+        elapsed: mockSession.elapsed,
+        index: mockSession.index,
+        examMode: mockSession.examMode,
+      },
+    };
+    save();
+  }
+
+  function stopMockTimer() {
+    if (mockTimer) { clearInterval(mockTimer); mockTimer = null; }
+  }
+
+  function syncMockTimer() {
+    const active = mode === 'quiz' && quizSource === 'mock' && mockSession && !mockSession.submitted && !mockSession.paused && mockSession.examMode === 'exam';
+    if (!active) { stopMockTimer(); return; }
+    if (mockTimer) return;
+    mockTimer = setInterval(() => {
+      if (!mockSession || mockSession.submitted || mockSession.paused || mode !== 'quiz' || quizSource !== 'mock') { stopMockTimer(); return; }
+      mockSession.elapsed++;
+      const left = Math.max(0, EXAM_SEC - mockSession.elapsed);
+      const tEl = $('fc-mk-timer');
+      if (tEl) {
+        tEl.textContent = formatClock(left);
+        tEl.className = 'fc-mk-timer' + (left <= 300 ? ' warn' : '');
+      }
+      if (mockSession.elapsed % 15 === 0) persistMockProgress();
+      if (left <= 0) {
+        stopMockTimer();
+        submitMockExam(true);
+      }
+    }, 1000);
+  }
+
+  async function ensureMockVolume(setNum) {
+    if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
+      await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' });
+    }
+    if (typeof TOEIC_MOCK_P6 === 'undefined' && !$('script-toeic-mock-p6')) {
+      await loadFile('script', { src: 'toeic-mock-p6.js', id: 'script-toeic-mock-p6' });
+    }
+    const vol = Math.ceil((Number(setNum) || 1) / 5);
+    const vols = globalThis.TOEIC_MOCK_VOLS || {};
+    if (!vols[vol] && !$(`script-toeic-mock-${vol}`)) {
+      await loadFile('script', { src: `toeic-mock-${vol}.js`, id: `script-toeic-mock-${vol}` });
+    }
+    return (globalThis.TOEIC_MOCK_VOLS || {})[vol] || [];
+  }
+
+  async function startMockExam(setNum = 1, { resume = false, examMode = mockExamMode } = {}) {
+    const s = Number(setNum) || 1;
+    loadingMockSet = s;
+    paint();
+    try {
+      const p7Groups = await ensureMockVolume(s);
+      const p5Pool = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+      const p6Passages = typeof TOEIC_MOCK_P6 !== 'undefined' ? TOEIC_MOCK_P6 : [];
+      const questions = buildMockExam(s, { p5Pool, p6Passages, p7Groups });
+      loadingMockSet = 0;
+      if (!questions.length) {
+        tell(`Mock Exam Set ${s} could not be loaded.`);
+        paint();
+        return;
+      }
+      const saved = resume ? data.mockProgress?.[String(s)] : null;
+      const len = questions.length;
+      const answers = saved?.answers?.length === len ? [...saved.answers] : new Array(len).fill(null);
+      const flags = saved?.flags?.length === len ? [...saved.flags] : new Array(len).fill(false);
+      mockSession = {
+        set: s,
+        examMode: saved?.examMode || examMode,
+        questions,
+        answers,
+        flags,
+        index: saved ? Math.max(0, Math.min(len - 1, saved.index || 0)) : 0,
+        elapsed: saved ? Number(saved.elapsed) || 0 : 0,
+        paused: false,
+        navOpen: false,
+        docTab: 'all',
+        submitted: false,
+        report: null,
+        revFilter: 'missed',
+        revPart: 0,
+      };
+      quizSource = 'mock';
+      paint();
+    } catch (e) {
+      loadingMockSet = 0;
+      tell('Could not load mock exam data: ' + (e.message || e));
+      paint();
+    }
+  }
+
+  async function submitMockExam(autoTimedOut = false) {
+    if (!mockSession || mockSession.submitted) return;
+    const unanswered = mockSession.answers.filter((a) => a === null || a === undefined).length;
+    if (!autoTimedOut && unanswered > 0) {
+      if (!(await ask(`You still have ${unanswered} unanswered question${unanswered === 1 ? '' : 's'}. Submit Mock Set ${mockSession.set} and calculate your score?`, 'Submit'))) return;
+    }
+    stopMockTimer();
+    const report = scoreMockExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
+    mockSession.submitted = true;
+    mockSession.report = report;
+    mockSession.paused = false;
+    mockSession.navOpen = false;
+    mockSession.docTab = 'all';
+    mockSession.revFilter = report.missed.length ? 'missed' : 'all';
+    mockSession.revPart = 0;
+    mockSession.index = report.missed[0]?.index ?? 0;
+
+    const key = String(mockSession.set);
+    const prev = data.mockScores?.[key];
+    data.mockScores = {
+      ...(data.mockScores || {}),
+      [key]: {
+        bestScaled: Math.max(prev?.bestScaled || 0, report.scaled),
+        bestRaw: Math.max(prev?.bestRaw || 0, report.correct),
+        lastScaled: report.scaled,
+        lastRaw: report.correct,
+        band: toeicCefrBand(Math.max(prev?.bestScaled || 0, report.scaled)),
+        attempts: (prev?.attempts || 0) + 1,
+        parts: report.parts,
+      },
+    };
+    if (data.mockProgress?.[key]) {
+      const copy = { ...data.mockProgress };
+      delete copy[key];
+      data.mockProgress = copy;
+    }
+    save();
+    emit('card-reviewed', { key: `mock:${mockSession.set}:${today()}` });
+    paint();
+  }
+
+  function answerMock(choiceIdx) {
+    if (!mockSession || mockSession.submitted || mockSession.paused) return;
+    const i = mockSession.index;
+    const picked = mockSession.answers[i];
+    if (mockSession.examMode === 'practice' && picked !== null && picked !== undefined) return;
+    mockSession.answers[i] = choiceIdx;
+    persistMockProgress();
+    paint();
+  }
+
+  function toggleMockFlag(idx = mockSession?.index) {
+    if (!mockSession || mockSession.submitted || idx === undefined || idx === null) return;
+    mockSession.flags[idx] = !mockSession.flags[idx];
+    persistMockProgress();
+    paint();
+  }
+
+  function gotoMockQuestion(idx) {
+    if (!mockSession) return;
+    const prevQ = mockSession.questions[mockSession.index];
+    const nextIdx = Math.max(0, Math.min(mockSession.questions.length - 1, idx));
+    const nextQ = mockSession.questions[nextIdx];
+    mockSession.index = nextIdx;
+    if (prevQ?.groupId !== nextQ?.groupId) mockSession.docTab = 'all';
+    mockSession.navOpen = false;
+    if (!mockSession.submitted && mockSession.elapsed > 0) persistMockProgress();
+    paint();
+  }
+
+  function renderAnnotatedText(text, doc, activeQ, answers) {
+    const str = String(text || '');
+    const tokens = str.split(/(\[[1-4]\])/g);
+    const frag = [];
+    for (const tok of tokens) {
+      const m = tok.match(/^\[([1-4])\]$/);
+      if (!m) { if (tok) frag.push(tok); continue; }
+      const slot = Number(m[1]);
+      if (doc.baseNum) {
+        const qNum = doc.baseNum + slot - 1;
+        const qIdx = qNum - 101;
+        const picked = answers?.[qIdx];
+        const isCurrent = activeQ && activeQ.num === qNum;
+        const LETTERS = ['A', 'B', 'C', 'D'];
+        const filled = picked !== null && picked !== undefined;
+        frag.push(el('span', {
+          className: 'fc-mk-blank' + (isCurrent ? ' active' : '') + (filled ? ' filled' : ''),
+          onclick: () => gotoMockQuestion(qIdx),
+        }, filled ? `[${qNum} · ${LETTERS[picked]}]` : `[${qNum}]`));
+      } else {
+        frag.push(el('span', { className: 'fc-mk-slot' }, tok));
+      }
+    }
+    return el('p', { className: 'fc-mk-p' }, ...frag);
+  }
+
+  function renderPassageDoc(doc, idx, totalDocs, activeQ, answers) {
+    const blocks = (doc.blocks || []).map((b) => {
+      if (typeof b === 'string') return renderAnnotatedText(b, doc, activeQ, answers);
+      if (b?.type === 'list') return el('ul', { className: 'fc-mk-list' }, ...(b.items || []).map((it) => el('li', {}, it)));
+      if (b?.type === 'table') {
+        return el('div', { className: 'fc-mk-tblwrap' },
+          el('table', { className: 'fc-mk-tbl' },
+            ...(b.headers ? [el('thead', {}, el('tr', {}, ...b.headers.map((h) => el('th', {}, h))))] : []),
+            el('tbody', {}, ...(b.rows || []).map((row) => el('tr', {}, ...row.map((cell) => el('td', {}, cell)))))));
+      }
+      if (b?.type === 'chat') {
+        return el('div', { className: 'fc-mk-chat' }, ...(b.msgs || []).map(([who, time, body]) => el('div', { className: 'fc-mk-msg' },
+          el('div', { className: 'fc-mk-msghead' }, el('b', {}, who), el('small', {}, time)),
+          el('p', {}, body))));
+      }
+      if (b?.type === 'box') {
+        return el('div', { className: 'fc-mk-box' },
+          ...(b.title ? [el('strong', {}, b.title)] : []),
+          ...(b.lines || []).map((line) => el('span', {}, line)));
+      }
+      return null;
+    }).filter(Boolean);
+
+    const metaEl = doc.meta?.length
+      ? el('dl', { className: 'fc-mk-meta' }, ...doc.meta.flatMap(([k, v]) => [el('dt', {}, `${k}:`), el('dd', {}, v)]))
+      : null;
+
+    return el('article', { className: 'fc-mk-doc' },
+      el('div', { className: 'fc-mk-dochead' },
+        el('span', { className: 'fc-mk-dkind' }, totalDocs > 1 ? `Document ${idx + 1} · ${doc.kind || 'Reading'}` : (doc.kind || doc.kindLabel || 'Reading')),
+        ...(doc.title ? [el('span', { className: 'fc-mk-dtitle' }, doc.title)] : [])),
+      ...(metaEl ? [metaEl] : []),
+      ...blocks);
+  }
+
+  function renderMockNavigator() {
+    const qs = mockSession.questions;
+    const parts = [
+      ['Part 5 · Incomplete Sentences (101–130)', qs.filter((x) => x.part === 5)],
+      ['Part 6 · Text Completion (131–146)', qs.filter((x) => x.part === 6)],
+      ['Part 7 · Reading Comprehension (147–200)', qs.filter((x) => x.part === 7)],
+    ].filter(([, arr]) => arr.length);
+
+    return el('div', { className: 'fc-mk-nav' },
+      el('div', { className: 'fc-mk-navhead' },
+        el('b', {}, `Answer Sheet Navigator · ${mockSession.answers.filter((a) => a !== null && a !== undefined).length}/${qs.length} answered`),
+        el('button', { type: 'button', className: 'linkish', onclick: () => { mockSession.navOpen = false; paint(); } }, 'Close ✕')),
+      ...parts.map(([title, list]) => el('div', { className: 'fc-mk-navpart' },
+        el('small', {}, title),
+        el('div', { className: 'fc-mk-bubbles' }, ...list.map((item) => {
+          const i = item.num - 101;
+          const picked = mockSession.answers[i];
+          const answered = picked !== null && picked !== undefined;
+          let cls = 'fc-mk-bub';
+          if (i === mockSession.index) cls += ' cur';
+          if (mockSession.submitted) cls += (picked === item.ans ? ' ok' : ' bad');
+          else if (answered) cls += ' ans';
+          if (mockSession.flags[i]) cls += ' flag';
+          return el('button', {
+            type: 'button',
+            className: cls,
+            onclick: () => gotoMockQuestion(i),
+          }, String(item.num));
+        })))));
+  }
+
+  function sourceBar() {
+    const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+    const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
+    return el('div', { className: 'fc-qz-sources', role: 'group', ariaLabel: 'Test bank' },
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'mock' ? ' active' : ''), onclick: () => { quizSource = 'mock'; paint(); } }, 'Mock Exam (30 Sets · 100 Qs)'),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'sets' ? ' active' : ''), onclick: () => startQuiz('sets', { set: quizSet }) }, 'Part 5 Sets (20 × 50 Qs)'),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'topic' ? ' active' : ''), onclick: () => startQuiz('topic', { tag: quizTag, count: quizCount }) }, `By Topic (${tags.length})`),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => startQuiz('cards', { count: quizCount }) }, `My Decks / Chunks (${data.cards.length})`));
+  }
+
+  function paintMock(stage) {
+    const LETTERS = ['A', 'B', 'C', 'D'];
+    // Lobby when no active mock test session
+    if (!mockSession) {
+      const doneEntries = Object.values(data.mockScores || {});
+      const bestTop = doneEntries.reduce((mx, r) => Math.max(mx, r.bestScaled || 0), 0);
+      const inProgKeys = Object.keys(data.mockProgress || {}).filter((k) => (data.mockProgress[k]?.answers || []).some((a) => a !== null && a !== undefined));
+      const resumeKey = inProgKeys.sort((a, b) => Number(b) - Number(a))[0];
+      const resumeProg = resumeKey ? data.mockProgress[resumeKey] : null;
+
+      const resumeBanner = resumeProg
+        ? el('div', { className: 'fc-mk-resume' },
+            el('div', {},
+              el('strong', {}, `Mock Set ${resumeKey} in progress · Q${101 + (resumeProg.index || 0)}/200`),
+              el('small', {}, `${resumeProg.answers.filter((a) => a !== null && a !== undefined).length}/100 answered · ${resumeProg.examMode === 'exam' ? `${formatClock(Math.max(0, EXAM_SEC - (resumeProg.elapsed || 0)))} remaining` : 'Practice Mode'}`)),
+            el('button', {
+              type: 'button',
+              className: 'primary',
+              onclick: () => startMockExam(Number(resumeKey), { resume: true }),
+            }, el('span', {}, `Resume Set ${resumeKey}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')))
+        : null;
+
+      const grid = el('div', { className: 'fc-mk-grid', role: 'group', ariaLabel: '30 Full TOEIC Reading Mock Sets' },
+        ...Array.from({ length: 30 }, (_, idx) => {
+          const s = idx + 1;
+          const sc = data.mockScores?.[String(s)];
+          const prog = data.mockProgress?.[String(s)];
+          const hasProg = prog && (prog.answers || []).some((a) => a !== null && a !== undefined);
+          const isLoad = loadingMockSet === s;
+          return el('button', {
+            type: 'button',
+            className: 'fc-mk-setcard' + (sc ? ' scored' : '') + (hasProg ? ' inprog' : '') + (isLoad ? ' disabled' : ''),
+            disabled: loadingMockSet > 0,
+            onclick: () => startMockExam(s, { resume: Boolean(hasProg) }),
+          },
+          el('b', {}, `Mock ${s}`, ...(sc ? [el('span', { className: 'fc-mk-band' }, sc.band || toeicCefrBand(sc.bestScaled))] : [])),
+          el('small', {}, isLoad ? 'Loading…' : sc ? `Best ${sc.bestScaled}/495 (${sc.bestRaw}/100)` : hasProg ? `Resume Q${101 + (prog.index || 0)}` : '100 Qs · Part 5–7'));
+        }));
+
+      stage.replaceChildren(
+        el('div', { className: 'fc-qz-bar' }, sourceBar()),
+        el('div', { className: 'fc-mk-lobby' },
+          el('div', { className: 'fc-mk-modebar' },
+            el('div', { className: 'fc-mk-modepills', role: 'group', ariaLabel: 'Mock exam mode' },
+              el('button', { type: 'button', className: 'tag-pill' + (mockExamMode === 'exam' ? ' active' : ''), onclick: () => { mockExamMode = 'exam'; paint(); } }, 'Exam Mode (75 min · 5–495 Score)'),
+              el('button', { type: 'button', className: 'tag-pill' + (mockExamMode === 'practice' ? ' active' : ''), onclick: () => { mockExamMode = 'practice'; paint(); } }, 'Practice Mode (Untimed · Instant Review)')),
+            el('span', { className: 'fc-mk-stats' }, `${doneEntries.length}/30 sets completed` + (bestTop ? ` · Peak: ${bestTop}/495` : ''))),
+          ...(resumeBanner ? [resumeBanner] : []),
+          grid));
+      return;
+    }
+
+    // Score Report & Post-Exam Inspector when submitted
+    if (mockSession.submitted && mockSession.report) {
+      const r = mockSession.report;
+      const filteredList = mockSession.questions.map((q, idx) => ({ q, idx, pick: mockSession.answers[idx], flag: mockSession.flags[idx] }))
+        .filter(({ q, pick, flag }) => {
+          if (mockSession.revPart && q.part !== mockSession.revPart) return false;
+          if (mockSession.revFilter === 'missed') return pick !== q.ans;
+          if (mockSession.revFilter === 'flagged') return flag;
+          return true;
+        });
+      const activeItem = filteredList.find((x) => x.idx === mockSession.index) || filteredList[0];
+      if (activeItem && activeItem.idx !== mockSession.index) mockSession.index = activeItem.idx;
+      const aq = activeItem?.q;
+      const aIdx = activeItem?.idx ?? 0;
+      const aPick = mockSession.answers[aIdx];
+
+      const passagePane = aq?.passages?.length
+        ? el('div', { className: 'fc-mk-passage' },
+            el('div', { className: 'fc-mk-phead' },
+              el('span', {}, `Questions ${aq.groupRange || aq.num} · Review`)),
+            ...aq.passages.map((d, di) => renderPassageDoc(d, di, aq.passages.length, aq, mockSession.answers)))
+        : null;
+
+      const reviewDetail = aq
+        ? el('div', { className: 'fc-mk-split' + (passagePane ? '' : ' single') },
+            ...(passagePane ? [passagePane] : []),
+            el('div', { className: 'fc-mk-qpane' },
+              el('div', { className: 'fc-card fc-qz-card' },
+                el('div', { className: 'fc-card-meta' },
+                  el('span', {}, `Q${aq.num} · Part ${aq.part} · ${aq.tag}`),
+                  el('span', {}, aPick === aq.ans ? '✓ Correct' : aPick === null ? '— Skipped' : '✕ Missed')),
+                el('div', { className: 'fc-qz-q' }, aq.q),
+                el('div', { className: 'fc-qz-choices' }, ...aq.choices.map((ch, ci) => {
+                  let cls = 'fc-qz-opt';
+                  if (ci === aq.ans) cls += ' right';
+                  else if (ci === aPick) cls += ' wrong';
+                  else cls += ' dim';
+                  return el('button', { type: 'button', className: cls, disabled: true },
+                    el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, ch));
+                })),
+                el('div', { className: 'fc-qz-explain ' + (aPick === aq.ans ? 'ok' : 'bad') },
+                  el('strong', {}, aPick === aq.ans
+                    ? `✓ Correct (${LETTERS[aq.ans]})`
+                    : aPick === null || aPick === undefined
+                      ? `Unanswered — Correct answer is (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`
+                      : `✕ Your pick: (${LETTERS[aPick]})  →  Correct: (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`),
+                  el('div', { className: 'fc-qz-why' }, ...String(aq.why || '').split('\n').map((line) => el('p', {}, line)))))))
+        : el('p', { className: 'fc-qz-perfect' }, 'No questions match this review filter — great work!');
+
+      stage.replaceChildren(
+        el('div', { className: 'fc-mk-report' },
+          el('div', { className: 'fc-mk-hud' },
+            el('div', { className: 'fc-mk-hud-l' },
+              el('button', { type: 'button', className: 'linkish', onclick: () => { mockSession = null; paint(); } }, '← All 30 Mock Sets'),
+              el('strong', {}, `Mock Set ${mockSession.set} Score Report`)),
+            el('div', { className: 'fc-mk-hud-r' },
+              el('button', { type: 'button', className: 'fc-grade', onclick: () => startMockExam(mockSession.set, { resume: false }) }, el('b', {}, `Retake Set ${mockSession.set}`)),
+              ...(mockSession.set < 30 ? [el('button', { type: 'button', className: 'primary', onclick: () => startMockExam(mockSession.set + 1) }, el('span', {}, `Next: Set ${mockSession.set + 1}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))] : []))),
+          el('div', { className: 'fc-mk-hero' },
+            el('div', { className: 'fc-mk-hero-score' },
+              el('b', {}, `${r.scaled}`),
+              el('small', {}, `/ 495 · CEFR ${r.band}`)),
+            el('div', {},
+              el('strong', {}, `${r.correct} / ${r.total} Correct (${r.pct}%)`),
+              el('small', { style: { display: 'block', color: 'var(--mute)' } }, `${mockSession.examMode === 'exam' ? `Time used: ${formatClock(r.elapsedSec)} / 75:00` : `Untimed Practice · ${formatClock(r.elapsedSec)}`}`))),
+          el('div', { className: 'fc-mk-parts' },
+            el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 5 · Sentences'), el('b', {}, `${r.parts[5].correct} / ${r.parts[5].total}`), el('span', {}, `${Math.round(r.parts[5].correct / (r.parts[5].total || 1) * 100)}% accuracy`)),
+            el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 6 · Text Completion'), el('b', {}, `${r.parts[6].correct} / ${r.parts[6].total}`), el('span', {}, `${Math.round(r.parts[6].correct / (r.parts[6].total || 1) * 100)}% accuracy`)),
+            el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 7 · Reading'), el('b', {}, `${r.parts[7].correct} / ${r.parts[7].total}`), el('span', {}, `Single ${r.parts[7].singleCorrect}/${r.parts[7].singleTotal} · Multi ${r.parts[7].multiCorrect}/${r.parts[7].multiTotal}`))),
+          el('div', { className: 'fc-mk-revbar' },
+            el('div', { className: 'fc-mk-modepills' },
+              ...[['missed', `Missed (${r.missed.length + (r.total - r.answered)})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${r.total})`]].map(([id, lbl]) => el('button', {
+                type: 'button',
+                className: 'tag-pill' + (mockSession.revFilter === id ? ' active' : ''),
+                onclick: () => { mockSession.revFilter = id; paint(); },
+              }, lbl))),
+            el('div', { className: 'fc-mk-modepills' },
+              ...[[0, 'All Parts'], [5, 'Part 5'], [6, 'Part 6'], [7, 'Part 7']].map(([p, lbl]) => el('button', {
+                type: 'button',
+                className: 'tag-pill' + (mockSession.revPart === p ? ' active' : ''),
+                onclick: () => { mockSession.revPart = p; paint(); },
+              }, lbl)))),
+          ...(filteredList.length ? [el('div', { className: 'fc-mk-revstrip' }, ...filteredList.map(({ q, idx, pick, flag }) => el('button', {
+            type: 'button',
+            className: 'fc-mk-bub' + (idx === aIdx ? ' cur' : '') + (pick === q.ans ? ' ok' : ' bad') + (flag ? ' flag' : ''),
+            onclick: () => { mockSession.index = idx; paint(); },
+          }, String(q.num))))] : []),
+          reviewDetail));
+      return;
+    }
+
+    // Active Mock Exam / Practice workspace
+    const qs = mockSession.questions;
+    const i = mockSession.index;
+    const q = qs[i];
+    const picked = mockSession.answers[i];
+    const answeredCount = mockSession.answers.filter((a) => a !== null && a !== undefined).length;
+    const flaggedCount = mockSession.flags.filter(Boolean).length;
+    const remainingSec = Math.max(0, EXAM_SEC - mockSession.elapsed);
+    const sameGroup = q.groupId ? qs.map((x, qi) => ({ num: x.num, qi })).filter((x) => qs[x.qi].groupId === q.groupId) : [];
+
+    const hud = el('div', { className: 'fc-mk-hud' },
+      el('div', { className: 'fc-mk-hud-l' },
+        el('button', { type: 'button', className: 'linkish', onclick: () => { persistMockProgress(); stopMockTimer(); mockSession = null; paint(); } }, '← Exit & Save'),
+        el('strong', {}, `Mock ${mockSession.set}`),
+        el('span', { className: 'fc-mk-partpill' }, `Part ${q.part} · Q${q.num}/200`)),
+      el('div', { className: 'fc-mk-hud-r' },
+        ...(mockSession.examMode === 'exam'
+          ? [
+              el('span', { id: 'fc-mk-timer', className: 'fc-mk-timer' + (remainingSec <= 300 ? ' warn' : '') }, formatClock(remainingSec)),
+              el('button', { type: 'button', className: 'tag-pill', onclick: () => { mockSession.paused = !mockSession.paused; persistMockProgress(); paint(); } }, mockSession.paused ? 'Resume' : 'Pause'),
+            ]
+          : [el('span', { className: 'fc-mk-partpill' }, 'Practice Mode')]),
+        el('span', { className: 'fc-mk-prog' }, `${answeredCount}/100 done${flaggedCount ? ` · ⚑ ${flaggedCount}` : ''}`),
+        el('button', { type: 'button', className: 'tag-pill' + (mockSession.navOpen ? ' active' : ''), onclick: () => { mockSession.navOpen = !mockSession.navOpen; paint(); } }, 'Grid 101–200'),
+        el('button', { type: 'button', className: 'fc-mk-subbtn', onclick: () => submitMockExam(false) }, 'Submit Exam')));
+
+    if (mockSession.paused) {
+      stage.replaceChildren(hud,
+        el('div', { className: 'fc-mk-pausebox' },
+          el('h3', {}, `Mock Exam Set ${mockSession.set} Paused`),
+          el('p', {}, `Progress is saved (${answeredCount}/100 answered · ${formatClock(remainingSec)} left).`),
+          el('button', { type: 'button', className: 'primary', onclick: () => { mockSession.paused = false; paint(); } }, el('span', {}, 'Resume Test'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))));
+      return;
+    }
+
+    const docs = q.passages || [];
+    const showSingleDocIdx = mockSession.docTab === 'all' ? -1 : Number(mockSession.docTab);
+    const visibleDocs = docs.map((d, di) => ({ d, di })).filter(({ di }) => showSingleDocIdx < 0 || di === showSingleDocIdx);
+
+    const passagePane = docs.length
+      ? el('div', { className: 'fc-mk-passage' },
+          el('div', { className: 'fc-mk-phead' },
+            el('span', {}, q.part === 6
+              ? `Questions ${q.groupRange} refer to the following passage.`
+              : `Questions ${q.groupRange} refer to the following ${docs.length >= 3 ? 'three passages' : docs.length === 2 ? 'two passages' : 'passage'}.`),
+            ...(docs.length > 1
+              ? [el('div', { className: 'fc-mk-doctabs' },
+                  el('button', { type: 'button', className: 'tag-pill' + (mockSession.docTab === 'all' ? ' active' : ''), onclick: () => { mockSession.docTab = 'all'; paint(); } }, 'All docs'),
+                  ...docs.map((_, di) => el('button', { type: 'button', className: 'tag-pill' + (String(mockSession.docTab) === String(di) ? ' active' : ''), onclick: () => { mockSession.docTab = String(di); paint(); } }, `Doc ${di + 1}`)))]
+              : [])),
+          ...visibleDocs.map(({ d, di }) => renderPassageDoc(d, di, docs.length, q, mockSession.answers)))
+      : null;
+
+    const showImmediate = mockSession.examMode === 'practice' && picked !== null && picked !== undefined;
+    const choiceBtns = q.choices.map((ch, ci) => {
+      let cls = 'fc-qz-opt fc-mk-opt';
+      if (showImmediate) {
+        if (ci === q.ans) cls += ' right';
+        else if (ci === picked) cls += ' wrong';
+        else cls += ' dim';
+      } else if (picked === ci) {
+        cls += ' picked';
+      }
+      return el('button', {
+        type: 'button',
+        className: cls,
+        disabled: showImmediate,
+        onclick: () => answerMock(ci),
+      }, el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, ch));
+    });
+
+    const qCard = el('div', { className: 'fc-card fc-qz-card' },
+      el('div', { className: 'fc-card-meta' },
+        el('span', {}, `Question ${q.num} · ${q.tag}`),
+        el('button', { type: 'button', className: 'fc-mk-flagbtn' + (mockSession.flags[i] ? ' active' : ''), onclick: () => toggleMockFlag(i) }, mockSession.flags[i] ? '⚑ Flagged (F)' : '⚑ Flag (F)')),
+      el('div', { className: 'fc-qz-q' }, q.q),
+      el('div', { className: 'fc-qz-choices' }, ...choiceBtns),
+      ...(showImmediate
+        ? [el('div', { className: 'fc-qz-explain ' + (picked === q.ans ? 'ok' : 'bad') },
+            el('strong', {}, picked === q.ans ? `✓ Correct (${LETTERS[q.ans]})` : `✕ Incorrect — Correct answer is (${LETTERS[q.ans]}) ${q.choices[q.ans]}`),
+            el('div', { className: 'fc-qz-why' }, ...String(q.why || '').split('\n').map((line) => el('p', {}, line))))]
+        : []),
+      el('div', { className: 'fc-mk-qfoot' },
+        el('button', { type: 'button', className: 'tag-pill', disabled: i === 0, onclick: () => gotoMockQuestion(i - 1) }, '← Prev'),
+        ...(sameGroup.length > 1
+          ? [el('div', { className: 'fc-mk-grppills' }, ...sameGroup.map(({ num, qi }) => el('button', {
+              type: 'button',
+              className: 'fc-mk-bub' + (qi === i ? ' cur' : '') + (mockSession.answers[qi] !== null && mockSession.answers[qi] !== undefined ? ' ans' : '') + (mockSession.flags[qi] ? ' flag' : ''),
+              onclick: () => gotoMockQuestion(qi),
+            }, String(num))))]
+          : []),
+        i + 1 < qs.length
+          ? el('button', { type: 'button', className: 'primary fc-qz-next', onclick: () => gotoMockQuestion(i + 1) }, el('span', {}, 'Next'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))
+          : el('button', { type: 'button', className: 'fc-mk-subbtn', onclick: () => submitMockExam(false) }, 'Finish & Submit →')));
+
+    const navEl = mockSession.navOpen ? renderMockNavigator() : null;
+    stage.replaceChildren(
+      hud,
+      ...(navEl ? [navEl] : []),
+      el('div', { className: 'fc-mk-split' + (passagePane ? '' : ' single') },
+        ...(passagePane ? [passagePane] : []),
+        el('div', { className: 'fc-mk-qpane' }, qCard)));
+  }
+
   function startQuiz(source = quizSource, { set = quizSet, tag = quizTag, count = quizCount } = {}) {
     quizSource = source;
+    if (source === 'mock') { paint(); return; }
     quizSet = Number(set) || 1;
     quizTag = tag;
     quizCount = count;
@@ -180,6 +712,7 @@
   }
 
   function paintQuiz(stage) {
+    if (quizSource === 'mock') { paintMock(stage); return; }
     const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
     const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
     const setNums = [...new Set(curated.map((x) => Number(x.set)).filter((n) => n > 0))].sort((a, b) => a - b);
@@ -196,7 +729,7 @@
       : null;
 
     const setGrid = quizSource === 'sets' && setNums.length
-      ? el('div', { className: 'fc-qz-set-grid', role: 'group', ariaLabel: 'TOEIC Test Sets 1 to 20' },
+      ? el('div', { className: 'fc-qz-set-grid', role: 'group', ariaLabel: 'Part 5 Test Sets 1 to 20' },
           ...setNums.map((n) => {
             const rec = data.quizScores?.[String(n)];
             return el('button', {
@@ -222,10 +755,7 @@
           el('button', { type: 'button', className: 'linkish fc-qz-new', onclick: () => startQuiz(quizSource, { tag: quizTag, count: quizCount }) }, 'New set ↻'));
 
     const toolbar = el('div', { className: 'fc-qz-bar' },
-      el('div', { className: 'fc-qz-sources', role: 'group', ariaLabel: 'Test bank' },
-        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'sets' ? ' active' : ''), onclick: () => startQuiz('sets', { set: quizSet }) }, `20 Test Sets (${curated.length})`),
-        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'topic' ? ' active' : ''), onclick: () => startQuiz('topic', { tag: quizTag, count: quizCount }) }, `By Topic (${tags.length})`),
-        el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => startQuiz('cards', { count: quizCount }) }, `My Decks / Chunks (${data.cards.length})`)),
+      sourceBar(),
       optsRow,
       ...(setGrid ? [setGrid] : []));
     const finishMount = () => { if (topicSel && typeof enhanceSelect === 'function') enhanceSelect(topicSel); };
@@ -342,16 +872,21 @@
 
   function paint() {
     const t = today();
+    const isMockActive = mode === 'quiz' && quizSource === 'mock' && Boolean(mockSession);
+    root()?.classList?.toggle('mock-active', isMockActive);
     $('fc-m-study').ariaSelected = String(mode === 'study');
     if ($('fc-m-quiz')) $('fc-m-quiz').ariaSelected = String(mode === 'quiz');
     $('fc-m-browse').ariaSelected = String(mode === 'browse');
     const qAll = studyQueue(data.cards, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
     const s = deckSummary(data.cards, t);
     const fig = (label, value) => el('div', {}, el('small', {}, label), el('b', {}, value));
-    $('fc-sum').replaceChildren(
-      fig('Due today', String(qAll.queue.length)),
-      fig('Mastered (10+ days)', String(s.mastered)),
-      fig('Total cards', String(s.total)));
+    if ($('fc-sum')) {
+      $('fc-sum').hidden = isMockActive;
+      $('fc-sum').replaceChildren(
+        fig('Due today', String(qAll.queue.length)),
+        fig('Mastered (10+ days)', String(s.mastered)),
+        fig('Total cards', String(s.total)));
+    }
 
     if ($('fc-pace')) {
       $('fc-pace').hidden = mode !== 'study';
@@ -378,7 +913,8 @@
     else if ($('fc-packs')) $('fc-packs').hidden = true;
 
     const stage = $('fc-stage');
-    if (mode === 'quiz') { paintQuiz(stage); return; }
+    if (mode === 'quiz') { paintQuiz(stage); syncMockTimer(); return; }
+    syncMockTimer();
     if (mode === 'study') {
       const qs = queueState();
       const due = qs.queue;
@@ -440,10 +976,11 @@
     }
   }
 
-  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['Enter', 'Next quiz question'], ['N', 'New card']] };
+  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['Enter / Arrows', 'Next / prev question'], ['F', 'Flag mock question'], ['N', 'New card']] };
   const commandFn = () => [
     { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } },
-    { label: 'TOEIC: Practice Test (20 Sets · 1,000 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
+    { label: 'TOEIC: Full Reading Mock Exam (30 Sets × 100 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; quizSource = 'mock'; paint(); } },
+    { label: 'TOEIC: Part 5 Practice Sets (20 × 50 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
     { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
     { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
     { label: `TOEIC: Load all ${packs().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(); } },
@@ -474,13 +1011,15 @@
       if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
         await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' }).catch(() => {});
       }
-      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, ...(moduleData.cards || {}) };
+      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
       build();
       paint();
       commandHooks.push(commandFn);
       shortcutGroups.push(group);
     },
     stop() {
+      persistMockProgress();
+      stopMockTimer();
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
     },
@@ -496,6 +1035,18 @@
       const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
       const pad = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'].indexOf(e.code);
       const num = idx >= 0 ? idx + 1 : pad >= 0 ? pad + 1 : ['1', '2', '3', '4'].indexOf(e.key) + 1;
+      if (mode === 'quiz' && quizSource === 'mock' && mockSession) {
+        if (!mockSession.submitted && !mockSession.paused) {
+          const cur = mockSession.index;
+          const picked = mockSession.answers[cur];
+          const answered = picked !== null && picked !== undefined;
+          if (num >= 1 && num <= 4) { e.preventDefault(); answerMock(num - 1); }
+          else if (e.code === 'KeyF') { e.preventDefault(); toggleMockFlag(cur); }
+          else if (e.key === 'ArrowLeft') { e.preventDefault(); gotoMockQuestion(cur - 1); }
+          else if (e.key === 'ArrowRight' || (e.key === 'Enter' && answered)) { e.preventDefault(); gotoMockQuestion(cur + 1); }
+        }
+        return;
+      }
       if (mode === 'quiz' && quizState) {
         const curIdx = quizState.index;
         const q = quizState.questions[curIdx];
