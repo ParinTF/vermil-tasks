@@ -231,7 +231,7 @@ let noteDirty = false; // typed since the last save
 let noteTimer;
 const newNoteId = () => 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
 const currentNote = () => notes.find((n) => n.id === selectedNoteId);
-const noteLine = (n) => (n.body || '').split('\n').map((l) => l.replace(/^\[[ x]\] /, '').trim()).find(Boolean) || 'No text'; // a checklist line without its box
+const noteLine = (n) => ((n.body || '').split('\n').map((l) => l.replace(/^\[[ x]\] /, '').trim()).find(Boolean) || 'No text').slice(0, 140); // a checklist line without its box
 const visibleNotes = () => {
   const q = $('note-search').value.trim().toLowerCase();
   return sortNotes(notes)
