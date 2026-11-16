@@ -13,10 +13,21 @@
 .fc-card { display: grid; gap: 18px; padding: 24px; border: 2px solid var(--ink); border-radius: 16px; background: color-mix(in srgb, var(--ink) 2.5%, transparent); cursor: pointer; }
 .fc-card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
 .fc-card-front { font-size: clamp(20px, 2.4vw, 28px); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
-.fc-card-back { padding-top: 16px; border-top: 1px solid var(--line); font-size: 17px; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.fc-card-back { padding-top: 16px; border-top: 1px solid var(--line); font-size: 17px; font-weight: 600; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
+.fc-card-example { margin: -8px 0 0; font-size: 14px; font-style: italic; line-height: 1.5; color: var(--mute); overflow-wrap: anywhere; }
 .fc-card-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
-.fc-grade { flex: 1; min-width: 120px; padding: 11px 16px; border: 1px solid var(--ink); border-radius: 999px; background: none; font: inherit; font-size: 14px; font-weight: 700; color: var(--ink); cursor: pointer; }
+.fc-grades { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.fc-grade { display: grid; justify-items: center; gap: 2px; min-width: 0; min-height: 44px; padding: 9px 10px; border: 1px solid var(--ink); border-radius: 12px; background: none; font: inherit; color: var(--ink); cursor: pointer; }
+.fc-grade b { font-size: 13.5px; font-weight: 700; line-height: 1.2; }
+.fc-grade small { font-size: 11.5px; font-weight: 600; font-variant-numeric: tabular-nums; color: var(--mute); }
+.fc-grade:hover { border-color: var(--ink); }
+.fc-grade.again { border-color: color-mix(in srgb, var(--accent) 45%, var(--line)); }
+.fc-grade.again b { color: var(--accent-text); }
+.fc-grade.hard { border-color: var(--line); }
 .fc-grade.good { border-color: var(--accent); background: var(--accent); color: var(--on-accent); }
+.fc-grade.good small { color: var(--on-accent); opacity: .82; }
+.fc-grade.easy { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.fc-grade.easy small { color: var(--paper); opacity: .78; }
 .fc-reveal-btn { justify-self: start; }
 .fc-done-box { padding: 28px 20px; border: 1px solid var(--line); border-radius: 14px; text-align: center; }
 .fc-done-box h3 { margin: 0 0 6px; font-size: 20px; }
@@ -35,6 +46,7 @@
 .fc-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
 .fc-field input, .fc-field textarea { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); resize: vertical; }
 .fc-field input:focus, .fc-field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }
+.fc-tip { margin: -4px 0 0; font-size: 12.5px; line-height: 1.45; color: var(--mute); }
 .fc-msg { min-height: 1.2em; font-size: 13px; color: var(--mute); }
 
 @media (max-width: 640px) {
@@ -43,6 +55,7 @@
   .fc-sum { gap: 10px; padding: 12px 0; }
   .fc-sum b { font-size: 18px; }
   .fc-card { padding: 18px; }
+  .fc-grades { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .fc-side {
     display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
     max-height: 86dvh; overflow-y: auto;

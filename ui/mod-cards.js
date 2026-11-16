@@ -1,5 +1,5 @@
-// Spaced Flashcards module: Leitner 5-box review intervals (1, 3, 7, 14, 30 days) with a flip-card study session.
-// Data: { cards: [{ id, deck, front, back, box, next, lastReviewed, reviews }] }.
+// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler (Again / Hard / Good / Easy) with context examples.
+// Data: { cards: [{ id, deck, front, back, example?, s?, d?, ivl?, lapses?, box, next, lastReviewed, reviews }] }.
 (() => {
   let data = { cards: [] };
   let mode = 'study'; // 'study' | 'browse'
@@ -22,9 +22,11 @@
         el('div', { id: 'fc-stage' })),
       el('aside', { className: 'fc-side', ariaLabel: 'Add a flashcard' },
         el('form', { id: 'fc-form', onsubmit: add },
-          el('label', { className: 'fc-field' }, 'Deck', el('input', { id: 'fc-deck', maxLength: 40, autocomplete: 'off', placeholder: 'Languages, Tech, Exams' })),
-          el('label', { className: 'fc-field' }, 'Front (Prompt or question)', el('textarea', { id: 'fc-front', rows: 3, maxLength: 300, placeholder: 'What does spaced repetition do?' })),
-          el('label', { className: 'fc-field' }, 'Back (Answer)', el('textarea', { id: 'fc-back', rows: 3, maxLength: 500, placeholder: 'Schedules reviews at increasing intervals (1, 3, 7, 14, 30 days).' })),
+          el('label', { className: 'fc-field' }, 'Deck', el('input', { id: 'fc-deck', maxLength: 40, autocomplete: 'off', placeholder: 'TOEIC, Leetcode, AI' })),
+          el('label', { className: 'fc-field' }, 'Front (meaning, or a sentence with a ___ gap)', el('textarea', { id: 'fc-front', rows: 3, maxLength: 300, placeholder: 'All staff must ___ the new safety rules.' })),
+          el('label', { className: 'fc-field' }, 'Back (the chunk or answer)', el('textarea', { id: 'fc-back', rows: 2, maxLength: 500, placeholder: 'comply with (the rules)' })),
+          el('label', { className: 'fc-field' }, 'Example sentence (optional)', el('textarea', { id: 'fc-example', rows: 2, maxLength: 300, placeholder: 'Our suppliers comply with every safety regulation.' })),
+          el('p', { className: 'fc-tip' }, 'Tip: for English, learn chunks (collocations and phrases) in a sentence, not lone words.'),
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add card'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'fc-msg', className: 'fc-msg', role: 'status' }))));
     mobileSheet(root(), root().querySelector('.fc-side'), 'New card');
@@ -35,11 +37,13 @@
     const deck = $('fc-deck').value.trim() || 'General';
     const front = $('fc-front').value.trim();
     const back = $('fc-back').value.trim();
+    const example = $('fc-example').value.trim();
     if (!front || !back) { $('fc-msg').textContent = 'Fill in both the front and the back of the card.'; return; }
-    data.cards.push({ id: crypto.randomUUID(), deck, front, back, box: 1, next: today(), lastReviewed: null, reviews: 0 });
+    data.cards.push({ id: crypto.randomUUID(), deck, front, back, ...(example ? { example } : {}), box: 1, next: today(), lastReviewed: null, reviews: 0 });
     save();
     $('fc-front').value = '';
     $('fc-back').value = '';
+    $('fc-example').value = '';
     $('fc-msg').textContent = `Added card to "${deck}".`;
     paint();
     $('fc-front').focus();
@@ -47,17 +51,21 @@
 
   function dueList() {
     const t = today();
-    return data.cards.filter((c) => (!activeDeck || c.deck === activeDeck) && cardDue(c, t));
+    return data.cards
+      .filter((c) => (!activeDeck || c.deck === activeDeck) && cardDue(c, t))
+      .sort((a, b) => (a.next || '').localeCompare(b.next || ''));
   }
 
-  function gradeCurrent(remembered) {
+  // grade: 1 Again, 2 Hard, 3 Good, 4 Easy (FSRS)
+  function gradeCurrent(grade) {
     const list = dueList();
     const cur = list[0];
     if (!cur) return;
     const t = today();
-    const updated = reviewCard(cur, remembered, t);
+    const updated = fsrsReview(cur, grade, t);
     data.cards = data.cards.map((c) => (c.id === cur.id ? updated : c));
     revealed = false;
+    emit('card-reviewed', { key: `card:${cur.id}:${t}` });
     save();
     paint();
   }
@@ -77,7 +85,7 @@
     const fig = (label, value) => el('div', {}, el('small', {}, label), el('b', {}, value));
     $('fc-sum').replaceChildren(
       fig('Due today', String(s.due)),
-      fig('Mastered (Box 4–5)', String(s.mastered)),
+      fig('Mastered (10+ days)', String(s.mastered)),
       fig('Total cards', String(s.total)));
 
     if (activeDeck && !s.decks.includes(activeDeck)) activeDeck = '';
@@ -100,18 +108,22 @@
         return;
       }
       const cur = due[0];
-      const nextDays = CARD_BOX_DAYS[Math.min(4, cur.box || 1)];
+      const pv = fsrsPreview(cur, t);
+      const days = (n) => (n >= 365 ? `${Math.round(n / 36.5) / 10}y` : n >= 30 ? `${Math.round(n / 3) / 10}mo` : `${n}d`);
+      const grades = [[1, 'Again', 'again'], [2, 'Hard', 'hard'], [3, 'Good', 'good'], [4, 'Easy', 'easy']];
+      const recall = cur.lastReviewed ? `${Math.round(fsrsRetrievability(cur, t) * 100)}% recall` : 'New card';
       const cardBox = el('div', { className: 'fc-card' + (revealed ? ' revealed' : ''), onclick: () => { if (!revealed) { revealed = true; paint(); } } },
         el('div', { className: 'fc-card-meta' },
           el('span', {}, cur.deck || 'General'),
-          el('span', {}, `Box ${cur.box || 1} of 5 · ${due.length} left today`)),
+          el('span', {}, `${recall} · ${due.length} left today`)),
         el('div', { className: 'fc-card-front' }, cur.front),
         ...(revealed
           ? [
               el('div', { className: 'fc-card-back' }, cur.back),
-              el('div', { className: 'fc-card-acts' },
-                el('button', { type: 'button', className: 'fc-grade again', onclick: (e) => { e.stopPropagation(); gradeCurrent(false); } }, 'Again · 1d'),
-                el('button', { type: 'button', className: 'fc-grade good', onclick: (e) => { e.stopPropagation(); gradeCurrent(true); } }, `Got it ✓ · ${nextDays}d`)),
+              ...(cur.example ? [el('p', { className: 'fc-card-example' }, cur.example)] : []),
+              el('div', { className: 'fc-card-acts fc-grades' },
+                ...grades.map(([g, label, cls]) => el('button', { type: 'button', className: 'fc-grade ' + cls, title: `${label} (${g})`, onclick: (e) => { e.stopPropagation(); gradeCurrent(g); } },
+                  el('b', {}, label), el('small', {}, days(pv[g]))))),
             ]
           : [
               el('button', { type: 'button', className: 'primary fc-reveal-btn', onclick: (e) => { e.stopPropagation(); revealed = true; paint(); } },
@@ -124,20 +136,21 @@
         list.length
           ? el('ul', { className: 'fc-list' }, ...list.map((c) => {
               const del = el('button', { type: 'button', className: 'fc-del', ariaLabel: 'Delete card', textContent: '✕', onclick: () => remove(c) });
+              const stab = fsrsStability(c);
               return el('li', { className: 'fc-row' },
                 el('div', { className: 'fc-row-main' },
                   el('b', {}, c.front),
-                  el('span', {}, c.back)),
+                  el('span', {}, c.back + (c.example ? ` · "${c.example}"` : ''))),
                 el('div', { className: 'fc-row-meta' },
                   el('span', { className: 'task-tag' }, c.deck || 'General'),
-                  el('small', {}, `Box ${c.box || 1} · due ${c.next <= t ? 'today' : fmt(parseDay(c.next), { day: 'numeric', month: 'short' })}`),
+                  el('small', {}, `${stab ? `stable ${Math.round(stab)}d · ${Math.round(fsrsRetrievability(c, t) * 100)}%` : 'new'} · due ${c.next <= t ? 'today' : fmt(parseDay(c.next), { day: 'numeric', month: 'short' })}`),
                   del));
             }))
           : el('p', { className: 'empty' }, 'No cards in this deck.'));
     }
   }
 
-  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 / 2', 'Grade: Again / Got it'], ['N', 'New card']] };
+  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Again, Hard, Good, Easy'], ['N', 'New card']] };
   const commandFn = () => [{ label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } }];
 
   defineModule('cards', {
@@ -169,8 +182,12 @@
       if (isField(t)) return;
       if (e.code === 'KeyN') { e.preventDefault(); $('fc-front').focus(); }
       else if (mode === 'study' && e.code === 'Space') { e.preventDefault(); if (!revealed) { revealed = true; paint(); } }
-      else if (mode === 'study' && revealed && e.key === '1') { e.preventDefault(); gradeCurrent(false); }
-      else if (mode === 'study' && revealed && e.key === '2') { e.preventDefault(); gradeCurrent(true); }
+      else if (mode === 'study' && revealed) {
+        const idx = ['Digit1', 'Digit2', 'Digit3', 'Digit4'].indexOf(e.code);
+        const pad = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'].indexOf(e.code);
+        const num = idx >= 0 ? idx + 1 : pad >= 0 ? pad + 1 : ['1', '2', '3', '4'].indexOf(e.key) + 1;
+        if (num >= 1 && num <= 4) { e.preventDefault(); gradeCurrent(num); }
+      }
     },
   });
 })();

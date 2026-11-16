@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, deckSummary } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, xpAward } = require('../ui/logic.js');
 
 test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Again', () => {
   assert.deepEqual(CARD_BOX_DAYS, [1, 3, 7, 14, 30]);
@@ -19,11 +19,41 @@ test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Ag
   assert.equal(c3.reviews, 2);
 });
 
-test('deckSummary counts due, mastered (Box 4-5) and sorted deck names', () => {
+test('FSRS-4.5 schedules initial grades, subsequent intervals, lapses and retrievability', () => {
+  const c0 = { id: 'f1', deck: 'TOEIC', front: 'All staff must ___ the rules.', back: 'comply with', example: 'Suppliers comply with safety laws.', next: '2026-11-16', reviews: 0 };
+  assert.equal(fsrsRetrievability(c0, '2026-11-16'), 1);
+
+  const pv0 = fsrsPreview(c0, '2026-11-16');
+  assert.deepEqual(pv0, { 1: 1, 2: 1, 3: 4, 4: 14 });
+
+  const c1 = fsrsReview(c0, 3, '2026-11-16'); // Good
+  assert.equal(c1.ivl, 4);
+  assert.equal(c1.next, '2026-11-20');
+  assert.equal(c1.reviews, 1);
+  assert.ok(Math.abs(fsrsRetrievability(c1, '2026-11-20') - 0.9) < 0.02);
+
+  const pv1 = fsrsPreview(c1, '2026-11-20');
+  assert.ok(pv1[1] < pv1[2] && pv1[2] < pv1[3] && pv1[3] < pv1[4]);
+
+  const c2 = fsrsReview(c1, 3, '2026-11-20'); // Good again
+  assert.ok(c2.s > c1.s && c2.ivl >= 10);
+
+  const lapsed = fsrsReview(c2, 1, c2.next); // Again -> lapse
+  assert.equal(lapsed.ivl, 1);
+  assert.equal(lapsed.lapses, 1);
+  assert.ok(lapsed.s < c2.s);
+  assert.ok(lapsed.d > c2.d);
+
+  // Legacy Leitner cards keep their progress instead of resetting to 0
+  const legacy = { id: 'old', box: 3, lastReviewed: '2026-11-09', next: '2026-11-16' };
+  assert.equal(fsrsStability(legacy), 7);
+});
+
+test('deckSummary counts due, mastered (s >= 10 or Box 4-5) and sorted deck names, plus review XP', () => {
   const cards = [
     { id: '1', deck: 'Tech', box: 4, next: '2026-11-20' },
-    { id: '2', deck: 'Lang', box: 1, next: '2026-11-15' },
-    { id: '3', deck: 'Tech', box: 5, next: '2026-11-10' },
+    { id: '2', deck: 'Lang', s: 1.4, box: 1, next: '2026-11-15' },
+    { id: '3', deck: 'Tech', s: 14.8, box: 3, next: '2026-11-10' },
   ];
   assert.deepEqual(deckSummary(cards, '2026-11-15'), {
     total: 3,
@@ -31,4 +61,6 @@ test('deckSummary counts due, mastered (Box 4-5) and sorted deck names', () => {
     mastered: 2,
     decks: ['Lang', 'Tech'],
   });
+  const xp = xpAward({ total: 0, day: '', today: {}, keys: {}, log: [] }, 'card-reviewed', { key: 'card:1:2026-11-15' }, '2026-11-15');
+  assert.equal(xp.gained, 2);
 });

@@ -570,6 +570,7 @@ const XP_RULES = {
   'workout-logged': { src: 'workout', label: 'Workout', pts: () => 15, cap: 30 },
   'water-goal': { src: 'water', label: 'Water goal reached', pts: () => 5, cap: 5 },
   'bill-paid': { src: 'bills', label: 'Bill paid', pts: () => 10, cap: 30 },
+  'card-reviewed': { src: 'cards', label: 'Flashcard reviewed', pts: () => 2, cap: 40 },
 };
 const XP_TITLES = [[1, 'Beginner'], [3, 'Apprentice'], [5, 'Regular'], [8, 'Skilled'], [12, 'Expert'], [18, 'Master'], [25, 'Legend']];
 // level L starts at 50 * L * (L - 1) XP: 100, 300, 600, 1000...
@@ -1279,7 +1280,7 @@ function filterLinks(items = [], { status = 'unread', tag = '', q = '' } = {}) {
     .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || String(b.addedAt || '').localeCompare(String(a.addedAt || '')));
 }
 
-// ── Spaced Flashcards (Leitner 5-box intervals: 1, 3, 7, 14, 30 days) ──
+// ── Spaced Flashcards (Leitner 5-box + FSRS-4.5 DSR scheduler) ──
 const CARD_BOX_DAYS = [1, 3, 7, 14, 30];
 const cardDue = (c, today) => !c.next || c.next <= today;
 
@@ -1290,12 +1291,79 @@ function reviewCard(c, remembered, today) {
   return { ...c, box, next, lastReviewed: today, reviews: (Number(c.reviews) || 0) + 1 };
 }
 
+// FSRS-4.5 with its published default weights, scheduled by whole days (no same-day learning steps, no weight optimiser).
+// A card keeps s (stability: days until recall falls to 90%) and d (difficulty 1..10). Grades: 1 Again, 2 Hard, 3 Good, 4 Easy.
+const FSRS_W = [0.4872, 1.4003, 3.7145, 13.8206, 5.1618, 1.2298, 0.8975, 0.031, 1.6474, 0.1367, 1.0461, 2.1072, 0.0793, 0.3246, 1.587, 0.2272, 2.8755];
+const FSRS_DECAY = -0.5;
+const FSRS_FACTOR = 19 / 81; // makes R(S, S) = 0.9
+const FSRS_RETENTION = 0.9;
+const fsrsClampD = (d) => Math.min(10, Math.max(1, d));
+const fsrsD0 = (g) => fsrsClampD(FSRS_W[4] - (g - 3) * FSRS_W[5]);
+const fsrsR = (elapsed, s) => Math.pow(1 + FSRS_FACTOR * elapsed / s, FSRS_DECAY);
+const fsrsInterval = (s) => Math.min(36500, Math.max(1, Math.round(s / FSRS_FACTOR * (Math.pow(FSRS_RETENTION, 1 / FSRS_DECAY) - 1))));
+
+// the stability a card already has: its own, or one guessed from its old Leitner box so a migrated card is not reset
+function fsrsStability(card) {
+  if (Number(card?.s) > 0) return Number(card.s);
+  const box = Number(card?.box) || 1;
+  return card?.lastReviewed && box > 1 ? CARD_BOX_DAYS[box - 1] : 0;
+}
+
+// chance of recalling the card today (1 for a card never reviewed)
+function fsrsRetrievability(card, today) {
+  const s = fsrsStability(card);
+  if (!s || !card?.lastReviewed) return 1;
+  return Math.round(fsrsR(Math.max(0, daysUntil(today, card.lastReviewed)), s) * 1000) / 1000;
+}
+
+function fsrsReview(card, grade, today) {
+  const g = Math.max(1, Math.min(4, Math.round(Number(grade)) || 3));
+  const prevS = fsrsStability(card);
+  let s;
+  let d;
+  if (!prevS) {
+    s = FSRS_W[g - 1];
+    d = fsrsD0(g);
+  } else {
+    const prevD = Number(card?.d) > 0 ? Number(card.d) : 5;
+    const r = fsrsR(Math.max(0, daysUntil(today, card.lastReviewed || today)), prevS);
+    if (g === 1) {
+      s = FSRS_W[11] * Math.pow(prevD, -FSRS_W[12]) * (Math.pow(prevS + 1, FSRS_W[13]) - 1) * Math.exp(FSRS_W[14] * (1 - r));
+      s = Math.min(s, prevS); // forgetting never makes a card more stable
+    } else {
+      const hard = g === 2 ? FSRS_W[15] : 1;
+      const easy = g === 4 ? FSRS_W[16] : 1;
+      s = prevS * (1 + Math.exp(FSRS_W[8]) * (11 - prevD) * Math.pow(prevS, -FSRS_W[9]) * (Math.exp(FSRS_W[10] * (1 - r)) - 1) * hard * easy);
+    }
+    const nextD = prevD - FSRS_W[6] * (g - 3);
+    d = fsrsClampD(FSRS_W[7] * fsrsD0(3) + (1 - FSRS_W[7]) * nextD); // mean reversion towards a Good first answer
+  }
+  s = Math.round(Math.max(0.1, s) * 100) / 100;
+  const ivl = g === 1 ? 1 : fsrsInterval(s);
+  return {
+    ...card,
+    s,
+    d: Math.round(d * 100) / 100,
+    box: ivl >= 21 ? 5 : ivl >= 10 ? 4 : ivl >= 5 ? 3 : ivl >= 2 ? 2 : 1, // kept for the old Leitner views and backups
+    ivl,
+    lapses: (Number(card?.lapses) || 0) + (g === 1 && prevS ? 1 : 0),
+    next: shiftDay(today, ivl),
+    lastReviewed: today,
+    reviews: (Number(card?.reviews) || 0) + 1,
+  };
+}
+
+// the interval each of the four answers would give, for the buttons
+function fsrsPreview(card, today) {
+  return { 1: fsrsReview(card, 1, today).ivl, 2: fsrsReview(card, 2, today).ivl, 3: fsrsReview(card, 3, today).ivl, 4: fsrsReview(card, 4, today).ivl };
+}
+
 function deckSummary(cards = [], today) {
   const list = Array.isArray(cards) ? cards : [];
   const due = list.filter((c) => c && cardDue(c, today)).length;
-  const mastered = list.filter((c) => c && (Number(c.box) || 1) >= 4).length;
+  const mastered = list.filter((c) => c && ((Number(c.s) || 0) >= 10 || (Number(c.box) || 1) >= 4)).length;
   const decks = [...new Set(list.map((c) => (c && c.deck ? String(c.deck).trim() : '')).filter(Boolean))].sort();
   return { total: list.length, due, mastered, decks };
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, deckSummary, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
