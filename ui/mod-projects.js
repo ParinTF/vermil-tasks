@@ -110,11 +110,15 @@
 
   function renderBoard(p) {
     const b = projectBoard(todos, p.id);
-    const col = (key, label, items) => el('div', { className: 'pj-col', dataset: { col: key } },
-      el('div', { className: 'pj-col-head' }, el('span', {}, label), el('b', {}, String(items.length))),
-      items.length
-        ? el('ul', { className: 'pj-col-list' }, ...items.map((t) => boardCard(t, key)))
-        : el('p', { className: 'pj-col-empty' }, 'Nothing here'));
+    const col = (key, label, items) => {
+      const box = el('div', { className: 'pj-col' },
+        el('div', { className: 'pj-col-head' }, el('span', {}, label), el('b', {}, String(items.length))),
+        items.length
+          ? el('ul', { className: 'pj-col-list' }, ...items.map((t) => boardCard(t, key)))
+          : el('p', { className: 'pj-col-empty' }, 'Nothing here'));
+      box.dataset.col = key;
+      return box;
+    };
     return el('div', { id: 'pj-board', className: 'pj-board' },
       col('todo', 'To do', b.todo),
       col('doing', 'Doing', b.doing),

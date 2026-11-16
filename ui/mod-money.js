@@ -675,6 +675,7 @@
 
   defineModule('money', {
     addEntry,
+    openSubTab: setSubTab,
     daily() {
       const byDay = {};
       for (const e of data.entries) if (e.kind === 'out') byDay[e.day] = (byDay[e.day] || 0) + e.amount;

@@ -951,7 +951,7 @@ try {
   await main.eval(`setCalMode('month')`);
 
   // 9. Expenses (Money)
-  await main.eval(`setView('money')`);
+  await main.eval(`setView('money'); registry.money?.openSubTab?.('expenses')`);
   await sleep(200);
   await main.screenshot('expenses.png');
 
@@ -961,7 +961,7 @@ try {
   await main.screenshot('habits.png');
 
   // 11. Subscriptions
-  await main.eval(`setView('subs')`);
+  await main.eval(`setView('money'); registry.money?.openSubTab?.('subs')`);
   await sleep(200);
   await main.screenshot('subscriptions.png');
 
@@ -986,7 +986,7 @@ try {
   await main.screenshot('people.png');
 
   // 16. Home & Bills
-  await main.eval(`setView('bills')`);
+  await main.eval(`setView('money'); registry.money?.openSubTab?.('bills')`);
   await sleep(200);
   await main.screenshot('bills.png');
 
