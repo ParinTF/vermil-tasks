@@ -21,8 +21,8 @@ const MODULES = [
   { id: 'library', pack: 'life', name: 'Library', about: 'Books, films, series and games: what you want, what you are in the middle of, what you finished and how you rated it.', script: 'mod-library.js', style: 'mod-library.css', view: 'Library' },
   { id: 'people', pack: 'life', name: 'People', about: 'Birthdays with a reminder, gift ideas, and a nudge when it has been too long since you were in touch.', script: 'mod-people.js', style: 'mod-people.css', view: 'People' },
   { id: 'travel', pack: 'plan', name: 'Travel', about: 'Trips with a packing list, a plan for each day and what it costs against your budget.', script: 'mod-travel.js', style: 'mod-travel.css', view: 'Travel' },
-  { id: 'time', pack: 'work', name: 'Time Tracker', about: 'Time your work by project, add it by hand, and get hours and earnings for the week or the month to copy into an invoice.', script: 'mod-time.js', style: 'mod-time.css', view: 'Time' },
-  { id: 'projects', pack: 'work', name: 'Projects', about: 'One page per project: its tasks and how far along they are, the time you put in and what it earns. Uses the Time Tracker projects.', script: 'mod-projects.js', style: 'mod-projects.css', view: 'Projects', requires: ['tasks', 'time'] },
+  { id: 'time', pack: 'work', name: 'Projects & Time', subLabel: 'Time & Reports', about: 'Kanban project boards (To do / Doing / Done), project timers, manual hours and weekly or monthly invoice reports in one hub.', script: 'mod-time.js', style: 'mod-time.css', view: 'Projects', requires: ['tasks'] },
+  { id: 'projects', hub: 'time', pack: 'work', name: 'Projects', subLabel: 'Project Board', about: 'One page per project: its tasks and how far along they are, the time you put in and what it earns. Uses the Time Tracker projects.', script: 'mod-projects.js', style: 'mod-projects.css', view: 'Projects', requires: ['tasks', 'time'] },
   { id: 'links', pack: 'work', name: 'Bookmarks', about: 'Save links, articles and videos to read later, organised by #tag and searchable from Ctrl+K.', script: 'mod-links.js', style: 'mod-links.css', view: 'Links' },
   { id: 'plan', pack: 'plan', name: 'Week plan', about: 'Plan the week on one page: seven days with what is already on them, and the open tasks that still have no day. Press 1 to 7 to put a task on a day.', script: 'mod-plan.js', style: 'mod-plan.css', view: 'Plan', requires: ['tasks'] },
   { id: 'xp', pack: 'smart', name: 'Levels', about: 'XP and levels for what you do: tasks done, habits kept, focus, time, journal days and more. One band on Home, and a short message at each level.', script: 'mod-xp.js', style: 'mod-xp.css' },
@@ -53,6 +53,31 @@ const moduleData = {}; // id -> saved value; "_on" lists the ids that are switch
 const started = new Set();
 const registry = {};
 const byId = (id) => MODULES.find((m) => m.id === id);
+const hubOf = (id) => byId(id)?.hub || id;
+const hubMembers = (hubId) => [byId(hubId), ...MODULES.filter((x) => x.hub === hubId)].filter(Boolean);
+
+function renderHubBar(activeId = view) {
+  const bar = $('hub-bar');
+  if (!bar) return;
+  const hubId = hubOf(activeId);
+  const members = hubMembers(hubId).filter((m) => m.view && started.has(m.id));
+  if (activeId === 'home' || activeId === 'settings' || members.length <= 1) {
+    bar.hidden = true;
+    bar.replaceChildren();
+    return;
+  }
+  bar.hidden = false;
+  bar.replaceChildren(...members.map((m) => {
+    const btn = el('button', {
+      type: 'button',
+      role: 'tab',
+      className: 'hub-tab',
+      ariaSelected: String(m.id === activeId),
+    }, m.subLabel || m.name);
+    btn.onclick = () => setView(m.id);
+    return btn;
+  }));
+}
 
 const defineModule = (id, impl) => { registry[id] = impl; };
 const moduleOn = (id) => (moduleData._on || []).includes(id);
@@ -73,16 +98,18 @@ function loadFile(tag, props) {
 
 // the tab bar and VIEWS follow what is switched on: Home first, then the modules with a view, in list order
 function syncViews() {
-  const want = ['home', ...orderTabs(MODULES.filter((m) => m.view && started.has(m.id)).map((m) => m.id), prefsNow.tabOrder)];
+  const want = ['home', ...orderTabs(MODULES.filter((m) => m.view && !m.hub && started.has(m.id)).map((m) => m.id), prefsNow.tabOrder)];
   VIEWS.splice(0, VIEWS.length, ...want);
+  const activeHub = hubOf(view);
   const more = el('button', { className: 'views-more-btn', type: 'button', hidden: true, ariaHaspopup: 'menu', ariaExpanded: 'false' });
   more.onclick = toggleTabMenu;
   document.querySelector('.views').replaceChildren(...want.map((id) => {
-    const tab = el('button', { id: 'view-' + id, role: 'tab', type: 'button', ariaSelected: String(view === id) }, id === 'home' ? 'Home' : byId(id).view);
+    const tab = el('button', { id: 'view-' + id, role: 'tab', type: 'button', ariaSelected: String(activeHub === id) }, id === 'home' ? 'Home' : byId(id).view);
     tab.onclick = () => setView(id);
     return tab;
   }), more);
   layoutTabs();
+  renderHubBar(view);
 }
 
 function openDrawer() {
@@ -90,13 +117,14 @@ function openDrawer() {
   if (!dlg) return;
   if (dlg.open) { dlg.close(); return; }
   const go = (id) => { dlg.close(); setView(id); };
+  const activeHub = hubOf(view);
   const groups = PACKS.map((p) => {
-    const mods = MODULES.filter((m) => m.pack === p.id && m.view && started.has(m.id));
+    const mods = MODULES.filter((m) => m.pack === p.id && m.view && !m.hub && started.has(m.id));
     if (!mods.length) return null;
     return el('div', { className: 'drw-group' },
       el('div', { className: 'drw-head' }, p.name),
       ...mods.map((m) => el('button', {
-        type: 'button', className: 'drw-item' + (view === m.id ? ' active' : ''),
+        type: 'button', className: 'drw-item' + (activeHub === m.id ? ' active' : ''),
         onclick: () => go(m.id),
       }, m.name)));
   }).filter(Boolean);
@@ -209,13 +237,18 @@ async function stopModule(m) {
 
 // Switch one on (bringing what it needs) or off (taking what needs it); false when the user backs out.
 async function setModule(m, on) {
+  const hub = byId(hubOf(m.id)) || m;
+  const children = MODULES.filter((x) => x.hub === hub.id);
   if (on) {
-    for (const id of [...(m.requires || []), m.id]) await startModule(byId(id));
+    const reqs = new Set([...(hub.requires || []), ...children.flatMap((c) => c.requires || [])]);
+    for (const id of [...reqs, hub.id, ...children.map((c) => c.id)]) if (byId(id)) await startModule(byId(id));
   } else {
-    const deps = MODULES.filter((d) => started.has(d.id) && (d.requires || []).includes(m.id));
-    if (deps.length && !(await ask(`${deps.map((d) => d.name).join(' and ')} ${deps.length > 1 ? 'need' : 'needs'} ${m.name}, so ${deps.length > 1 ? 'they go' : 'it goes'} too. Your data stays.`, 'Remove'))) return false;
+    const groupIds = new Set([hub.id, ...children.map((c) => c.id)]);
+    const deps = MODULES.filter((d) => started.has(d.id) && !groupIds.has(d.id) && (d.requires || []).some((r) => groupIds.has(r)));
+    if (deps.length && !(await ask(`${deps.map((d) => d.name).join(' and ')} ${deps.length > 1 ? 'need' : 'needs'} ${hub.name}, so ${deps.length > 1 ? 'they go' : 'it goes'} too. Your data stays.`, 'Remove'))) return false;
     for (const d of deps) await stopModule(d);
-    await stopModule(m);
+    for (const c of children) await stopModule(c);
+    await stopModule(hub);
   }
   await saveModule('_on', MODULES.filter((x) => started.has(x.id)).map((x) => x.id));
   return true;
@@ -235,10 +268,11 @@ function renderHome() {
       ? [...(m.view ? [el('button', { type: 'button', className: 'primary mod-open', onclick: () => setView(m.id) }, el('span', {}, 'Open'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))] : []),
         el('button', { type: 'button', className: 'linkish mod-remove', ariaLabel: 'Remove ' + m.name, onclick: act(false) }, 'Remove')]
       : [el('button', { type: 'button', className: 'primary mod-add', ariaLabel: 'Add ' + m.name, onclick: act(true) }, el('span', {}, 'Add'), el('span', { className: 'arrow', ariaHidden: 'true' }, '+'))];
+    const reqs = [...new Set([...(m.requires || []), ...MODULES.filter((c) => c.hub === m.id).flatMap((c) => c.requires || [])])].filter((id) => id !== m.id && byId(id) && byId(id).hub !== m.id);
     return el('article', { className: 'mod-card' + (on ? ' on' : ''), id: 'card-' + m.id },
       el('div', { className: 'mod-tag' }, on ? 'Installed' : m.recommended ? 'Recommended' : 'Available'),
       el('h3', {}, m.name), el('p', {}, m.about),
-      ...((m.requires || []).length && !on ? [el('p', { className: 'mod-needs' }, 'Also adds ' + m.requires.map((id) => byId(id).name).join(', '))] : []),
+      ...(reqs.length && !on ? [el('p', { className: 'mod-needs' }, 'Also adds ' + reqs.map((id) => byId(id).name).join(', '))] : []),
       el('div', { className: 'mod-actions' }, ...buttons));
   };
   home.replaceChildren(
@@ -254,7 +288,7 @@ function renderHome() {
     ...homeHooks.flatMap((f) => { try { const x = f(); return x ? [x] : []; } catch (e) { console.error('home hook', e); return []; } }), // a hook may return nothing
     ...todayStrip(),
     ...PACKS.map((p) => {
-      const mods = MODULES.filter((m) => m.pack === p.id && (!isAndroid || m.id !== 'widget'));
+      const mods = MODULES.filter((m) => m.pack === p.id && !m.hub && (!isAndroid || m.id !== 'widget'));
       const on = mods.filter((m) => started.has(m.id));
       const all = el('button', { type: 'button', className: 'linkish pack-all', ariaLabel: `Add all of ${p.name}`, hidden: on.length === mods.length }, 'Add all');
       all.onclick = async (e) => {
@@ -523,6 +557,13 @@ invoke('get_modules').then(async (saved) => {
     if (moduleData._on.length) await invoke('save_module', { id: '_on', value: moduleData._on });
   } else if (moduleData._on.some((id) => id === 'subs' || id === 'bills') && !moduleData._on.includes('money')) {
     moduleData._on.push('money');
+  }
+  for (const id of [...moduleData._on]) {
+    const hubId = hubOf(id);
+    for (const m of hubMembers(hubId)) {
+      if (!moduleData._on.includes(m.id)) moduleData._on.push(m.id);
+      for (const r of m.requires || []) if (!moduleData._on.includes(r)) moduleData._on.push(r);
+    }
   }
   for (const m of MODULES) if (moduleOn(m.id)) await startModule(m).catch((e) => console.error(m.id, e));
   syncViews();

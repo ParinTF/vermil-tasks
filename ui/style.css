@@ -98,6 +98,12 @@ h1, h2, h3 { text-wrap: balance; }
 p, li { text-wrap: pretty; }
 @media (max-width: 640px) { #today, #version { display: none; } } /* the narrowest window has no room for them */
 
+/* ── hub sub-navigation bar (shared across multi-view module hubs) ── */
+.hub-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; padding: 12px 0 10px; border-bottom: 1px solid var(--line); }
+.hub-tab { display: inline-flex; align-items: center; gap: 6px; padding: 6px 14px; border: 1px solid var(--line); border-radius: 999px; background: none; font: inherit; font-size: 13px; font-weight: 600; color: var(--mute); cursor: pointer; }
+.hub-tab:hover { border-color: var(--ink); color: var(--ink); }
+.hub-tab[aria-selected="true"] { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+
 /* ── hero: the headline is the picture ── */
 .hero { padding-block: clamp(28px, 7vh, 80px) clamp(24px, 5vh, 56px); }
 .eyebrow {
@@ -708,6 +714,9 @@ dialog.guide-dlg {
     letter-spacing: .06em; text-transform: uppercase; color: var(--ink);
   }
   .marquee { display: none !important; }
+  .hub-bar { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; padding: 8px 0; margin-bottom: 2px; }
+  .hub-bar::-webkit-scrollbar { display: none; }
+  .hub-tab { flex: none; padding: 6px 13px; font-size: 12.5px; }
   /* Universal mobile compact rules for headers & empty states */
   main h2 { font-size: 20px !important; line-height: 1.15; }
   .empty { padding: 18px 0; font-size: 16px; }
@@ -898,7 +907,7 @@ dialog.guide-dlg {
    (and the form column, as a fallback on a very short window). Sizes follow the window height so it all fits. */
 @media (min-width: 860px) {
   body { height: 100vh; display: flex; flex-direction: column; padding-bottom: 0; overflow: hidden; }
-  .top, .marquee, .foot { flex: none; }
+  .top, .marquee, .hub-bar, .foot { flex: none; }
   .marquee { padding-block: clamp(8px, 1.4vh, 14px); }
   .grid { flex: 1; min-height: 0; grid-template-columns: minmax(0, 5fr) minmax(0, 7fr); grid-template-rows: minmax(0, 1fr); gap: clamp(40px, 6vw, 96px); }
   .side, #list { overflow-y: auto; scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 20%, transparent) transparent; }

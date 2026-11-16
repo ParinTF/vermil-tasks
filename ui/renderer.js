@@ -256,15 +256,18 @@ async function showTask(id) {
 }
 
 async function setView(next) {
-  if (next === view || !(VIEWS.includes(next) || next === 'settings')) return; // a view that is not switched on does not exist
+  const hubId = typeof hubOf === 'function' ? hubOf(next) : next;
+  if (next === view || !(VIEWS.includes(next) || VIEWS.includes(hubId) || next === 'settings')) return; // a view that is not switched on does not exist
+  if (next !== 'home' && next !== 'settings' && !started.has(next)) return;
   if (next === 'settings') lastView = view;
   else try { localStorage.setItem('last-view', next); } catch {}
   await registry.notes?.leave?.(); // typing in a note is saved before the view changes
   view = next;
   for (const n of document.querySelectorAll('main[id$="-view"]')) { n.hidden = n.id !== view + '-view'; n.classList.remove('sheet-open'); }
-  for (const b of document.querySelectorAll('.views button[role=tab]')) b.ariaSelected = String(b.id === 'view-' + view);
+  for (const b of document.querySelectorAll('.views button[role=tab]')) b.ariaSelected = String(b.id === 'view-' + hubId);
   if (typeof layoutTabs === 'function') layoutTabs(); // the tab you are on is always in the bar
-  if (isMobile()) document.getElementById('view-' + view)?.scrollIntoView({ block: 'nearest', inline: 'center' });
+  if (typeof renderHubBar === 'function') renderHubBar(view);
+  if (isMobile()) document.getElementById('view-' + hubId)?.scrollIntoView({ block: 'nearest', inline: 'center' });
   if (view === 'home') return renderHome();
   if (view === 'settings') return renderSettings();
   return registry[view]?.show?.(); // any other view belongs to its module
