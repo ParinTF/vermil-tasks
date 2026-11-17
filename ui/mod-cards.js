@@ -61,7 +61,7 @@
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
         el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
         el('div', { id: 'fc-decks', className: 'tag-bar', hidden: true }),
-        el('details', { id: 'fc-packs', className: 'fc-packs', hidden: true }),
+        el('div', { id: 'fc-packs', className: 'fc-packs-wrap', hidden: true }),
         el('input', { id: 'fc-search', type: 'search', placeholder: 'Search chunks, meanings or examples…', ariaLabel: 'Search flashcards', hidden: true, oninput: paint }),
         el('div', { id: 'fc-stage' })),
       el('aside', { className: 'fc-side', ariaLabel: 'Add a flashcard' },
@@ -93,9 +93,15 @@
     $('fc-front').focus();
   }
 
+  function matchesDeck(card, filter) {
+    if (!filter) return true;
+    const d = String(card?.deck || '');
+    return filter.endsWith('*') ? d.startsWith(filter.slice(0, -1)) : d === filter;
+  }
+
   function queueState() {
     const t = today();
-    const scoped = data.cards.filter((c) => !activeDeck || c.deck === activeDeck);
+    const scoped = data.cards.filter((c) => matchesDeck(c, activeDeck));
     return studyQueue(scoped, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
   }
   const dueList = () => queueState().queue;
@@ -121,7 +127,8 @@
     paint();
   }
 
-  const packs = () => (typeof TOEIC_PACKS !== 'undefined' ? TOEIC_PACKS : []);
+  const toeicPacks = () => (typeof TOEIC_PACKS !== 'undefined' ? TOEIC_PACKS : []);
+  const dailyPacks = () => (typeof DAILY_PACKS !== 'undefined' ? DAILY_PACKS : []);
   const existingKeys = () => new Set(data.cards.map((c) => `${c.front.trim().toLowerCase()}\n${c.back.trim().toLowerCase()}`));
 
   function packRemaining(pack) {
@@ -129,25 +136,32 @@
     return pack.cards.filter(([front, back]) => !have.has(`${front.trim().toLowerCase()}\n${back.trim().toLowerCase()}`)).length;
   }
 
-  function loadPack(pack) {
-    const added = importCardPack(data.cards, pack, today());
-    if (!added.length) { $('fc-msg').textContent = `All chunks from "${pack.label}" are already in your deck.`; return; }
-    data.cards.push(...added);
+  function packToItems(pack) {
+    const deck = pack.deck || pack.label;
+    return (pack.cards || []).map(([front, back, example]) => ({ deck, front, back, example }));
+  }
+
+  function loadPack(pack, groupLabel = 'chunks') {
+    const res = importCardPack(data.cards, packToItems(pack), today());
+    if (!res.added) { $('fc-msg').textContent = `All chunks from "${pack.label}" are already in your deck.`; return; }
+    data.cards = res.cards;
     save();
-    $('fc-msg').textContent = `Added ${added.length} TOEIC chunks (${pack.label}).`;
+    $('fc-msg').textContent = `Added ${res.added} ${groupLabel} (${pack.label}).`;
     paint();
   }
 
-  function loadAllPacks() {
+  function loadAllPacks(list, groupLabel = 'chunks') {
     let total = 0;
     const t = today();
-    for (const p of packs()) {
-      const added = importCardPack(data.cards, p, t);
-      if (added.length) { data.cards.push(...added); total += added.length; }
+    let cur = data.cards;
+    for (const p of list) {
+      const res = importCardPack(cur, packToItems(p), t);
+      if (res.added) { cur = res.cards; total += res.added; }
     }
-    if (!total) { $('fc-msg').textContent = 'All 1,000 TOEIC chunks are already in your collection.'; return; }
+    if (!total) { $('fc-msg').textContent = `All ${groupLabel} in this library are already in your collection.`; return; }
+    data.cards = cur;
     save();
-    $('fc-msg').textContent = `Added all ${total} TOEIC chunks across ${packs().length} topics.`;
+    $('fc-msg').textContent = `Added all ${total} ${groupLabel} across ${list.length} topics.`;
     paint();
   }
 
@@ -1637,29 +1651,43 @@
     finishMount();
   }
 
-  function paintPacks() {
-    const box = $('fc-packs');
-    const list = packs();
-    if (!box || !list.length) return;
-    box.hidden = false;
+  const packOpen = { daily: true, toeic: false };
+
+  function buildPackSection(key, title, unitLabel, list) {
+    if (!list.length) return null;
     const total = list.reduce((n, p) => n + p.cards.length, 0);
     const leftAll = list.reduce((n, p) => n + packRemaining(p), 0);
-    if (!data.cards.length) box.open = true;
-    const allBtn = el('button', { type: 'button', className: 'fc-pack-all' + (!leftAll ? ' loaded' : ''), onclick: loadAllPacks },
-      leftAll ? `Add all ${leftAll} remaining TOEIC chunks →` : `✓ All ${total} TOEIC chunks loaded`);
+    const allBtn = el('button', { type: 'button', className: 'fc-pack-all' + (!leftAll ? ' loaded' : ''), onclick: () => loadAllPacks(list, unitLabel) },
+      leftAll ? `Add all ${leftAll} remaining ${unitLabel} →` : `✓ All ${total} ${unitLabel} loaded`);
     const grid = el('div', { className: 'fc-pack-grid' }, ...list.map((p) => {
       const rem = packRemaining(p);
       return el('button', {
         type: 'button',
         className: 'fc-pack-btn' + (rem === 0 ? ' loaded' : ''),
-        onclick: () => loadPack(p),
+        onclick: () => loadPack(p, unitLabel),
       }, el('b', {}, (rem === 0 ? '✓ ' : '+ ') + p.label), el('small', {}, rem === 0 ? `${p.cards.length} ready` : `${rem} of ${p.cards.length} new`));
     }));
-    box.replaceChildren(
+    const sec = el('details', { className: 'fc-packs' },
       el('summary', {},
-        el('span', {}, `TOEIC Complete Library · ${total} chunks (${list.length} topics)`),
+        el('span', {}, `${title} · ${total} chunks (${list.length} topics)`),
         el('small', {}, leftAll ? `${leftAll} available` : 'All installed')),
       el('div', { className: 'fc-pack-body' }, allBtn, grid));
+    sec.open = Boolean(packOpen[key]);
+    sec.addEventListener('toggle', () => { packOpen[key] = sec.open; });
+    return sec;
+  }
+
+  function paintPacks() {
+    const box = $('fc-packs');
+    const dailyList = dailyPacks();
+    const toeicList = toeicPacks();
+    if (!box || (!dailyList.length && !toeicList.length)) return;
+    box.hidden = false;
+    const sections = [
+      buildPackSection('daily', 'Everyday Conversation Library', 'everyday chunks', dailyList),
+      buildPackSection('toeic', 'TOEIC Business Library', 'TOEIC chunks', toeicList),
+    ].filter(Boolean);
+    box.replaceChildren(...sections);
   }
 
   function paint() {
@@ -1693,13 +1721,27 @@
     }
     if ($('fc-search')) $('fc-search').hidden = mode !== 'browse';
 
-    if (activeDeck && !s.decks.includes(activeDeck)) activeDeck = '';
+    if (activeDeck && !activeDeck.endsWith('*') && !s.decks.includes(activeDeck)) activeDeck = '';
+    if (activeDeck === 'Daily · *' && !s.decks.some((d) => d.startsWith('Daily · '))) activeDeck = '';
+    if (activeDeck === 'TOEIC · *' && !s.decks.some((d) => d.startsWith('TOEIC · '))) activeDeck = '';
     const deckBar = $('fc-decks');
     deckBar.hidden = !s.decks.length || (mode === 'quiz' && quizSource !== 'cards');
     if (s.decks.length) {
+      const hasDaily = s.decks.some((d) => d.startsWith('Daily · '));
+      const hasToeic = s.decks.some((d) => d.startsWith('TOEIC · '));
+      const pickDeck = (val) => { activeDeck = val; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); };
+      const shownDecks = s.decks.filter((d) => {
+        if (activeDeck === 'Daily · *' || activeDeck.startsWith('Daily · ')) return !hasToeic || d.startsWith('Daily · ');
+        if (activeDeck === 'TOEIC · *' || activeDeck.startsWith('TOEIC · ')) return !hasDaily || d.startsWith('TOEIC · ');
+        return true;
+      });
       deckBar.replaceChildren(
-        el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => { activeDeck = ''; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); } }, 'All decks'),
-        ...s.decks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => { activeDeck = activeDeck === d ? '' : d; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); } }, d)));
+        el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => pickDeck('') }, 'All decks'),
+        ...(hasDaily && hasToeic ? [
+          el('button', { type: 'button', className: 'tag-pill' + (activeDeck === 'Daily · *' ? ' active' : ''), onclick: () => pickDeck(activeDeck === 'Daily · *' ? '' : 'Daily · *') }, 'Everyday (All)'),
+          el('button', { type: 'button', className: 'tag-pill' + (activeDeck === 'TOEIC · *' ? ' active' : ''), onclick: () => pickDeck(activeDeck === 'TOEIC · *' ? '' : 'TOEIC · *') }, 'TOEIC (All)'),
+        ] : []),
+        ...shownDecks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => pickDeck(activeDeck === d ? '' : d) }, d)));
     }
     if (mode !== 'quiz') paintPacks();
     else if ($('fc-packs')) $('fc-packs').hidden = true;
@@ -1717,7 +1759,7 @@
             el('h3', {}, data.cards.length ? 'All caught up for today' : 'No flashcards yet'),
             el('p', {}, data.cards.length
               ? (waiting ? `You finished today’s pacing target! ${qs.newDue} unseen cards are queued for upcoming days.` : 'You have reviewed every card due today. Come back tomorrow or add new cards.')
-              : 'Load the 1,000 TOEIC chunks above or add your own flashcard on the right.'),
+              : 'Load the 1,000 Everyday or 1,000 TOEIC chunks above, or add your own flashcard on the right.'),
             ...(waiting ? [el('button', {
               type: 'button', className: 'primary fc-more-btn',
               onclick: () => { data.extraDay = t; data.extraToday = (data.extraDay === t ? data.extraToday || 0 : 0) + 20; paint(); },
@@ -1749,7 +1791,7 @@
       stage.replaceChildren(cardBox);
     } else {
       const needle = ($('fc-search')?.value || '').trim().toLowerCase();
-      const list = data.cards.filter((c) => (!activeDeck || c.deck === activeDeck) && (!needle || `${c.front}\n${c.back}\n${c.example || ''}\n${c.deck || ''}`.toLowerCase().includes(needle)));
+      const list = data.cards.filter((c) => matchesDeck(c, activeDeck) && (!needle || `${c.front}\n${c.back}\n${c.example || ''}\n${c.deck || ''}`.toLowerCase().includes(needle)));
       stage.replaceChildren(
         list.length
           ? el('ul', { className: 'fc-list' }, ...list.slice(0, 200).map((c) => {
@@ -1797,6 +1839,9 @@
       return { title: 'Flashcards', lines: [`${rev} card${rev === 1 ? '' : 's'} reviewed`] };
     },
     async start() {
+      if (typeof DAILY_PACKS === 'undefined' && !$('script-daily-pack')) {
+        await loadFile('script', { src: 'daily-pack.js', id: 'script-daily-pack' }).catch(() => {});
+      }
       if (typeof TOEIC_PACKS === 'undefined' && !$('script-toeic-pack')) {
         await loadFile('script', { src: 'toeic-pack.js', id: 'script-toeic-pack' }).catch(() => {});
       }

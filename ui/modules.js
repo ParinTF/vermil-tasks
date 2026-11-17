@@ -35,7 +35,7 @@ const MODULES = [
   { id: 'insights', hub: 'review', pack: 'smart', name: 'Insights', subLabel: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
   { id: 'assistant', pack: 'smart', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
   { id: 'review', pack: 'smart', name: 'Review & Goals', subLabel: 'Review', about: 'Day/week/month/year Review dashboard, automated & manual Goals, and cross-module Insights in one analytics hub.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
-  { id: 'cards', hub: 'notes', pack: 'smart', name: 'Flashcards', subLabel: 'Flashcards', about: 'FSRS flashcards, 1,000 TOEIC chunks, 1,000 Part 5 questions, and 30 full 200-question TOEIC Listening & Reading mock exams (10–990 scoring).', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
+  { id: 'cards', hub: 'notes', pack: 'smart', name: 'Flashcards', subLabel: 'Flashcards', about: 'FSRS flashcards, 1,000 everyday conversation chunks, 1,000 TOEIC chunks, 1,000 Part 5 questions, and 30 full 200-question TOEIC Listening & Reading mock exams (10–990 scoring).', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
 ];
 
 // Packages: Home shows the modules in a few sets instead of one long list. A new module names its set with `pack`.

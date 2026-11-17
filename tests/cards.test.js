@@ -2,6 +2,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
+const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 const { TOEIC_MOCK_P6 } = require('../ui/toeic-mock-p6.js');
 const { TOEIC_MOCK_VOL1 } = require('../ui/toeic-mock-1.js');
@@ -344,4 +345,48 @@ test('TOEIC Listening score scale, 30 balanced sets (3,000 Qs), and Full 200-Q s
   assert.equal(fullRep.correct, 170);
   assert.equal(fullRep.total, 200);
   assert.equal(fullRep.elapsedSec, 4940);
+});
+
+test('DAILY_PACKS provides 1,000 unique everyday chunks separated cleanly from TOEIC decks', () => {
+  assert.equal(DAILY_PACKS.length, 20);
+  const toeicFronts = new Set();
+  for (const p of TOEIC_PACKS) {
+    for (const [front] of p.cards) toeicFronts.add(front.trim().toLowerCase());
+  }
+  const seenFront = new Set();
+  const seenBack = new Set();
+  const dailyItems = [];
+
+  for (const pack of DAILY_PACKS) {
+    assert.ok(pack.deck.startsWith('Daily · '), `Daily pack deck must start with "Daily · ": ${pack.deck}`);
+    assert.equal(pack.cards.length, 50, `Daily pack ${pack.id} must have 50 cards`);
+    for (const [front, back, example] of pack.cards) {
+      assert.equal((front.match(/___/g) || []).length, 1, `Expected single ___ blank: ${front}`);
+      assert.ok(/\([^)]*[\u0E00-\u0E7F]+[^)]*\)$/.test(front.trim()), `Missing Thai cue: ${front}`);
+      assert.ok(back && back.split('/')[0].trim().includes(' '), `Expected multi-word everyday chunk: ${back}`);
+      const fk = front.trim().toLowerCase();
+      const bk = back.trim().toLowerCase();
+      assert.ok(!toeicFronts.has(fk), `Collision with TOEIC_PACKS: ${front}`);
+      assert.ok(!seenFront.has(fk), `Duplicate daily front: ${front}`);
+      assert.ok(!seenBack.has(bk), `Duplicate daily back chunk: ${back}`);
+      seenFront.add(fk);
+      seenBack.add(bk);
+      dailyItems.push({ deck: pack.deck, front, back, example });
+    }
+  }
+  assert.equal(dailyItems.length, 1000);
+
+  const toeicItems = TOEIC_PACKS.flatMap((p) => p.cards.map(([front, back, example]) => ({ deck: p.deck, front, back, example })));
+  let seq = 0;
+  const imported = importCardPack([], [...toeicItems, ...dailyItems], '2026-11-17', () => `d-${++seq}`);
+  assert.equal(imported.added, 2000);
+  assert.equal(imported.cards.length, 2000);
+
+  const dailyQuiz = buildCardQuiz(imported.cards, { count: 20, deck: 'Daily · *' });
+  assert.equal(dailyQuiz.length, 20);
+  assert.ok(dailyQuiz.every((q) => String(q.tag || '').startsWith('Daily · ')));
+
+  const toeicQuiz = buildCardQuiz(imported.cards, { count: 20, deck: 'TOEIC · *' });
+  assert.equal(toeicQuiz.length, 20);
+  assert.ok(toeicQuiz.every((q) => String(q.tag || '').startsWith('TOEIC · ')));
 });
