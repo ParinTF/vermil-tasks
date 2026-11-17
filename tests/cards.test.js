@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, buildMockExam, scoreMockExam, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 const { TOEIC_MOCK_P6 } = require('../ui/toeic-mock-p6.js');
@@ -10,6 +10,12 @@ const { TOEIC_MOCK_VOL3 } = require('../ui/toeic-mock-3.js');
 const { TOEIC_MOCK_VOL4 } = require('../ui/toeic-mock-4.js');
 const { TOEIC_MOCK_VOL5 } = require('../ui/toeic-mock-5.js');
 const { TOEIC_MOCK_VOL6 } = require('../ui/toeic-mock-6.js');
+const { TOEIC_LISTEN_VOL1 } = require('../ui/toeic-listen-1.js');
+const { TOEIC_LISTEN_VOL2 } = require('../ui/toeic-listen-2.js');
+const { TOEIC_LISTEN_VOL3 } = require('../ui/toeic-listen-3.js');
+const { TOEIC_LISTEN_VOL4 } = require('../ui/toeic-listen-4.js');
+const { TOEIC_LISTEN_VOL5 } = require('../ui/toeic-listen-5.js');
+const { TOEIC_LISTEN_VOL6 } = require('../ui/toeic-listen-6.js');
 
 test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Again', () => {
   assert.deepEqual(CARD_BOX_DAYS, [1, 3, 7, 14, 30]);
@@ -247,4 +253,95 @@ test('Mock exam builder serves 30 balanced 100-question TOEIC Reading sets (Part
   assert.equal(report.parts[7].multiTotal, 25);
   assert.equal(report.missed.length, 30);
   assert.equal(report.missed[0].num, 171);
+});
+
+test('TOEIC Listening score scale, 30 balanced sets (3,000 Qs), and Full 200-Q scoring', () => {
+  assert.equal(toeicListeningScore(0, 100), 5);
+  assert.equal(toeicListeningScore(93, 100), 495);
+  assert.equal(toeicListeningCefr(495), 'C1');
+  assert.equal(toeicListeningCefr(400), 'B2');
+  assert.equal(toeicTotalScore(495, 495), 990);
+  assert.equal(toeicTotalCefr(945), 'C1');
+  assert.equal(toeicTotalCefr(785), 'B2');
+
+  const vols = [TOEIC_LISTEN_VOL1, TOEIC_LISTEN_VOL2, TOEIC_LISTEN_VOL3, TOEIC_LISTEN_VOL4, TOEIC_LISTEN_VOL5, TOEIC_LISTEN_VOL6];
+  const p2Seen = new Set();
+  const qSeen = new Set();
+  let totalListenQs = 0;
+
+  for (let set = 1; set <= 30; set++) {
+    const raw = vols[Math.ceil(set / 5) - 1];
+    const qs = buildListeningExam(set, raw);
+    assert.equal(qs.length, 100, `Set ${set} must have 100 listening questions`);
+    totalListenQs += qs.length;
+
+    const parts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+    const p1Ans = [0, 0, 0, 0];
+    const p2Ans = [0, 0, 0];
+    const p34Ans = [0, 0, 0, 0];
+    let p3Graphics = 0;
+    let p4Graphics = 0;
+
+    for (let i = 0; i < qs.length; i++) {
+      const q = qs[i];
+      assert.equal(q.num, i + 1);
+      parts[q.part]++;
+      if (q.part === 1) {
+        assert.equal(q.choices.length, 4);
+        assert.ok(q.imgKey && q.imgKey.endsWith('.webp'));
+        p1Ans[q.ans]++;
+      } else if (q.part === 2) {
+        assert.equal(q.choices.length, 3, `Part 2 must strictly have 3 choices (${q.id})`);
+        assert.ok(q.prompt && q.prompt.length >= 8);
+        assert.ok(!p2Seen.has(q.prompt.toLowerCase()), `Duplicate Part 2 prompt in set ${set}: ${q.prompt}`);
+        p2Seen.add(q.prompt.toLowerCase());
+        p2Ans[q.ans]++;
+      } else {
+        assert.equal(q.choices.length, 4);
+        assert.ok(!qSeen.has(q.q.toLowerCase()), `Duplicate Part 3/4 question in set ${set}: ${q.q}`);
+        qSeen.add(q.q.toLowerCase());
+        p34Ans[q.ans]++;
+        if (q.passages?.[0]) {
+          const doc = q.passages[0];
+          assert.ok(doc.meta == null || (Array.isArray(doc.meta) && doc.meta.every((m) => Array.isArray(m) && m.length >= 2)));
+          assert.ok(Array.isArray(doc.blocks) && doc.blocks.length > 0);
+          if (q.part === 3) p3Graphics++;
+          if (q.part === 4) p4Graphics++;
+        }
+      }
+      assert.ok(q.why && q.why.length >= 15);
+      assert.ok(!/\([A-D]\)/.test(q.why), `Bare choice letter leaked in why: ${q.why}`);
+    }
+
+    assert.deepEqual(parts, { 1: 6, 2: 25, 3: 39, 4: 30 });
+    assert.equal(p3Graphics, 9);
+    assert.equal(p4Graphics, 9);
+    assert.ok(p1Ans.every((c) => c >= 1));
+    assert.ok(p2Ans.every((c) => c >= 8 && c <= 9));
+    assert.ok(p34Ans.every((c) => c >= 15 && c <= 20));
+  }
+
+  assert.equal(totalListenQs, 3000);
+  assert.equal(p2Seen.size, 750);
+  assert.equal(qSeen.size, 2070);
+
+  const lSet1 = buildListeningExam(1, TOEIC_LISTEN_VOL1);
+  const rSet1 = buildMockExam(1, {
+    p5Pool: TOEIC_QUIZ,
+    p6Passages: TOEIC_MOCK_P6,
+    p7Groups: TOEIC_MOCK_VOL1.filter((g) => g.set === 1),
+  });
+  const lRep = scoreListeningExam(lSet1, lSet1.map((q) => q.ans), 1840);
+  const rRep = scoreMockExam(rSet1, rSet1.map((q, idx) => (idx < 70 ? q.ans : (q.ans + 1) % 4)), 3100);
+  assert.equal(lRep.correct, 100);
+  assert.equal(lRep.scaled, 495);
+  assert.equal(lRep.band, 'C1');
+  const fullRep = scoreFullToeicExam(lRep, rRep);
+  assert.equal(fullRep.listenScaled, 495);
+  assert.equal(fullRep.readScaled, 325);
+  assert.equal(fullRep.totalScaled, 820);
+  assert.equal(fullRep.band, 'B2');
+  assert.equal(fullRep.correct, 170);
+  assert.equal(fullRep.total, 200);
+  assert.equal(fullRep.elapsedSec, 4940);
 });

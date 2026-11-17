@@ -207,6 +207,35 @@
 .fc-mk-revbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; }
 .fc-mk-revstrip { display: flex; flex-wrap: wrap; gap: 4px; max-height: 112px; overflow-y: auto; padding: 2px 0; }
 
+/* Listening audio & visual extensions */
+.fc-mk-packbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: color-mix(in srgb, var(--ink) 2.5%, var(--paper)); }
+.fc-mk-packbar-lbl { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--mute); margin-right: 4px; }
+.fc-mk-packpill { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border: 1px solid var(--line); border-radius: 999px; background: var(--paper); font: inherit; font-size: 11.5px; color: var(--ink); cursor: pointer; }
+.fc-mk-packpill:hover:not(:disabled) { border-color: var(--ink); }
+.fc-mk-packpill.ok { border-color: color-mix(in srgb, var(--ink) 45%, var(--line)); font-weight: 600; }
+.fc-mk-packpill.busy { border-color: var(--accent); color: var(--accent-text); cursor: progress; }
+.fc-mk-packdel { padding: 0 3px; border: 0; background: none; font: inherit; font-size: 11px; color: var(--mute); cursor: pointer; }
+.fc-mk-packdel:hover { color: var(--accent-text); }
+.fc-mk-promptcard { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1.5px solid var(--ink); border-radius: 12px; background: color-mix(in srgb, var(--ink) 4%, var(--paper)); }
+.fc-mk-promptcard div { display: grid; gap: 3px; min-width: 220px; flex: 1; }
+.fc-mk-promptcard strong { font-size: 14px; color: var(--ink); }
+.fc-mk-promptcard small { font-size: 12.5px; color: var(--mute); line-height: 1.4; }
+.fc-mk-promptacts { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.fc-mk-photo { width: 100%; max-height: 440px; aspect-ratio: 4 / 3; object-fit: cover; border-radius: 10px; display: block; border: 1px solid var(--line); }
+.fc-mk-photofallback { display: grid; place-items: center; text-align: center; gap: 6px; padding: 36px 20px; border: 1px dashed var(--line); border-radius: 10px; color: var(--mute); font-size: 13.5px; }
+.fc-mk-audiobar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; padding: 10px 12px; border: 1px solid var(--line); border-radius: 10px; background: color-mix(in srgb, var(--ink) 3%, var(--paper)); }
+.fc-mk-playbtn { padding: 5px 13px; border: 0; border-radius: 999px; background: var(--ink); color: var(--paper); font: inherit; font-size: 12px; font-weight: 700; cursor: pointer; }
+.fc-mk-playbtn.playing { background: var(--accent); color: var(--on-accent); }
+.fc-mk-playbtn:disabled { opacity: .5; cursor: not-allowed; }
+.fc-mk-trackmeta { flex: 1; min-width: 140px; display: grid; gap: 4px; }
+.fc-mk-tracktitle { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; font-weight: 600; color: var(--ink); font-variant-numeric: tabular-nums; }
+.fc-mk-trackprog { height: 5px; border-radius: 999px; background: color-mix(in srgb, var(--ink) 14%, transparent); overflow: hidden; }
+.fc-mk-trackfill { height: 100%; width: 0%; background: var(--accent); border-radius: 999px; transition: width .2s linear; }
+.fc-mk-trackseek { width: 100%; accent-color: var(--accent); cursor: pointer; }
+.fc-mk-script { display: grid; gap: 4px; padding: 10px 12px; border-radius: 8px; background: color-mix(in srgb, var(--ink) 4%, transparent); font-size: 13.5px; line-height: 1.5; color: var(--ink); }
+.fc-mk-script p { margin: 0; }
+.fc-mk-stage2box { display: grid; gap: 12px; padding: 28px 24px; border: 2px solid var(--ink); border-radius: 14px; text-align: center; justify-items: center; }
+
 @media (max-width: 640px) {
   .cards-page { gap: 16px; padding-top: 12px; }
   .fc-head h2 { font-size: 24px; }

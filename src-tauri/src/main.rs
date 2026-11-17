@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod assistant;
+mod listening;
 
 use chrono::{DateTime, Local, NaiveDateTime, NaiveTime, TimeZone};
 use serde::{Deserialize, Serialize};
@@ -1492,7 +1493,7 @@ pub fn run() {
             }
         });
     builder
-        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, save_page_pdf, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask])
+        .invoke_handler(tauri::generate_handler![get_todos, save_todos, check_update, install_update, get_autostart, set_autostart, quick_add, quick_shortcut, export_todos, get_summary_time, set_summary_time, get_notes, save_notes, delete_note, convert_legacy_notes, get_modules, save_module, toast, quick_note, net_online, stock_search, stock_quotes, get_backup, set_backup, backup_now, widget_enable, widget_set, widget_get, widget_click, get_sync, set_sync, sync_now, export_text, get_notify, set_notify, get_zoom, set_zoom, get_hotkeys, set_hotkey, reset_hotkeys, data_info, open_data_folder, save_page_pdf, assistant::get_assistant, assistant::set_assistant, assistant::assistant_models, assistant::assistant_ask, listening::listening_pack_status, listening::download_listening_pack, listening::delete_listening_pack, listening::read_listening_asset])
         .setup(|app| {
             let dir = app.path().app_data_dir()?;
             fs::create_dir_all(&dir)?;

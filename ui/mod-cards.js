@@ -1,21 +1,48 @@
-// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler (Again / Hard / Good / Easy) with context examples.
-// Data: { cards: [{ id, deck, front, back, example?, s?, d?, ivl?, lapses?, box, next, lastReviewed, reviews }] }.
+// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + 1,000 TOEIC chunks + Part 5 quizzes
+// + 30 Full TOEIC Listening & Reading Mock Exams (Q1-100 Listening / Q101-200 Reading / Full 200-Q 10-990 scoring).
+// Data: { cards, newLimit, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, mockProgress }.
 (() => {
-  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, mockProgress: {} };
+  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {} };
   let mode = 'study'; // 'study' | 'quiz' | 'browse'
   let activeDeck = '';
   let revealed = false;
-  let quizSource = 'mock'; // 'mock' (30 x 100-Q Reading Mock) | 'sets' (20 x 50-Q Part 5) | 'topic' (1,000 Qs) | 'cards'
+  let quizSource = 'mock'; // 'mock' | 'sets' | 'topic' | 'cards'
   let quizSet = 1;
   let quizTag = '';
   let quizCount = 10;
   let quizSyncFsrs = true;
-  let quizState = null; // { source, set, questions, answers, index, recorded }
-  let mockExamMode = 'exam'; // 'exam' (75m timed, submit at end) | 'practice' (untimed, instant reveal)
+  let quizState = null;
+
+  let mockSection = 'listening'; // 'listening' | 'reading' | 'full'
+  let mockExamMode = 'exam'; // 'exam' | 'practice'
   let mockSession = null;
+  let pendingPackSet = 0; // set waiting on volume download/preview choice
   let loadingMockSet = 0;
   let mockTimer = null;
-  const EXAM_SEC = 75 * 60;
+
+  let packStatus = {}; // vol (1..6) -> { vol, installed, bytes }
+  let packLoadingVol = 0;
+  let packDownload = {}; // vol -> { loaded, total }
+  let unlistenProgress = null;
+
+  const assetCache = new Map();
+  const audioState = {
+    el: null,
+    key: '',
+    playing: false,
+    loading: false,
+    playedKeys: new Set(),
+    currentTime: 0,
+    duration: 0,
+    rate: 1.0,
+    autoNext: true,
+    nextTimer: null,
+    error: '',
+  };
+
+  const READ_EXAM_SEC = 75 * 60;
+  const LISTEN_EXAM_SEC = 45 * 60;
+  const tauriInvoke = (cmd, args) => (window.__TAURI__?.core?.invoke ? window.__TAURI__.core.invoke(cmd, args) : null);
   const save = () => saveModule('cards', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('cards-view');
   const today = () => localDay(new Date());
@@ -28,9 +55,9 @@
         el('div', { className: 'fc-head' },
           el('h2', {}, 'Flashcards'),
           el('div', { className: 'fc-modes', role: 'tablist', ariaLabel: 'Flashcards mode' },
-            el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { mode = 'study'; revealed = false; paint(); } }, 'Study'),
-            el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (quizSource !== 'mock' && !quizState) startQuiz(); else paint(); } }, 'Test'),
-            el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { mode = 'browse'; paint(); } }, 'All cards'))),
+            el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'study'; revealed = false; paint(); } }, 'Study'),
+            el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (quizSource !== 'mock' && !quizState) startQuiz(); else { refreshPackStatus(); paint(); } } }, 'Test'),
+            el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'browse'; paint(); } }, 'All cards'))),
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
         el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
         el('div', { id: 'fc-decks', className: 'tag-bar', hidden: true }),
@@ -73,80 +100,379 @@
   }
   const dueList = () => queueState().queue;
 
-  // grade: 1 Again, 2 Hard, 3 Good, 4 Easy (FSRS)
   function gradeCurrent(grade) {
     const list = dueList();
     const cur = list[0];
     if (!cur) return;
     const t = today();
-    const wasNew = !cur.lastReviewed;
+    const wasNew = cur.reviews === 0;
     const updated = fsrsReview(cur, grade, t);
     data.cards = data.cards.map((c) => (c.id === cur.id ? updated : c));
-    if (wasNew) data.newLog = { day: t, count: newDone(t) + 1 };
-    revealed = false;
-    emit('card-reviewed', { key: `card:${cur.id}:${t}` });
+    if (wasNew) data.newLog = { day: t, count: (data.newLog?.day === t ? data.newLog.count || 0 : 0) + 1 };
     save();
+    emit('card-reviewed', { key: `card:${cur.id}:${t}` });
+    revealed = false;
     paint();
   }
 
-  async function remove(card) {
-    if (!(await ask(`Delete card "${card.front.slice(0, 60)}"?`, 'Delete'))) return;
+  function remove(card) {
     data.cards = data.cards.filter((c) => c.id !== card.id);
     save();
     paint();
   }
 
   const packs = () => (typeof TOEIC_PACKS !== 'undefined' ? TOEIC_PACKS : []);
-  const packItems = (p) => p.cards.map(([front, back, example]) => ({ deck: p.deck, front, back, example }));
-  const packRemaining = (p) => {
-    const have = new Set(data.cards.map((c) => String(c.front || '').trim().toLowerCase()));
-    return p.cards.filter(([front]) => !have.has(String(front || '').trim().toLowerCase())).length;
-  };
+  const existingKeys = () => new Set(data.cards.map((c) => `${c.front.trim().toLowerCase()}\n${c.back.trim().toLowerCase()}`));
 
-  function loadPack(p) {
-    const res = importCardPack(data.cards, packItems(p), today());
-    data.cards = res.cards;
-    activeDeck = p.deck;
-    mode = 'study';
-    revealed = false;
-    if (res.added) save();
-    if ($('fc-msg')) $('fc-msg').textContent = res.added ? `Loaded ${res.added} TOEIC chunks into "${p.deck}".` : `"${p.deck}" is already loaded.`;
+  function packRemaining(pack) {
+    const have = existingKeys();
+    return pack.cards.filter(([front, back]) => !have.has(`${front.trim().toLowerCase()}\n${back.trim().toLowerCase()}`)).length;
+  }
+
+  function loadPack(pack) {
+    const added = importCardPack(data.cards, pack, today());
+    if (!added.length) { $('fc-msg').textContent = `All chunks from "${pack.label}" are already in your deck.`; return; }
+    data.cards.push(...added);
+    save();
+    $('fc-msg').textContent = `Added ${added.length} TOEIC chunks (${pack.label}).`;
     paint();
   }
 
   function loadAllPacks() {
-    const allItems = packs().flatMap(packItems);
-    const res = importCardPack(data.cards, allItems, today());
-    data.cards = res.cards;
-    activeDeck = '';
-    mode = 'study';
-    revealed = false;
-    if (res.added) save();
-    if ($('fc-msg')) $('fc-msg').textContent = res.added ? `Loaded all ${res.added} TOEIC chunks.` : 'All TOEIC packs are already loaded.';
-    if ($('fc-packs')) $('fc-packs').open = false;
+    let total = 0;
+    const t = today();
+    for (const p of packs()) {
+      const added = importCardPack(data.cards, p, t);
+      if (added.length) { data.cards.push(...added); total += added.length; }
+    }
+    if (!total) { $('fc-msg').textContent = 'All 1,000 TOEIC chunks are already in your collection.'; return; }
+    save();
+    $('fc-msg').textContent = `Added all ${total} TOEIC chunks across ${packs().length} topics.`;
     paint();
   }
 
-  function formatClock(sec = 0) {
-    const s = Math.max(0, Math.floor(sec));
+  function isField(t) {
+    return t.matches('input, textarea, select') && t.type !== 'checkbox';
+  }
+
+  function formatClock(sec) {
+    const s = Math.max(0, Math.floor(sec || 0));
     const m = Math.floor(s / 60);
     const r = s % 60;
     return `${String(m).padStart(2, '0')}:${String(r).padStart(2, '0')}`;
   }
 
+  // ── Media Pack Manager (.vpack) & Listening Audio Playback ──
+
+  function cacheSet(key, val) {
+    if (assetCache.has(key)) assetCache.delete(key);
+    assetCache.set(key, val);
+    if (assetCache.size > 40) {
+      const first = assetCache.keys().next().value;
+      if (first) assetCache.delete(first);
+    }
+  }
+
+  async function fetchAsset(vol, key) {
+    const cacheKey = `${vol}:${key}`;
+    if (assetCache.has(cacheKey)) return assetCache.get(cacheKey);
+    try {
+      const dataUri = await tauriInvoke('read_listening_asset', { vol, key });
+      if (dataUri) cacheSet(cacheKey, dataUri);
+      return dataUri || '';
+    } catch {
+      return '';
+    }
+  }
+
+  async function refreshPackStatus() {
+    if (!window.__TAURI__?.core?.invoke) return;
+    try {
+      const list = await tauriInvoke('listening_pack_status');
+      const next = {};
+      for (const it of list || []) next[it.vol] = it;
+      packStatus = next;
+      if (mode === 'quiz' && quizSource === 'mock') paint();
+    } catch {}
+  }
+
+  async function downloadPack(vol) {
+    if (packLoadingVol || !window.__TAURI__?.core?.invoke) return false;
+    packLoadingVol = vol;
+    packDownload[vol] = { loaded: 0, total: 0 };
+    paint();
+    try {
+      const st = await tauriInvoke('download_listening_pack', { vol });
+      assetCache.clear();
+      packStatus = { ...packStatus, [vol]: st };
+      packLoadingVol = 0;
+      delete packDownload[vol];
+      paint();
+      return true;
+    } catch (e) {
+      packLoadingVol = 0;
+      delete packDownload[vol];
+      tell('Download failed: ' + (e?.message || e));
+      paint();
+      return false;
+    }
+  }
+
+  async function removePack(vol, e) {
+    e?.stopPropagation?.();
+    if (packLoadingVol || !window.__TAURI__?.core?.invoke) return;
+    if (!(await ask(`Remove cached Volume ${vol} audio & photo pack to free disk space?`, 'Remove'))) return;
+    try {
+      await tauriInvoke('delete_listening_pack', { vol });
+      assetCache.clear();
+      await refreshPackStatus();
+    } catch (err) {
+      tell('Could not remove pack: ' + (err?.message || err));
+    }
+  }
+
+  function clearAudioTimers() {
+    if (audioState.nextTimer) { clearTimeout(audioState.nextTimer); audioState.nextTimer = null; }
+  }
+
+  function stopAudioPlayback() {
+    clearAudioTimers();
+    if (audioState.el) {
+      try { audioState.el.pause(); } catch {}
+    }
+    try { window.speechSynthesis?.cancel(); } catch {}
+    audioState.playing = false;
+    audioState.loading = false;
+    audioState.key = '';
+    audioState.currentTime = 0;
+    audioState.duration = 0;
+    audioState.error = '';
+  }
+
+  function updateAudioUi() {
+    const tEl = $('fc-mk-audiotime');
+    const fEl = $('fc-mk-trackfill');
+    const sEl = $('fc-mk-seek');
+    const pEl = $('fc-mk-playbtn');
+    const dur = audioState.duration || 0;
+    const cur = audioState.currentTime || 0;
+    if (tEl) tEl.textContent = audioState.loading ? 'Loading audio…' : `${formatClock(cur)} / ${dur ? formatClock(dur) : '--:--'}`;
+    if (fEl) fEl.style.width = `${dur > 0 ? Math.min(100, (cur / dur) * 100) : 0}%`;
+    if (sEl && dur > 0) { sEl.max = String(dur); sEl.value = String(cur); }
+    if (pEl) {
+      pEl.textContent = audioState.playing ? '❚❚ Playing' : '▶ Play';
+      pEl.className = 'fc-mk-playbtn' + (audioState.playing ? ' playing' : '');
+    }
+  }
+
+  function pickVoice(hint = 'us', role = 'm') {
+    const voices = window.speechSynthesis?.getVoices?.() || [];
+    const wantFemale = String(role).includes('w') || String(role).includes('f');
+    const en = voices.filter((v) => String(v.lang || '').toLowerCase().startsWith('en'));
+    if (!en.length) return null;
+    const langPrefix = hint === 'uk' ? 'en-gb' : hint === 'au' ? 'en-au' : hint === 'ca' ? 'en-ca' : 'en-us';
+    const byRegion = en.filter((v) => v.lang.toLowerCase().startsWith(langPrefix));
+    const pool = byRegion.length ? byRegion : en;
+    const fem = pool.find((v) => /zira|sonia|libby|natasha|clara|aria|jenny|female|woman/i.test(v.name));
+    const mal = pool.find((v) => /david|mark|ryan|william|liam|guy|andrew|male|man/i.test(v.name));
+    return (wantFemale ? fem || pool[pool.length - 1] : mal || pool[0]) || pool[0];
+  }
+
+  function speakListeningFallback(q, onFinish) {
+    if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') {
+      audioState.error = 'Audio pack not downloaded and system speech synthesis is unavailable.';
+      updateAudioUi();
+      return;
+    }
+    window.speechSynthesis.cancel();
+    const lines = [];
+    if (q.part === 1) {
+      lines.push([`Number ${q.num}.`, 'us', 'm']);
+      ['A', 'B', 'C', 'D'].forEach((L, idx) => lines.push([`${L}. ${q.choices[idx] || ''}`, q.accent || 'us', 'm']));
+    } else if (q.part === 2) {
+      lines.push([`Number ${q.num}. ${q.prompt || ''}`, 'uk', 'f']);
+      ['A', 'B', 'C'].forEach((L, idx) => lines.push([`${L}. ${q.choices[idx] || ''}`, 'us', 'm']));
+    } else if (q.part === 3) {
+      lines.push([`Questions ${q.groupRange || q.num}.`, 'us', 'm']);
+      (q.scriptLines || []).forEach((line, idx) => lines.push([line.replace(/^[^:]+:\s*/, ''), idx % 2 ? 'uk' : 'us', idx % 2 ? 'm' : 'f']));
+    } else {
+      lines.push([`Questions ${q.groupRange || q.num}. ${q.contextLabel || ''}.`, 'us', 'm']);
+      lines.push([(q.scriptLines || []).slice(1).join(' '), 'us', 'm']);
+    }
+    let idx = 0;
+    audioState.playing = true;
+    audioState.loading = false;
+    updateAudioUi();
+    const key = q.audioKey;
+    const next = () => {
+      if (!audioState.playing || audioState.key !== key) return;
+      if (idx >= lines.length) {
+        audioState.playing = false;
+        onFinish();
+        return;
+      }
+      const [txt, acc, role] = lines[idx++];
+      const u = new SpeechSynthesisUtterance(txt);
+      const v = pickVoice(acc, role);
+      if (v) u.voice = v;
+      u.rate = audioState.rate || 1.0;
+      u.pitch = role === 'f' ? 1.08 : 0.96;
+      u.onend = () => { if (audioState.key === key && audioState.playing) setTimeout(next, 420); };
+      u.onerror = () => { audioState.playing = false; updateAudioUi(); };
+      window.speechSynthesis.speak(u);
+    };
+    next();
+  }
+
+  function scheduleExamAutoNext(playedKey) {
+    clearAudioTimers();
+    if (!mockSession || mockSession.submitted || mockSession.paused || mockSession.examMode !== 'exam' || !audioState.autoNext) return;
+    const curQ = mockSession.questions[mockSession.index];
+    if (!curQ || curQ.audioKey !== playedKey) return;
+    const waitMs = curQ.part <= 2 ? 2000 : 1800;
+    audioState.nextTimer = setTimeout(() => {
+      if (!mockSession || mockSession.submitted || mockSession.paused || mockSession.examMode !== 'exam') return;
+      const qs = mockSession.questions;
+      const curIdx = mockSession.index;
+      if (qs[curIdx]?.audioKey !== playedKey) return;
+      let nextIdx = curIdx + 1;
+      while (nextIdx < qs.length && qs[nextIdx].audioKey === playedKey) nextIdx++;
+      if (nextIdx < qs.length) gotoMockQuestion(nextIdx);
+    }, waitMs);
+  }
+
+  async function playQuestionAudio(q, { restart = false } = {}) {
+    if (!q?.audioKey) return;
+    clearAudioTimers();
+    const key = q.audioKey;
+    const sameKey = audioState.key === key;
+    if (sameKey && !restart && audioState.playing) return;
+
+    if (!sameKey || restart) {
+      if (audioState.el) { try { audioState.el.pause(); } catch {} }
+      try { window.speechSynthesis?.cancel(); } catch {}
+    }
+
+    audioState.key = key;
+    audioState.error = '';
+
+    const onEnded = () => {
+      audioState.playing = false;
+      audioState.playedKeys.add(key);
+      updateAudioUi();
+      scheduleExamAutoNext(key);
+    };
+
+    if (mockSession?.ttsFallback) {
+      speakListeningFallback(q, onEnded);
+      return;
+    }
+
+    if (!audioState.el && typeof Audio !== 'undefined') {
+      const a = new Audio();
+      a.addEventListener('timeupdate', () => {
+        if (audioState.key !== key) return;
+        audioState.currentTime = a.currentTime || 0;
+        audioState.duration = a.duration || 0;
+        updateAudioUi();
+      });
+      a.addEventListener('loadedmetadata', () => {
+        audioState.duration = a.duration || 0;
+        updateAudioUi();
+      });
+      a.addEventListener('ended', () => {
+        audioState.playing = false;
+        audioState.playedKeys.add(audioState.key);
+        updateAudioUi();
+        scheduleExamAutoNext(audioState.key);
+      });
+      audioState.el = a;
+    }
+
+    if (!audioState.el) return;
+    try {
+      if (!sameKey || restart) {
+        audioState.loading = true;
+        audioState.currentTime = 0;
+        audioState.duration = 0;
+        updateAudioUi();
+        const uri = await fetchAsset(q.vol, key);
+        if (audioState.key !== key) return;
+        audioState.loading = false;
+        if (!uri) {
+          audioState.error = 'Audio pack asset missing — download Volume pack in Lobby.';
+          updateAudioUi();
+          return;
+        }
+        audioState.el.src = uri;
+        audioState.el.currentTime = 0;
+      }
+      audioState.el.playbackRate = audioState.rate || 1.0;
+      audioState.playing = true;
+      updateAudioUi();
+      await audioState.el.play();
+    } catch (err) {
+      audioState.loading = false;
+      audioState.playing = false;
+      audioState.error = 'Playback error: ' + (err?.message || err);
+      updateAudioUi();
+    }
+  }
+
+  function toggleAudioPlayPause(q) {
+    if (!q?.audioKey || !mockSession) return;
+    if (mockSession.ttsFallback) {
+      if (audioState.playing) { stopAudioPlayback(); updateAudioUi(); }
+      else playQuestionAudio(q, { restart: true });
+      return;
+    }
+    if (mockSession.examMode === 'exam' && !mockSession.submitted && audioState.playedKeys.has(q.audioKey)) return;
+    if (audioState.key === q.audioKey && audioState.el?.src) {
+      if (audioState.playing) {
+        audioState.el.pause();
+        audioState.playing = false;
+        clearAudioTimers();
+        updateAudioUi();
+      } else {
+        audioState.playing = true;
+        audioState.el.playbackRate = audioState.rate || 1.0;
+        updateAudioUi();
+        audioState.el.play().catch(() => {});
+      }
+    } else {
+      playQuestionAudio(q, { restart: true });
+    }
+  }
+
+  // ── Mock Progress & Session Lifecycle ──
+
+  function progressKeyFor(sess = mockSession) {
+    if (!sess) return '';
+    if (sess.isFull) return `F${sess.set}`;
+    return sess.stage === 'listening' ? `L${sess.set}` : String(sess.set);
+  }
+
   function persistMockProgress() {
     if (!mockSession || mockSession.submitted) return;
-    const key = String(mockSession.set);
-    data.mockProgress = {
-      ...(data.mockProgress || {}),
-      [key]: {
-        answers: mockSession.answers,
-        flags: mockSession.flags,
-        elapsed: mockSession.elapsed,
-        index: mockSession.index,
-        examMode: mockSession.examMode,
-      },
+    const key = progressKeyFor(mockSession);
+    if (!key) return;
+    const entry = {
+      answers: mockSession.answers,
+      flags: mockSession.flags,
+      elapsed: mockSession.elapsed,
+      index: mockSession.index,
+      examMode: mockSession.examMode,
+      ttsFallback: Boolean(mockSession.ttsFallback),
+      ...(mockSession.isFull ? {
+        isFull: true,
+        stage: mockSession.stage,
+        intermission: Boolean(mockSession.intermission),
+        stage1Answers: mockSession.stage1?.answers || null,
+        stage1Flags: mockSession.stage1?.flags || null,
+        stage1Elapsed: mockSession.stage1?.elapsed || 0,
+      } : {}),
     };
+    data.mockProgress = { ...(data.mockProgress || {}), [key]: entry };
     save();
   }
 
@@ -154,14 +480,24 @@
     if (mockTimer) { clearInterval(mockTimer); mockTimer = null; }
   }
 
+  function stopMockAll() {
+    stopMockTimer();
+    stopAudioPlayback();
+  }
+
+  function sectionLimitSec(sess = mockSession) {
+    return sess?.stage === 'listening' ? LISTEN_EXAM_SEC : READ_EXAM_SEC;
+  }
+
   function syncMockTimer() {
-    const active = mode === 'quiz' && quizSource === 'mock' && mockSession && !mockSession.submitted && !mockSession.paused && mockSession.examMode === 'exam';
+    const active = mode === 'quiz' && quizSource === 'mock' && mockSession && !mockSession.submitted && !mockSession.intermission && !mockSession.paused && mockSession.examMode === 'exam';
     if (!active) { stopMockTimer(); return; }
     if (mockTimer) return;
+    const limit = sectionLimitSec(mockSession);
     mockTimer = setInterval(() => {
-      if (!mockSession || mockSession.submitted || mockSession.paused || mode !== 'quiz' || quizSource !== 'mock') { stopMockTimer(); return; }
+      if (!mockSession || mockSession.submitted || mockSession.paused || mockSession.intermission || mode !== 'quiz' || quizSource !== 'mock') { stopMockTimer(); return; }
       mockSession.elapsed++;
-      const left = Math.max(0, EXAM_SEC - mockSession.elapsed);
+      const left = Math.max(0, limit - mockSession.elapsed);
       const tEl = $('fc-mk-timer');
       if (tEl) {
         tEl.textContent = formatClock(left);
@@ -175,7 +511,7 @@
     }, 1000);
   }
 
-  async function ensureMockVolume(setNum) {
+  async function ensureReadingVolume(setNum) {
     if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
       await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' });
     }
@@ -190,27 +526,88 @@
     return (globalThis.TOEIC_MOCK_VOLS || {})[vol] || [];
   }
 
-  async function startMockExam(setNum = 1, { resume = false, examMode = mockExamMode } = {}) {
+  async function ensureListeningVolume(setNum) {
+    const vol = Math.ceil((Number(setNum) || 1) / 5);
+    const vols = globalThis.TOEIC_LISTEN_VOLS || {};
+    if (!vols[vol] && !$(`script-toeic-listen-${vol}`)) {
+      await loadFile('script', { src: `toeic-listen-${vol}.js`, id: `script-toeic-listen-${vol}` });
+    }
+    return (globalThis.TOEIC_LISTEN_VOLS || {})[vol] || [];
+  }
+
+  async function launchMockEntry(setNum, { section = mockSection, resume = false, examMode = mockExamMode, allowFallback = false } = {}) {
     const s = Number(setNum) || 1;
-    loadingMockSet = s;
-    paint();
-    try {
-      const p7Groups = await ensureMockVolume(s);
-      const p5Pool = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
-      const p6Passages = typeof TOEIC_MOCK_P6 !== 'undefined' ? TOEIC_MOCK_P6 : [];
-      const questions = buildMockExam(s, { p5Pool, p6Passages, p7Groups });
-      loadingMockSet = 0;
-      if (!questions.length) {
-        tell(`Mock Exam Set ${s} could not be loaded.`);
+    const saved = resume ? data.mockProgress?.[section === 'full' ? `F${s}` : section === 'listening' ? `L${s}` : String(s)] : null;
+    const needPack = (section === 'listening' || (section === 'full' && (!saved || saved.stage !== 'reading'))) && !allowFallback && !saved?.ttsFallback;
+    if (needPack && window.__TAURI__?.core?.invoke) {
+      const vol = Math.ceil(s / 5);
+      const st = packStatus[vol];
+      if (!st?.installed) {
+        pendingPackSet = s;
         paint();
         return;
       }
-      const saved = resume ? data.mockProgress?.[String(s)] : null;
+    }
+    pendingPackSet = 0;
+    await startMockExam(s, { section, resume, examMode, ttsFallback: allowFallback || Boolean(saved?.ttsFallback) });
+  }
+
+  async function startMockExam(setNum = 1, { section = mockSection, resume = false, examMode = mockExamMode, ttsFallback = false } = {}) {
+    const s = Number(setNum) || 1;
+    loadingMockSet = s;
+    stopMockAll();
+    audioState.playedKeys = new Set();
+    paint();
+
+    try {
+      const progKey = section === 'full' ? `F${s}` : section === 'listening' ? `L${s}` : String(s);
+      const saved = resume ? data.mockProgress?.[progKey] : null;
+      const isFull = section === 'full';
+      const stage = isFull && saved?.stage === 'reading' ? 'reading' : section === 'reading' ? 'reading' : 'listening';
+
+      let questions = [];
+      let stage1 = null;
+      if (stage === 'listening') {
+        const raw = await ensureListeningVolume(s);
+        questions = buildListeningExam(s, raw);
+      } else {
+        if (isFull && saved?.stage1Answers) {
+          const rawL = await ensureListeningVolume(s);
+          const lQs = buildListeningExam(s, rawL);
+          const lAns = saved.stage1Answers;
+          stage1 = {
+            questions: lQs,
+            answers: lAns,
+            flags: saved.stage1Flags || new Array(lQs.length).fill(false),
+            elapsed: saved.stage1Elapsed || 0,
+            report: scoreListeningExam(lQs, lAns, saved.stage1Elapsed || 0),
+          };
+        }
+        const p7Groups = await ensureReadingVolume(s);
+        const p5Pool = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+        const p6Passages = typeof TOEIC_MOCK_P6 !== 'undefined' ? TOEIC_MOCK_P6 : [];
+        questions = buildMockExam(s, { p5Pool, p6Passages, p7Groups });
+      }
+
+      loadingMockSet = 0;
+      if (!questions.length) {
+        tell(`Mock Set ${s} (${stage}) could not be loaded.`);
+        paint();
+        return;
+      }
+
       const len = questions.length;
       const answers = saved?.answers?.length === len ? [...saved.answers] : new Array(len).fill(null);
       const flags = saved?.flags?.length === len ? [...saved.flags] : new Array(len).fill(false);
+
       mockSession = {
         set: s,
+        vol: Math.ceil(s / 5),
+        isFull,
+        stage,
+        intermission: Boolean(saved?.intermission),
+        stage1,
+        ttsFallback: ttsFallback || Boolean(saved?.ttsFallback),
         examMode: saved?.examMode || examMode,
         questions,
         answers,
@@ -222,11 +619,17 @@
         docTab: 'all',
         submitted: false,
         report: null,
+        listenReport: stage1?.report || null,
+        readReport: null,
+        fullReport: null,
         revFilter: 'missed',
         revPart: 0,
       };
       quizSource = 'mock';
       paint();
+      if (mockSession.stage === 'listening' && mockSession.examMode === 'exam' && !mockSession.paused && !mockSession.intermission) {
+        playQuestionAudio(mockSession.questions[mockSession.index]);
+      }
     } catch (e) {
       loadingMockSet = 0;
       tell('Could not load mock exam data: ' + (e.message || e));
@@ -234,50 +637,169 @@
     }
   }
 
+  async function beginReadingStage2() {
+    if (!mockSession || !mockSession.isFull || mockSession.stage !== 'listening') return;
+    loadingMockSet = mockSession.set;
+    stopMockAll();
+    paint();
+    try {
+      const p7Groups = await ensureReadingVolume(mockSession.set);
+      const p5Pool = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+      const p6Passages = typeof TOEIC_MOCK_P6 !== 'undefined' ? TOEIC_MOCK_P6 : [];
+      const readQs = buildMockExam(mockSession.set, { p5Pool, p6Passages, p7Groups });
+      loadingMockSet = 0;
+      if (!readQs.length) {
+        tell(`Reading Set ${mockSession.set} could not be loaded.`);
+        paint();
+        return;
+      }
+      mockSession.stage = 'reading';
+      mockSession.intermission = false;
+      mockSession.questions = readQs;
+      mockSession.answers = new Array(readQs.length).fill(null);
+      mockSession.flags = new Array(readQs.length).fill(false);
+      mockSession.index = 0;
+      mockSession.elapsed = 0;
+      mockSession.docTab = 'all';
+      mockSession.navOpen = false;
+      mockSession.paused = false;
+      persistMockProgress();
+      paint();
+    } catch (e) {
+      loadingMockSet = 0;
+      tell('Could not load Reading stage: ' + (e.message || e));
+      paint();
+    }
+  }
+
+  function recordSectionScore(type, setNum, report) {
+    const key = String(setNum);
+    if (type === 'listening') {
+      const prev = data.listenScores?.[key];
+      data.listenScores = {
+        ...(data.listenScores || {}),
+        [key]: {
+          bestScaled: Math.max(prev?.bestScaled || 0, report.scaled),
+          bestRaw: Math.max(prev?.bestRaw || 0, report.correct),
+          lastScaled: report.scaled,
+          lastRaw: report.correct,
+          band: toeicListeningCefr(Math.max(prev?.bestScaled || 0, report.scaled)),
+          attempts: (prev?.attempts || 0) + 1,
+          parts: report.parts,
+        },
+      };
+    } else if (type === 'reading') {
+      const prev = data.mockScores?.[key];
+      data.mockScores = {
+        ...(data.mockScores || {}),
+        [key]: {
+          bestScaled: Math.max(prev?.bestScaled || 0, report.scaled),
+          bestRaw: Math.max(prev?.bestRaw || 0, report.correct),
+          lastScaled: report.scaled,
+          lastRaw: report.correct,
+          band: toeicCefrBand(Math.max(prev?.bestScaled || 0, report.scaled)),
+          attempts: (prev?.attempts || 0) + 1,
+          parts: report.parts,
+        },
+      };
+    }
+  }
+
   async function submitMockExam(autoTimedOut = false) {
     if (!mockSession || mockSession.submitted) return;
     const unanswered = mockSession.answers.filter((a) => a === null || a === undefined).length;
     if (!autoTimedOut && unanswered > 0) {
-      if (!(await ask(`You still have ${unanswered} unanswered question${unanswered === 1 ? '' : 's'}. Submit Mock Set ${mockSession.set} and calculate your score?`, 'Submit'))) return;
+      const label = mockSession.isFull && mockSession.stage === 'listening' ? 'Submit Listening & advance to Reading' : 'Submit';
+      if (!(await ask(`You still have ${unanswered} unanswered question${unanswered === 1 ? '' : 's'}. ${label}?`, label))) return;
     }
-    stopMockTimer();
-    const report = scoreMockExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
-    mockSession.submitted = true;
-    mockSession.report = report;
+    stopMockAll();
+
+    if (mockSession.stage === 'listening' && mockSession.isFull) {
+      const lRep = scoreListeningExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
+      recordSectionScore('listening', mockSession.set, lRep);
+      mockSession.stage1 = {
+        questions: mockSession.questions,
+        answers: [...mockSession.answers],
+        flags: [...mockSession.flags],
+        elapsed: mockSession.elapsed,
+        report: lRep,
+      };
+      mockSession.listenReport = lRep;
+      mockSession.intermission = true;
+      mockSession.paused = false;
+      persistMockProgress();
+      save();
+      paint();
+      return;
+    }
+
+    if (mockSession.stage === 'listening') {
+      const report = scoreListeningExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
+      recordSectionScore('listening', mockSession.set, report);
+      mockSession.submitted = true;
+      mockSession.report = report;
+      mockSession.listenReport = report;
+    } else if (mockSession.isFull && mockSession.stage1) {
+      const rRep = scoreMockExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
+      recordSectionScore('reading', mockSession.set, rRep);
+      const lRep = mockSession.stage1.report;
+      const fullRep = scoreFullToeicExam(lRep, rRep);
+      const key = String(mockSession.set);
+      const prev = data.fullScores?.[key];
+      data.fullScores = {
+        ...(data.fullScores || {}),
+        [key]: {
+          bestTotal: Math.max(prev?.bestTotal || 0, fullRep.totalScaled),
+          bestListen: Math.max(prev?.bestListen || 0, fullRep.listenScaled),
+          bestRead: Math.max(prev?.bestRead || 0, fullRep.readScaled),
+          lastTotal: fullRep.totalScaled,
+          band: toeicTotalCefr(Math.max(prev?.bestTotal || 0, fullRep.totalScaled)),
+          attempts: (prev?.attempts || 0) + 1,
+        },
+      };
+      mockSession.questions = [...mockSession.stage1.questions, ...mockSession.questions];
+      mockSession.answers = [...mockSession.stage1.answers, ...mockSession.answers];
+      mockSession.flags = [...mockSession.stage1.flags, ...mockSession.flags];
+      mockSession.submitted = true;
+      mockSession.listenReport = lRep;
+      mockSession.readReport = rRep;
+      mockSession.fullReport = fullRep;
+      mockSession.report = {
+        ...fullRep,
+        missed: [...(lRep.missed || []), ...(rRep.missed || [])],
+      };
+    } else {
+      const report = scoreMockExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
+      recordSectionScore('reading', mockSession.set, report);
+      mockSession.submitted = true;
+      mockSession.report = report;
+      mockSession.readReport = report;
+    }
+
     mockSession.paused = false;
     mockSession.navOpen = false;
     mockSession.docTab = 'all';
-    mockSession.revFilter = report.missed.length ? 'missed' : 'all';
+    const firstMissed = mockSession.questions.findIndex((q, idx) => mockSession.answers[idx] !== q.ans);
+    mockSession.revFilter = firstMissed >= 0 ? 'missed' : 'all';
     mockSession.revPart = 0;
-    mockSession.index = report.missed[0]?.index ?? 0;
+    mockSession.index = firstMissed >= 0 ? firstMissed : 0;
 
-    const key = String(mockSession.set);
-    const prev = data.mockScores?.[key];
-    data.mockScores = {
-      ...(data.mockScores || {}),
-      [key]: {
-        bestScaled: Math.max(prev?.bestScaled || 0, report.scaled),
-        bestRaw: Math.max(prev?.bestRaw || 0, report.correct),
-        lastScaled: report.scaled,
-        lastRaw: report.correct,
-        band: toeicCefrBand(Math.max(prev?.bestScaled || 0, report.scaled)),
-        attempts: (prev?.attempts || 0) + 1,
-        parts: report.parts,
-      },
-    };
-    if (data.mockProgress?.[key]) {
+    const pKey = progressKeyFor(mockSession);
+    if (data.mockProgress?.[pKey]) {
       const copy = { ...data.mockProgress };
-      delete copy[key];
+      delete copy[pKey];
       data.mockProgress = copy;
     }
     save();
-    emit('card-reviewed', { key: `mock:${mockSession.set}:${today()}` });
+    emit('card-reviewed', { key: `mock:${mockSession.isFull ? 'full' : mockSession.stage}:${mockSession.set}:${today()}` });
     paint();
   }
 
   function answerMock(choiceIdx) {
-    if (!mockSession || mockSession.submitted || mockSession.paused) return;
+    if (!mockSession || mockSession.submitted || mockSession.paused || mockSession.intermission) return;
     const i = mockSession.index;
+    const q = mockSession.questions[i];
+    if (!q || choiceIdx >= q.choices.length) return;
     const picked = mockSession.answers[i];
     if (mockSession.examMode === 'practice' && picked !== null && picked !== undefined) return;
     mockSession.answers[i] = choiceIdx;
@@ -300,8 +822,15 @@
     mockSession.index = nextIdx;
     if (prevQ?.groupId !== nextQ?.groupId) mockSession.docTab = 'all';
     mockSession.navOpen = false;
+    clearAudioTimers();
     if (!mockSession.submitted && mockSession.elapsed > 0) persistMockProgress();
     paint();
+
+    if (!mockSession.submitted && !mockSession.paused && nextQ?.part <= 4) {
+      if (nextQ.audioKey !== audioState.key && mockSession.examMode === 'exam' && !audioState.playedKeys.has(nextQ.audioKey)) {
+        playQuestionAudio(nextQ, { restart: true });
+      }
+    }
   }
 
   function renderAnnotatedText(text, doc, activeQ, answers) {
@@ -314,14 +843,14 @@
       const slot = Number(m[1]);
       if (doc.baseNum) {
         const qNum = doc.baseNum + slot - 1;
-        const qIdx = qNum - 101;
-        const picked = answers?.[qIdx];
+        const idx = mockSession ? mockSession.questions.findIndex((x) => x.num === qNum) : qNum - 101;
+        const picked = idx >= 0 ? answers?.[idx] : null;
         const isCurrent = activeQ && activeQ.num === qNum;
         const LETTERS = ['A', 'B', 'C', 'D'];
         const filled = picked !== null && picked !== undefined;
         frag.push(el('span', {
           className: 'fc-mk-blank' + (isCurrent ? ' active' : '') + (filled ? ' filled' : ''),
-          onclick: () => gotoMockQuestion(qIdx),
+          onclick: () => { if (idx >= 0) gotoMockQuestion(idx); },
         }, filled ? `[${qNum} · ${LETTERS[picked]}]` : `[${qNum}]`));
       } else {
         frag.push(el('span', { className: 'fc-mk-slot' }, tok));
@@ -359,40 +888,145 @@
 
     return el('article', { className: 'fc-mk-doc' },
       el('div', { className: 'fc-mk-dochead' },
-        el('span', { className: 'fc-mk-dkind' }, totalDocs > 1 ? `Document ${idx + 1} · ${doc.kind || 'Reading'}` : (doc.kind || doc.kindLabel || 'Reading')),
+        el('span', { className: 'fc-mk-dkind' }, totalDocs > 1 ? `Document ${idx + 1} · ${doc.kind || 'Reference'}` : (doc.kind || doc.kindLabel || 'Document')),
         ...(doc.title ? [el('span', { className: 'fc-mk-dtitle' }, doc.title)] : [])),
       ...(metaEl ? [metaEl] : []),
       ...blocks);
   }
 
+  function renderPart1PhotoPane(q) {
+    if (mockSession?.ttsFallback) {
+      return el('div', { className: 'fc-mk-passage' },
+        el('div', { className: 'fc-mk-phead' }, el('span', {}, `Photograph ${q.num} (Offline Voice Preview)`)),
+        el('div', { className: 'fc-mk-photofallback' },
+          el('strong', {}, 'Audio Photo Question (Download Vol Pack for Realistic Image)'),
+          el('small', {}, `Download Volume ${q.vol} in Lobby to display the realistic WebP photograph.`)));
+    }
+    const holder = el('div', { className: 'fc-mk-passage' },
+      el('div', { className: 'fc-mk-phead' }, el('span', {}, `Question ${q.num} · Photograph`)));
+    const img = el('img', { className: 'fc-mk-photo', alt: `TOEIC Part 1 photograph for Question ${q.num}` });
+    const showPending = () => {
+      holder.replaceChildren(
+        el('div', { className: 'fc-mk-phead' }, el('span', {}, `Question ${q.num} · Photograph`)),
+        el('div', { className: 'fc-mk-photofallback' },
+          el('strong', {}, `Photo Pending Pack Update (Set ${q.set} · Q${q.num})`),
+          el('small', {}, 'Audio plays cleanly! Realistic photo for this question is scheduled after image quota reset (Set 1 has all 6 photos ready).')));
+    };
+    const cacheKey = `${q.vol}:${q.imgKey}`;
+    if (assetCache.has(cacheKey)) {
+      const uri = assetCache.get(cacheKey);
+      if (uri) { img.src = uri; holder.appendChild(img); } else showPending();
+    } else if (window.__TAURI__?.core?.invoke) {
+      holder.appendChild(img);
+      fetchAsset(q.vol, q.imgKey).then((uri) => {
+        if (!holder.isConnected) return;
+        if (uri) img.src = uri;
+        else { cacheSet(cacheKey, ''); showPending(); }
+      });
+    } else {
+      holder.appendChild(img);
+    }
+    return holder;
+  }
+
+  function renderAudioBar(q, { inReview = false } = {}) {
+    if (!q?.audioKey) return null;
+    const isPracticeOrReview = inReview || mockSession?.examMode === 'practice';
+    const isSame = audioState.key === q.audioKey;
+    const played = audioState.playedKeys.has(q.audioKey);
+    const dur = isSame ? audioState.duration : 0;
+    const cur = isSame ? audioState.currentTime : 0;
+    const playing = isSame && audioState.playing;
+    const lockReplay = !isPracticeOrReview && !mockSession?.ttsFallback && played;
+
+    const speeds = isPracticeOrReview
+      ? [0.85, 1.0, 1.15].map((r) => el('button', {
+          type: 'button',
+          className: 'tag-pill' + (audioState.rate === r ? ' active' : ''),
+          onclick: () => {
+            audioState.rate = r;
+            if (audioState.el) audioState.el.playbackRate = r;
+            paint();
+          },
+        }, `${r}×`))
+      : [];
+
+    return el('div', { className: 'fc-mk-audiobar' },
+      el('button', {
+        id: 'fc-mk-playbtn',
+        type: 'button',
+        className: 'fc-mk-playbtn' + (playing ? ' playing' : ''),
+        disabled: lockReplay,
+        onclick: () => toggleAudioPlayPause(q),
+      }, playing ? '❚❚ Pause' : lockReplay ? '✓ Played (Exam)' : isSame && cur > 0 ? '▶ Resume' : '▶ Play Audio'),
+      ...(isPracticeOrReview
+        ? [el('button', { type: 'button', className: 'tag-pill', title: 'Replay audio (R)', onclick: () => playQuestionAudio(q, { restart: true }) }, '↻ Replay')]
+        : []),
+      el('div', { className: 'fc-mk-trackmeta' },
+        el('div', { className: 'fc-mk-tracktitle' },
+          el('span', {}, q.groupRange ? `Audio Track Q${q.groupRange}` : `Audio Track Q${q.num}`),
+          el('span', { id: 'fc-mk-audiotime' }, audioState.error ? audioState.error : audioState.loading && isSame ? 'Loading…' : `${formatClock(cur)} / ${dur ? formatClock(dur) : '--:--'}`)),
+        isPracticeOrReview && dur > 0 && !mockSession?.ttsFallback
+          ? el('input', {
+              id: 'fc-mk-seek',
+              type: 'range',
+              className: 'fc-mk-trackseek',
+              min: 0,
+              max: dur,
+              step: 0.1,
+              value: cur,
+              oninput: (e) => {
+                if (audioState.el && audioState.key === q.audioKey) {
+                  audioState.el.currentTime = Number(e.target.value) || 0;
+                  audioState.currentTime = audioState.el.currentTime;
+                }
+              },
+            })
+          : el('div', { className: 'fc-mk-trackbar fc-mk-trackprog' },
+              el('div', { id: 'fc-mk-trackfill', className: 'fc-mk-trackfill', style: { width: `${dur > 0 ? Math.min(100, (cur / dur) * 100) : 0}%` } }))),
+      ...speeds,
+      ...(!inReview && mockSession?.examMode === 'exam'
+        ? [el('button', {
+            type: 'button',
+            className: 'tag-pill' + (audioState.autoNext ? ' active' : ''),
+            title: 'Automatically advance after audio clip finishes',
+            onclick: () => { audioState.autoNext = !audioState.autoNext; if (!audioState.autoNext) clearAudioTimers(); paint(); },
+          }, audioState.autoNext ? 'Auto-next: ON' : 'Auto-next: OFF')]
+        : []));
+  }
+
   function renderMockNavigator() {
     const qs = mockSession.questions;
-    const parts = [
-      ['Part 5 · Incomplete Sentences (101–130)', qs.filter((x) => x.part === 5)],
-      ['Part 6 · Text Completion (131–146)', qs.filter((x) => x.part === 6)],
-      ['Part 7 · Reading Comprehension (147–200)', qs.filter((x) => x.part === 7)],
-    ].filter(([, arr]) => arr.length);
+    const partDefs = [
+      [1, 'Part 1 · Photographs (1–6)'],
+      [2, 'Part 2 · Question-Response (7–31)'],
+      [3, 'Part 3 · Conversations (32–70)'],
+      [4, 'Part 4 · Talks (71–100)'],
+      [5, 'Part 5 · Incomplete Sentences (101–130)'],
+      [6, 'Part 6 · Text Completion (131–146)'],
+      [7, 'Part 7 · Reading Comprehension (147–200)'],
+    ];
+    const groups = partDefs.map(([p, title]) => [title, qs.map((q, qi) => ({ q, qi })).filter(({ q }) => q.part === p)]).filter(([, arr]) => arr.length);
 
     return el('div', { className: 'fc-mk-nav' },
       el('div', { className: 'fc-mk-navhead' },
         el('b', {}, `Answer Sheet Navigator · ${mockSession.answers.filter((a) => a !== null && a !== undefined).length}/${qs.length} answered`),
         el('button', { type: 'button', className: 'linkish', onclick: () => { mockSession.navOpen = false; paint(); } }, 'Close ✕')),
-      ...parts.map(([title, list]) => el('div', { className: 'fc-mk-navpart' },
+      ...groups.map(([title, list]) => el('div', { className: 'fc-mk-navpart' },
         el('small', {}, title),
-        el('div', { className: 'fc-mk-bubbles' }, ...list.map((item) => {
-          const i = item.num - 101;
-          const picked = mockSession.answers[i];
+        el('div', { className: 'fc-mk-bubbles' }, ...list.map(({ q, qi }) => {
+          const picked = mockSession.answers[qi];
           const answered = picked !== null && picked !== undefined;
           let cls = 'fc-mk-bub';
-          if (i === mockSession.index) cls += ' cur';
-          if (mockSession.submitted) cls += (picked === item.ans ? ' ok' : ' bad');
+          if (qi === mockSession.index) cls += ' cur';
+          if (mockSession.submitted) cls += (picked === q.ans ? ' ok' : ' bad');
           else if (answered) cls += ' ans';
-          if (mockSession.flags[i]) cls += ' flag';
+          if (mockSession.flags[qi]) cls += ' flag';
           return el('button', {
             type: 'button',
             className: cls,
-            onclick: () => gotoMockQuestion(i),
-          }, String(item.num));
+            onclick: () => gotoMockQuestion(qi),
+          }, String(q.num));
         })))));
   }
 
@@ -400,67 +1034,168 @@
     const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
     const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
     return el('div', { className: 'fc-qz-sources', role: 'group', ariaLabel: 'Test bank' },
-      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'mock' ? ' active' : ''), onclick: () => { quizSource = 'mock'; paint(); } }, 'Mock Exam (30 Sets · 100 Qs)'),
-      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'sets' ? ' active' : ''), onclick: () => startQuiz('sets', { set: quizSet }) }, 'Part 5 Sets (20 × 50 Qs)'),
-      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'topic' ? ' active' : ''), onclick: () => startQuiz('topic', { tag: quizTag, count: quizCount }) }, `By Topic (${tags.length})`),
-      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => startQuiz('cards', { count: quizCount }) }, `My Decks / Chunks (${data.cards.length})`));
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'mock' ? ' active' : ''), onclick: () => { quizSource = 'mock'; refreshPackStatus(); paint(); } }, 'Mock Exam (30 Full L+R Sets)'),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'sets' ? ' active' : ''), onclick: () => { stopMockAll(); startQuiz('sets', { set: quizSet }); } }, 'Part 5 Sets (20 × 50 Qs)'),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'topic' ? ' active' : ''), onclick: () => { stopMockAll(); startQuiz('topic', { tag: quizTag, count: quizCount }); } }, `By Topic (${tags.length})`),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => { stopMockAll(); startQuiz('cards', { count: quizCount }); } }, `My Decks / Chunks (${data.cards.length})`));
+  }
+
+  function renderPackStrip() {
+    if (mockSection === 'reading') return null;
+    const isDesktop = Boolean(window.__TAURI__?.core?.invoke);
+    return el('div', { className: 'fc-mk-packbar', role: 'region', ariaLabel: 'Listening media packs' },
+      el('span', { className: 'fc-mk-packbar-lbl' }, 'Audio + Photo Packs:'),
+      ...[1, 2, 3, 4, 5, 6].map((v) => {
+        const st = packStatus[v];
+        const busy = packLoadingVol === v;
+        const setSpan = `${(v - 1) * 5 + 1}–${v * 5}`;
+        const mbText = st?.bytes ? ` (${(st.bytes / (1024 * 1024)).toFixed(1)} MB)` : '';
+        if (busy) {
+          const dl = packDownload[v] || { loaded: 0, total: 0 };
+          const pct = dl.total ? `${Math.round((dl.loaded / dl.total) * 100)}%` : `${(dl.loaded / (1024 * 1024)).toFixed(1)} MB`;
+          return el('span', { id: `fc-mk-dlprog-${v}`, className: 'fc-mk-packpill busy' }, `Downloading Vol ${v}: ${pct}`);
+        }
+        return el('span', { className: 'fc-mk-packpill' + (st?.installed ? ' ok' : '') },
+          el('button', {
+            type: 'button',
+            className: 'linkish',
+            disabled: !isDesktop || packLoadingVol > 0,
+            onclick: () => downloadPack(v),
+          }, st?.installed ? `✓ Vol ${v} (${setSpan})${mbText}` : `↓ Vol ${v} (${setSpan})`),
+          ...(st?.installed ? [el('button', { type: 'button', className: 'fc-mk-packdel', title: `Remove Volume ${v} cache`, onclick: (e) => removePack(v, e) }, '✕')] : []));
+      }));
   }
 
   function paintMock(stage) {
     const LETTERS = ['A', 'B', 'C', 'D'];
     // Lobby when no active mock test session
     if (!mockSession) {
-      const doneEntries = Object.values(data.mockScores || {});
-      const bestTop = doneEntries.reduce((mx, r) => Math.max(mx, r.bestScaled || 0), 0);
-      const inProgKeys = Object.keys(data.mockProgress || {}).filter((k) => (data.mockProgress[k]?.answers || []).some((a) => a !== null && a !== undefined));
-      const resumeKey = inProgKeys.sort((a, b) => Number(b) - Number(a))[0];
+      const scoreMap = mockSection === 'full' ? (data.fullScores || {}) : mockSection === 'listening' ? (data.listenScores || {}) : (data.mockScores || {});
+      const doneEntries = Object.values(scoreMap);
+      const bestTop = doneEntries.reduce((mx, r) => Math.max(mx, r.bestTotal || r.bestScaled || 0), 0);
+      const maxScale = mockSection === 'full' ? 990 : 495;
+
+      const progPrefix = mockSection === 'full' ? 'F' : mockSection === 'listening' ? 'L' : '';
+      const inProgKeys = Object.keys(data.mockProgress || {}).filter((k) => {
+        if (mockSection === 'full') return k.startsWith('F');
+        if (mockSection === 'listening') return k.startsWith('L');
+        return /^\d+$/.test(k);
+      }).filter((k) => {
+        const pr = data.mockProgress[k];
+        return pr && ((pr.answers || []).some((a) => a !== null && a !== undefined) || pr.stage === 'reading' || pr.intermission);
+      });
+      const resumeKey = inProgKeys.sort((a, b) => Number(b.replace(/^[LF]/, '')) - Number(a.replace(/^[LF]/, '')))[0];
       const resumeProg = resumeKey ? data.mockProgress[resumeKey] : null;
+      const resumeSetNum = resumeKey ? Number(resumeKey.replace(/^[LF]/, '')) : 0;
 
       const resumeBanner = resumeProg
         ? el('div', { className: 'fc-mk-resume' },
             el('div', {},
-              el('strong', {}, `Mock Set ${resumeKey} in progress · Q${101 + (resumeProg.index || 0)}/200`),
-              el('small', {}, `${resumeProg.answers.filter((a) => a !== null && a !== undefined).length}/100 answered · ${resumeProg.examMode === 'exam' ? `${formatClock(Math.max(0, EXAM_SEC - (resumeProg.elapsed || 0)))} remaining` : 'Practice Mode'}`)),
+              el('strong', {}, `Mock Set ${resumeSetNum} (${mockSection}) in progress · Q${(resumeProg.stage === 'reading' || mockSection === 'reading' ? 101 : 1) + (resumeProg.index || 0)}`),
+              el('small', {}, `${resumeProg.answers.filter((a) => a !== null && a !== undefined).length}/100 answered · ${resumeProg.examMode === 'exam' ? 'Exam Mode' : 'Practice Mode'}`)),
             el('button', {
               type: 'button',
               className: 'primary',
-              onclick: () => startMockExam(Number(resumeKey), { resume: true }),
-            }, el('span', {}, `Resume Set ${resumeKey}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')))
+              onclick: () => launchMockEntry(resumeSetNum, { section: mockSection, resume: true }),
+            }, el('span', {}, `Resume Set ${resumeSetNum}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')))
         : null;
 
-      const grid = el('div', { className: 'fc-mk-grid', role: 'group', ariaLabel: '30 Full TOEIC Reading Mock Sets' },
+      const pendingVol = pendingPackSet ? Math.ceil(pendingPackSet / 5) : 0;
+      const packPrompt = pendingPackSet
+        ? el('div', { className: 'fc-mk-promptcard' },
+            el('div', {},
+              el('strong', {}, `Media Pack Volume ${pendingVol} (Sets ${(pendingVol - 1) * 5 + 1}–${pendingVol * 5}) Required for Real Audio & Photos`),
+              el('small', {}, `Download natural multi-accent MP3 audio & WebP photos once (~12–18 MB) for Mock Set ${pendingPackSet}, or preview right away with Windows built-in speech.`)),
+            el('div', { className: 'fc-mk-promptacts' },
+              el('button', {
+                type: 'button',
+                className: 'primary',
+                disabled: packLoadingVol > 0,
+                onclick: async () => {
+                  const targetSet = pendingPackSet;
+                  if (await downloadPack(pendingVol)) startMockExam(targetSet, { section: mockSection, resume: false });
+                },
+              }, el('span', {}, packLoadingVol === pendingVol ? 'Downloading…' : `↓ Download Vol ${pendingVol} & Start`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
+              el('button', {
+                type: 'button',
+                className: 'tag-pill',
+                onclick: () => launchMockEntry(pendingPackSet, { section: mockSection, resume: false, allowFallback: true }),
+              }, 'Preview Offline (Windows Voice)'),
+              el('button', { type: 'button', className: 'linkish', onclick: () => { pendingPackSet = 0; paint(); } }, 'Cancel')))
+        : null;
+
+      const grid = el('div', { className: 'fc-mk-grid', role: 'group', ariaLabel: '30 TOEIC Mock Sets' },
         ...Array.from({ length: 30 }, (_, idx) => {
           const s = idx + 1;
-          const sc = data.mockScores?.[String(s)];
-          const prog = data.mockProgress?.[String(s)];
-          const hasProg = prog && (prog.answers || []).some((a) => a !== null && a !== undefined);
+          const sc = scoreMap[String(s)];
+          const pKey = `${progPrefix}${s}`;
+          const prog = data.mockProgress?.[pKey];
+          const hasProg = Boolean(prog && ((prog.answers || []).some((a) => a !== null && a !== undefined) || prog.stage === 'reading'));
           const isLoad = loadingMockSet === s;
+          const subLabel = isLoad
+            ? 'Loading…'
+            : sc
+              ? (mockSection === 'full' ? `Best ${sc.bestTotal}/990` : `Best ${sc.bestScaled}/495 (${sc.bestRaw}/100)`)
+              : hasProg
+                ? `Resume Q${(prog.stage === 'reading' || mockSection === 'reading' ? 101 : 1) + (prog.index || 0)}`
+                : mockSection === 'full' ? '200 Qs · Part 1–7' : mockSection === 'listening' ? '100 Qs · Part 1–4' : '100 Qs · Part 5–7';
           return el('button', {
             type: 'button',
             className: 'fc-mk-setcard' + (sc ? ' scored' : '') + (hasProg ? ' inprog' : '') + (isLoad ? ' disabled' : ''),
             disabled: loadingMockSet > 0,
-            onclick: () => startMockExam(s, { resume: Boolean(hasProg) }),
+            onclick: () => launchMockEntry(s, { section: mockSection, resume: hasProg }),
           },
-          el('b', {}, `Mock ${s}`, ...(sc ? [el('span', { className: 'fc-mk-band' }, sc.band || toeicCefrBand(sc.bestScaled))] : [])),
-          el('small', {}, isLoad ? 'Loading…' : sc ? `Best ${sc.bestScaled}/495 (${sc.bestRaw}/100)` : hasProg ? `Resume Q${101 + (prog.index || 0)}` : '100 Qs · Part 5–7'));
+          el('b', {}, `Mock ${s}`, ...(sc ? [el('span', { className: 'fc-mk-band' }, sc.band)] : [])),
+          el('small', {}, subLabel));
         }));
 
+      const packStrip = renderPackStrip();
       stage.replaceChildren(
         el('div', { className: 'fc-qz-bar' }, sourceBar()),
         el('div', { className: 'fc-mk-lobby' },
           el('div', { className: 'fc-mk-modebar' },
-            el('div', { className: 'fc-mk-modepills', role: 'group', ariaLabel: 'Mock exam mode' },
-              el('button', { type: 'button', className: 'tag-pill' + (mockExamMode === 'exam' ? ' active' : ''), onclick: () => { mockExamMode = 'exam'; paint(); } }, 'Exam Mode (75 min · 5–495 Score)'),
-              el('button', { type: 'button', className: 'tag-pill' + (mockExamMode === 'practice' ? ' active' : ''), onclick: () => { mockExamMode = 'practice'; paint(); } }, 'Practice Mode (Untimed · Instant Review)')),
-            el('span', { className: 'fc-mk-stats' }, `${doneEntries.length}/30 sets completed` + (bestTop ? ` · Peak: ${bestTop}/495` : ''))),
+            el('div', { className: 'fc-mk-modepills', role: 'group', ariaLabel: 'TOEIC Mock Section' },
+              el('button', { type: 'button', className: 'tag-pill' + (mockSection === 'listening' ? ' active' : ''), onclick: () => { mockSection = 'listening'; pendingPackSet = 0; refreshPackStatus(); paint(); } }, 'Listening (100 Q · 45m)'),
+              el('button', { type: 'button', className: 'tag-pill' + (mockSection === 'reading' ? ' active' : ''), onclick: () => { mockSection = 'reading'; pendingPackSet = 0; paint(); } }, 'Reading (100 Q · 75m)'),
+              el('button', { type: 'button', className: 'tag-pill' + (mockSection === 'full' ? ' active' : ''), onclick: () => { mockSection = 'full'; pendingPackSet = 0; refreshPackStatus(); paint(); } }, 'Full Exam (200 Q · 120m)')),
+            el('span', { className: 'fc-mk-stats' }, `${doneEntries.length}/30 sets completed` + (bestTop ? ` · Peak: ${bestTop}/${maxScale}` : ''))),
+          el('div', { className: 'fc-mk-modebar' },
+            el('div', { className: 'fc-mk-modepills', role: 'group', ariaLabel: 'Mock test pacing' },
+              el('button', { type: 'button', className: 'tag-pill' + (mockExamMode === 'exam' ? ' active' : ''), onclick: () => { mockExamMode = 'exam'; paint(); } }, 'Exam Mode (Timed · Single audio play)'),
+              el('button', { type: 'button', className: 'tag-pill' + (mockExamMode === 'practice' ? ' active' : ''), onclick: () => { mockExamMode = 'practice'; paint(); } }, 'Practice Mode (Untimed · Replay + Script + Thai Review)'))),
+          ...(packStrip ? [packStrip] : []),
+          ...(packPrompt ? [packPrompt] : []),
           ...(resumeBanner ? [resumeBanner] : []),
           grid));
+      return;
+    }
+
+    // Full TOEIC Stage 1 -> Stage 2 Intermission
+    if (mockSession.isFull && mockSession.intermission && !mockSession.submitted) {
+      const lr = mockSession.listenReport;
+      stage.replaceChildren(
+        el('div', { className: 'fc-mk-hud' },
+          el('div', { className: 'fc-mk-hud-l' },
+            el('button', { type: 'button', className: 'linkish', onclick: () => { persistMockProgress(); stopMockAll(); mockSession = null; paint(); } }, '← Exit & Save'),
+            el('strong', {}, `Mock ${mockSession.set} · Full TOEIC`)),
+          el('span', { className: 'fc-mk-partpill' }, 'Listening Complete · Next: Reading')),
+        el('div', { className: 'fc-mk-stage2box' },
+          el('h3', {}, `Section 1 (Listening Q1–100) Submitted`),
+          el('p', {}, `Listening answers recorded: ${lr.answered}/100 (${formatClock(lr.elapsedSec)} used). Your final 10–990 score will appear after finishing Section 2 Reading.`),
+          el('button', {
+            type: 'button',
+            className: 'primary',
+            disabled: loadingMockSet > 0,
+            onclick: beginReadingStage2,
+          }, el('span', {}, loadingMockSet ? 'Loading Reading…' : 'Start Section 2: Reading (Q101–200 · 75 min)'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))));
       return;
     }
 
     // Score Report & Post-Exam Inspector when submitted
     if (mockSession.submitted && mockSession.report) {
       const r = mockSession.report;
+      const isFull = Boolean(mockSession.fullReport);
+      const isListenOnly = !isFull && Boolean(mockSession.listenReport);
       const filteredList = mockSession.questions.map((q, idx) => ({ q, idx, pick: mockSession.answers[idx], flag: mockSession.flags[idx] }))
         .filter(({ q, pick, flag }) => {
           if (mockSession.revPart && q.part !== mockSession.revPart) return false;
@@ -474,22 +1209,31 @@
       const aIdx = activeItem?.idx ?? 0;
       const aPick = mockSession.answers[aIdx];
 
-      const passagePane = aq?.passages?.length
-        ? el('div', { className: 'fc-mk-passage' },
-            el('div', { className: 'fc-mk-phead' },
-              el('span', {}, `Questions ${aq.groupRange || aq.num} · Review`)),
-            ...aq.passages.map((d, di) => renderPassageDoc(d, di, aq.passages.length, aq, mockSession.answers)))
+      const leftPane = aq?.part === 1
+        ? renderPart1PhotoPane(aq)
+        : aq?.passages?.length
+          ? el('div', { className: 'fc-mk-passage' },
+              el('div', { className: 'fc-mk-phead' }, el('span', {}, `Questions ${aq.groupRange || aq.num} · Review`)),
+              ...aq.passages.map((d, di) => renderPassageDoc(d, di, aq.passages.length, aq, mockSession.answers)))
+          : null;
+
+      const scriptBox = aq?.scriptLines?.length
+        ? el('div', { className: 'fc-mk-script' },
+            el('strong', {}, 'Audio Script'),
+            ...aq.scriptLines.map((line) => el('p', {}, line)))
         : null;
 
+      const reviewAudio = aq?.audioKey ? renderAudioBar(aq, { inReview: true }) : null;
       const reviewDetail = aq
-        ? el('div', { className: 'fc-mk-split' + (passagePane ? '' : ' single') },
-            ...(passagePane ? [passagePane] : []),
+        ? el('div', { className: 'fc-mk-split' + (leftPane ? '' : ' single') },
+            ...(leftPane ? [leftPane] : []),
             el('div', { className: 'fc-mk-qpane' },
               el('div', { className: 'fc-card fc-qz-card' },
                 el('div', { className: 'fc-card-meta' },
                   el('span', {}, `Q${aq.num} · Part ${aq.part} · ${aq.tag}`),
                   el('span', {}, aPick === aq.ans ? '✓ Correct' : aPick === null ? '— Skipped' : '✕ Missed')),
-                el('div', { className: 'fc-qz-q' }, aq.q),
+                ...(reviewAudio ? [reviewAudio] : []),
+                el('div', { className: 'fc-qz-q' }, aq.prompt ? aq.prompt : aq.q),
                 el('div', { className: 'fc-qz-choices' }, ...aq.choices.map((ch, ci) => {
                   let cls = 'fc-qz-opt';
                   if (ci === aq.ans) cls += ' right';
@@ -498,6 +1242,7 @@
                   return el('button', { type: 'button', className: cls, disabled: true },
                     el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, ch));
                 })),
+                ...(scriptBox ? [scriptBox] : []),
                 el('div', { className: 'fc-qz-explain ' + (aPick === aq.ans ? 'ok' : 'bad') },
                   el('strong', {}, aPick === aq.ans
                     ? `✓ Correct (${LETTERS[aq.ans]})`
@@ -507,35 +1252,62 @@
                   el('div', { className: 'fc-qz-why' }, ...String(aq.why || '').split('\n').map((line) => el('p', {}, line)))))))
         : el('p', { className: 'fc-qz-perfect' }, 'No questions match this review filter — great work!');
 
+      const partBoxes = [];
+      if (mockSession.listenReport) {
+        const lp = mockSession.listenReport.parts;
+        partBoxes.push(
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 1 · Photos'), el('b', {}, `${lp[1].correct} / ${lp[1].total}`), el('span', {}, `${Math.round(lp[1].correct / (lp[1].total || 1) * 100)}%`)),
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 2 · Q&A'), el('b', {}, `${lp[2].correct} / ${lp[2].total}`), el('span', {}, `${Math.round(lp[2].correct / (lp[2].total || 1) * 100)}%`)),
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 3 · Conv'), el('b', {}, `${lp[3].correct} / ${lp[3].total}`), el('span', {}, `${Math.round(lp[3].correct / (lp[3].total || 1) * 100)}%`)),
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 4 · Talks'), el('b', {}, `${lp[4].correct} / ${lp[4].total}`), el('span', {}, `${Math.round(lp[4].correct / (lp[4].total || 1) * 100)}%`)));
+      }
+      if (mockSession.readReport) {
+        const rp = mockSession.readReport.parts;
+        partBoxes.push(
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 5 · Sentences'), el('b', {}, `${rp[5].correct} / ${rp[5].total}`), el('span', {}, `${Math.round(rp[5].correct / (rp[5].total || 1) * 100)}%`)),
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 6 · Text'), el('b', {}, `${rp[6].correct} / ${rp[6].total}`), el('span', {}, `${Math.round(rp[6].correct / (rp[6].total || 1) * 100)}%`)),
+          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 7 · Reading'), el('b', {}, `${rp[7].correct} / ${rp[7].total}`), el('span', {}, `Single ${rp[7].singleCorrect}/${rp[7].singleTotal} · Multi ${rp[7].multiCorrect}/${rp[7].multiTotal}`)));
+      }
+
+      const heroScore = isFull ? mockSession.fullReport.totalScaled : r.scaled;
+      const heroMax = isFull ? 990 : 495;
+      const heroBand = isFull ? mockSession.fullReport.band : r.band;
+      const totalQCount = mockSession.questions.length;
+      const totalCorrectCount = isFull ? mockSession.fullReport.correct : r.correct;
+      const partFilterList = isFull
+        ? [[0, 'All'], [1, 'P1'], [2, 'P2'], [3, 'P3'], [4, 'P4'], [5, 'P5'], [6, 'P6'], [7, 'P7']]
+        : isListenOnly
+          ? [[0, 'All Parts'], [1, 'Part 1'], [2, 'Part 2'], [3, 'Part 3'], [4, 'Part 4']]
+          : [[0, 'All Parts'], [5, 'Part 5'], [6, 'Part 6'], [7, 'Part 7']];
+
       stage.replaceChildren(
         el('div', { className: 'fc-mk-report' },
           el('div', { className: 'fc-mk-hud' },
             el('div', { className: 'fc-mk-hud-l' },
-              el('button', { type: 'button', className: 'linkish', onclick: () => { mockSession = null; paint(); } }, '← All 30 Mock Sets'),
-              el('strong', {}, `Mock Set ${mockSession.set} Score Report`)),
+              el('button', { type: 'button', className: 'linkish', onclick: () => { stopMockAll(); mockSession = null; paint(); } }, '← All 30 Mock Sets'),
+              el('strong', {}, `Mock Set ${mockSession.set} ${isFull ? 'Full TOEIC' : isListenOnly ? 'Listening' : 'Reading'} Score Report`)),
             el('div', { className: 'fc-mk-hud-r' },
-              el('button', { type: 'button', className: 'fc-grade', onclick: () => startMockExam(mockSession.set, { resume: false }) }, el('b', {}, `Retake Set ${mockSession.set}`)),
-              ...(mockSession.set < 30 ? [el('button', { type: 'button', className: 'primary', onclick: () => startMockExam(mockSession.set + 1) }, el('span', {}, `Next: Set ${mockSession.set + 1}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))] : []))),
+              el('button', { type: 'button', className: 'fc-grade', onclick: () => launchMockEntry(mockSession.set, { section: isFull ? 'full' : isListenOnly ? 'listening' : 'reading', resume: false, allowFallback: mockSession.ttsFallback }) }, el('b', {}, `Retake Set ${mockSession.set}`)),
+              ...(mockSession.set < 30 ? [el('button', { type: 'button', className: 'primary', onclick: () => launchMockEntry(mockSession.set + 1, { section: isFull ? 'full' : isListenOnly ? 'listening' : 'reading', allowFallback: mockSession.ttsFallback }) }, el('span', {}, `Next: Set ${mockSession.set + 1}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))] : []))),
           el('div', { className: 'fc-mk-hero' },
             el('div', { className: 'fc-mk-hero-score' },
-              el('b', {}, `${r.scaled}`),
-              el('small', {}, `/ 495 · CEFR ${r.band}`)),
+              el('b', {}, `${heroScore}`),
+              el('small', {}, `/ ${heroMax} · CEFR ${heroBand}`)),
             el('div', {},
-              el('strong', {}, `${r.correct} / ${r.total} Correct (${r.pct}%)`),
-              el('small', { style: { display: 'block', color: 'var(--mute)' } }, `${mockSession.examMode === 'exam' ? `Time used: ${formatClock(r.elapsedSec)} / 75:00` : `Untimed Practice · ${formatClock(r.elapsedSec)}`}`))),
-          el('div', { className: 'fc-mk-parts' },
-            el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 5 · Sentences'), el('b', {}, `${r.parts[5].correct} / ${r.parts[5].total}`), el('span', {}, `${Math.round(r.parts[5].correct / (r.parts[5].total || 1) * 100)}% accuracy`)),
-            el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 6 · Text Completion'), el('b', {}, `${r.parts[6].correct} / ${r.parts[6].total}`), el('span', {}, `${Math.round(r.parts[6].correct / (r.parts[6].total || 1) * 100)}% accuracy`)),
-            el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 7 · Reading'), el('b', {}, `${r.parts[7].correct} / ${r.parts[7].total}`), el('span', {}, `Single ${r.parts[7].singleCorrect}/${r.parts[7].singleTotal} · Multi ${r.parts[7].multiCorrect}/${r.parts[7].multiTotal}`))),
+              el('strong', {}, isFull
+                ? `L ${mockSession.fullReport.listenScaled}/495 + R ${mockSession.fullReport.readScaled}/495 · ${totalCorrectCount}/200 Correct`
+                : `${totalCorrectCount} / ${totalQCount} Correct (${r.pct}%)`),
+              el('small', { style: { display: 'block', color: 'var(--mute)' } }, `${mockSession.examMode === 'exam' ? `Time used: ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}` : `Untimed Practice · ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}`}`))),
+          el('div', { className: 'fc-mk-parts' }, ...partBoxes),
           el('div', { className: 'fc-mk-revbar' },
             el('div', { className: 'fc-mk-modepills' },
-              ...[['missed', `Missed (${r.missed.length + (r.total - r.answered)})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${r.total})`]].map(([id, lbl]) => el('button', {
+              ...[['missed', `Missed (${totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
                 type: 'button',
                 className: 'tag-pill' + (mockSession.revFilter === id ? ' active' : ''),
                 onclick: () => { mockSession.revFilter = id; paint(); },
               }, lbl))),
             el('div', { className: 'fc-mk-modepills' },
-              ...[[0, 'All Parts'], [5, 'Part 5'], [6, 'Part 6'], [7, 'Part 7']].map(([p, lbl]) => el('button', {
+              ...partFilterList.map(([p, lbl]) => el('button', {
                 type: 'button',
                 className: 'tag-pill' + (mockSession.revPart === p ? ' active' : ''),
                 onclick: () => { mockSession.revPart = p; paint(); },
@@ -549,31 +1321,40 @@
       return;
     }
 
-    // Active Mock Exam / Practice workspace
+    // Active Exam / Practice workspace
     const qs = mockSession.questions;
     const i = mockSession.index;
     const q = qs[i];
     const picked = mockSession.answers[i];
     const answeredCount = mockSession.answers.filter((a) => a !== null && a !== undefined).length;
     const flaggedCount = mockSession.flags.filter(Boolean).length;
-    const remainingSec = Math.max(0, EXAM_SEC - mockSession.elapsed);
+    const remainingSec = Math.max(0, sectionLimitSec(mockSession) - mockSession.elapsed);
     const sameGroup = q.groupId ? qs.map((x, qi) => ({ num: x.num, qi })).filter((x) => qs[x.qi].groupId === q.groupId) : [];
 
     const hud = el('div', { className: 'fc-mk-hud' },
       el('div', { className: 'fc-mk-hud-l' },
-        el('button', { type: 'button', className: 'linkish', onclick: () => { persistMockProgress(); stopMockTimer(); mockSession = null; paint(); } }, '← Exit & Save'),
+        el('button', { type: 'button', className: 'linkish', onclick: () => { persistMockProgress(); stopMockAll(); mockSession = null; paint(); } }, '← Exit & Save'),
         el('strong', {}, `Mock ${mockSession.set}`),
-        el('span', { className: 'fc-mk-partpill' }, `Part ${q.part} · Q${q.num}/200`)),
+        el('span', { className: 'fc-mk-partpill' }, `Part ${q.part} · Q${q.num}/${mockSession.stage === 'listening' ? 100 : 200}`)),
       el('div', { className: 'fc-mk-hud-r' },
         ...(mockSession.examMode === 'exam'
           ? [
               el('span', { id: 'fc-mk-timer', className: 'fc-mk-timer' + (remainingSec <= 300 ? ' warn' : '') }, formatClock(remainingSec)),
-              el('button', { type: 'button', className: 'tag-pill', onclick: () => { mockSession.paused = !mockSession.paused; persistMockProgress(); paint(); } }, mockSession.paused ? 'Resume' : 'Pause'),
+              el('button', {
+                type: 'button',
+                className: 'tag-pill',
+                onclick: () => {
+                  mockSession.paused = !mockSession.paused;
+                  if (mockSession.paused) { if (audioState.el) try { audioState.el.pause(); } catch {} audioState.playing = false; clearAudioTimers(); }
+                  persistMockProgress();
+                  paint();
+                },
+              }, mockSession.paused ? 'Resume' : 'Pause'),
             ]
           : [el('span', { className: 'fc-mk-partpill' }, 'Practice Mode')]),
         el('span', { className: 'fc-mk-prog' }, `${answeredCount}/100 done${flaggedCount ? ` · ⚑ ${flaggedCount}` : ''}`),
-        el('button', { type: 'button', className: 'tag-pill' + (mockSession.navOpen ? ' active' : ''), onclick: () => { mockSession.navOpen = !mockSession.navOpen; paint(); } }, 'Grid 101–200'),
-        el('button', { type: 'button', className: 'fc-mk-subbtn', onclick: () => submitMockExam(false) }, 'Submit Exam')));
+        el('button', { type: 'button', className: 'tag-pill' + (mockSession.navOpen ? ' active' : ''), onclick: () => { mockSession.navOpen = !mockSession.navOpen; paint(); } }, mockSession.stage === 'listening' ? 'Grid 1–100' : 'Grid 101–200'),
+        el('button', { type: 'button', className: 'fc-mk-subbtn', onclick: () => submitMockExam(false) }, mockSession.isFull && mockSession.stage === 'listening' ? 'Next: Reading →' : 'Submit Exam')));
 
     if (mockSession.paused) {
       stage.replaceChildren(hud,
@@ -588,21 +1369,26 @@
     const showSingleDocIdx = mockSession.docTab === 'all' ? -1 : Number(mockSession.docTab);
     const visibleDocs = docs.map((d, di) => ({ d, di })).filter(({ di }) => showSingleDocIdx < 0 || di === showSingleDocIdx);
 
-    const passagePane = docs.length
-      ? el('div', { className: 'fc-mk-passage' },
-          el('div', { className: 'fc-mk-phead' },
-            el('span', {}, q.part === 6
-              ? `Questions ${q.groupRange} refer to the following passage.`
-              : `Questions ${q.groupRange} refer to the following ${docs.length >= 3 ? 'three passages' : docs.length === 2 ? 'two passages' : 'passage'}.`),
-            ...(docs.length > 1
-              ? [el('div', { className: 'fc-mk-doctabs' },
-                  el('button', { type: 'button', className: 'tag-pill' + (mockSession.docTab === 'all' ? ' active' : ''), onclick: () => { mockSession.docTab = 'all'; paint(); } }, 'All docs'),
-                  ...docs.map((_, di) => el('button', { type: 'button', className: 'tag-pill' + (String(mockSession.docTab) === String(di) ? ' active' : ''), onclick: () => { mockSession.docTab = String(di); paint(); } }, `Doc ${di + 1}`)))]
-              : [])),
-          ...visibleDocs.map(({ d, di }) => renderPassageDoc(d, di, docs.length, q, mockSession.answers)))
-      : null;
+    const leftPane = q.part === 1
+      ? renderPart1PhotoPane(q)
+      : docs.length
+        ? el('div', { className: 'fc-mk-passage' },
+            el('div', { className: 'fc-mk-phead' },
+              el('span', {}, q.part === 6
+                ? `Questions ${q.groupRange} refer to the following passage.`
+                : q.part <= 4
+                  ? `Questions ${q.groupRange} refer to the following graphic.`
+                  : `Questions ${q.groupRange} refer to the following ${docs.length >= 3 ? 'three passages' : docs.length === 2 ? 'two passages' : 'passage'}.`),
+              ...(docs.length > 1
+                ? [el('div', { className: 'fc-mk-doctabs' },
+                    el('button', { type: 'button', className: 'tag-pill' + (mockSession.docTab === 'all' ? ' active' : ''), onclick: () => { mockSession.docTab = 'all'; paint(); } }, 'All docs'),
+                    ...docs.map((_, di) => el('button', { type: 'button', className: 'tag-pill' + (String(mockSession.docTab) === String(di) ? ' active' : ''), onclick: () => { mockSession.docTab = String(di); paint(); } }, `Doc ${di + 1}`)))]
+                : [])),
+            ...visibleDocs.map(({ d, di }) => renderPassageDoc(d, di, docs.length, q, mockSession.answers)))
+        : null;
 
     const showImmediate = mockSession.examMode === 'practice' && picked !== null && picked !== undefined;
+    const hideListenOptText = q.part <= 2 && !showImmediate;
     const choiceBtns = q.choices.map((ch, ci) => {
       let cls = 'fc-qz-opt fc-mk-opt';
       if (showImmediate) {
@@ -617,15 +1403,22 @@
         className: cls,
         disabled: showImmediate,
         onclick: () => answerMock(ci),
-      }, el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, ch));
+      }, el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, hideListenOptText ? `Mark option (${LETTERS[ci]})` : ch));
     });
+
+    const audioBar = q.audioKey ? renderAudioBar(q, { inReview: false }) : null;
+    const scriptReveal = showImmediate && q.scriptLines?.length
+      ? el('div', { className: 'fc-mk-script' }, el('strong', {}, 'Audio Script'), ...q.scriptLines.map((line) => el('p', {}, line)))
+      : null;
 
     const qCard = el('div', { className: 'fc-card fc-qz-card' },
       el('div', { className: 'fc-card-meta' },
         el('span', {}, `Question ${q.num} · ${q.tag}`),
         el('button', { type: 'button', className: 'fc-mk-flagbtn' + (mockSession.flags[i] ? ' active' : ''), onclick: () => toggleMockFlag(i) }, mockSession.flags[i] ? '⚑ Flagged (F)' : '⚑ Flag (F)')),
+      ...(audioBar ? [audioBar] : []),
       el('div', { className: 'fc-qz-q' }, q.q),
       el('div', { className: 'fc-qz-choices' }, ...choiceBtns),
+      ...(scriptReveal ? [scriptReveal] : []),
       ...(showImmediate
         ? [el('div', { className: 'fc-qz-explain ' + (picked === q.ans ? 'ok' : 'bad') },
             el('strong', {}, picked === q.ans ? `✓ Correct (${LETTERS[q.ans]})` : `✕ Incorrect — Correct answer is (${LETTERS[q.ans]}) ${q.choices[q.ans]}`),
@@ -642,20 +1435,20 @@
           : []),
         i + 1 < qs.length
           ? el('button', { type: 'button', className: 'primary fc-qz-next', onclick: () => gotoMockQuestion(i + 1) }, el('span', {}, 'Next'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))
-          : el('button', { type: 'button', className: 'fc-mk-subbtn', onclick: () => submitMockExam(false) }, 'Finish & Submit →')));
+          : el('button', { type: 'button', className: 'fc-mk-subbtn', onclick: () => submitMockExam(false) }, mockSession.isFull && mockSession.stage === 'listening' ? 'Submit Listening →' : 'Finish & Submit →')));
 
     const navEl = mockSession.navOpen ? renderMockNavigator() : null;
     stage.replaceChildren(
       hud,
       ...(navEl ? [navEl] : []),
-      el('div', { className: 'fc-mk-split' + (passagePane ? '' : ' single') },
-        ...(passagePane ? [passagePane] : []),
+      el('div', { className: 'fc-mk-split' + (leftPane ? '' : ' single') },
+        ...(leftPane ? [leftPane] : []),
         el('div', { className: 'fc-mk-qpane' }, qCard)));
   }
 
   function startQuiz(source = quizSource, { set = quizSet, tag = quizTag, count = quizCount } = {}) {
     quizSource = source;
-    if (source === 'mock') { paint(); return; }
+    if (source === 'mock') { refreshPackStatus(); paint(); return; }
     quizSet = Number(set) || 1;
     quizTag = tag;
     quizCount = count;
@@ -772,7 +1565,6 @@
     const sc = scoreQuiz(questions, answers);
     const LETTERS = ['A', 'B', 'C', 'D'];
 
-    // Summary screen when finished
     if (index >= questions.length) {
       const retryBtn = sc.missed.length ? el('button', {
         type: 'button', className: 'primary',
@@ -976,13 +1768,13 @@
     }
   }
 
-  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['Enter / Arrows', 'Next / prev question'], ['F', 'Flag mock question'], ['N', 'New card']] };
+  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['R', 'Replay listening clip'], ['Enter / Arrows', 'Next / prev question'], ['F', 'Flag mock question'], ['N', 'New card']] };
   const commandFn = () => [
-    { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'study'; paint(); } },
-    { label: 'TOEIC: Full Reading Mock Exam (30 Sets × 100 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; quizSource = 'mock'; paint(); } },
-    { label: 'TOEIC: Part 5 Practice Sets (20 × 50 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
-    { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
-    { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
+    { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'study'; paint(); } },
+    { label: 'TOEIC: Full Listening & Reading Mock Exam (30 Sets × 200 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; quizSource = 'mock'; refreshPackStatus(); paint(); } },
+    { label: 'TOEIC: Part 5 Practice Sets (20 × 50 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
+    { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
+    { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
     { label: `TOEIC: Load all ${packs().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(); } },
     ...packs().map((p) => ({
       label: `TOEIC: Add ${p.label} (${p.cards.length} chunks)`,
@@ -1011,7 +1803,20 @@
       if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
         await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' }).catch(() => {});
       }
-      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
+      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
+      if (window.__TAURI__?.event?.listen && !unlistenProgress) {
+        unlistenProgress = await window.__TAURI__.event.listen('listening-progress', (ev) => {
+          const p = ev?.payload;
+          if (!p?.vol) return;
+          packDownload[p.vol] = { loaded: Number(p.loaded) || 0, total: Number(p.total) || 0 };
+          const bar = $('fc-mk-dlprog-' + p.vol);
+          if (bar) {
+            const pct = p.total ? `${Math.round((p.loaded / p.total) * 100)}%` : `${(p.loaded / (1024 * 1024)).toFixed(1)} MB`;
+            bar.textContent = `Downloading Vol ${p.vol}: ${pct}`;
+          }
+        }).catch(() => null);
+      }
+      await refreshPackStatus();
       build();
       paint();
       commandHooks.push(commandFn);
@@ -1019,11 +1824,12 @@
     },
     stop() {
       persistMockProgress();
-      stopMockTimer();
+      stopMockAll();
+      if (typeof unlistenProgress === 'function') { try { unlistenProgress(); } catch {} unlistenProgress = null; }
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
     },
-    show() { paint(); },
+    show() { refreshPackStatus(); paint(); },
     keys(e) {
       const t = e.target.matches ? e.target : document.body;
       const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;
@@ -1036,12 +1842,18 @@
       const pad = ['Numpad1', 'Numpad2', 'Numpad3', 'Numpad4'].indexOf(e.code);
       const num = idx >= 0 ? idx + 1 : pad >= 0 ? pad + 1 : ['1', '2', '3', '4'].indexOf(e.key) + 1;
       if (mode === 'quiz' && quizSource === 'mock' && mockSession) {
-        if (!mockSession.submitted && !mockSession.paused) {
-          const cur = mockSession.index;
+        const cur = mockSession.index;
+        const curQ = mockSession.questions[cur];
+        if (mockSession.submitted) {
+          if (e.code === 'KeyR' && curQ?.audioKey) { e.preventDefault(); playQuestionAudio(curQ, { restart: true }); }
+          return;
+        }
+        if (!mockSession.paused && !mockSession.intermission) {
           const picked = mockSession.answers[cur];
           const answered = picked !== null && picked !== undefined;
-          if (num >= 1 && num <= 4) { e.preventDefault(); answerMock(num - 1); }
+          if (num >= 1 && num <= (curQ?.choices?.length || 4)) { e.preventDefault(); answerMock(num - 1); }
           else if (e.code === 'KeyF') { e.preventDefault(); toggleMockFlag(cur); }
+          else if (e.code === 'KeyR' && curQ?.audioKey && mockSession.examMode === 'practice') { e.preventDefault(); playQuestionAudio(curQ, { restart: true }); }
           else if (e.key === 'ArrowLeft') { e.preventDefault(); gotoMockQuestion(cur - 1); }
           else if (e.key === 'ArrowRight' || (e.key === 'Enter' && answered)) { e.preventDefault(); gotoMockQuestion(cur + 1); }
         }
