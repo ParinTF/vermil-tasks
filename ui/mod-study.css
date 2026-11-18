@@ -4,7 +4,7 @@
 .study-head small, .study-field > span, .study-progress span {
   font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--mute);
 }
-.study-fields { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); gap: 14px; }
+.study-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) repeat(2, minmax(0, 1fr)); gap: 14px; }
 .study-field { display: grid; gap: 4px; min-width: 0; }
 .study-actions, .study-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
 .study-progress { justify-content: space-between; margin: 0 0 12px; }
@@ -17,7 +17,6 @@
 @media (max-width: 640px) {
   .study-page { padding-top: 12px; }
   .study-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-  .study-field:first-child { grid-column: 1 / -1; }
 }
 
 @media (min-width: 860px) {

@@ -74,6 +74,51 @@ test('legacy cards keep their due date and counts before building FSRS-7 memory 
   assert.equal(legacy.next, '2026-11-16');
 });
 
+test('language versions isolate study cards and new card allowances', () => {
+  const { cardLanguage, studyLanguageCards, studyNewCount, studyNewReview } = require('../ui/logic.js');
+  const date = '2026-11-18';
+  const cards = [
+    { id: 'ox', deck: 'Oxford A1' },
+    { id: 'old-zh', deck: 'Mandarin Basics' },
+    { id: 'old-ja', deck: 'Japanese: Travel' },
+    { id: 'new-ja', deck: 'General', language: 'ja' },
+    { id: 'name-only', deck: 'Chinese', language: 'en' },
+  ];
+  assert.deepEqual(cards.map(cardLanguage), ['en', 'zh', 'ja', 'ja', 'en']);
+  assert.deepEqual(studyLanguageCards(cards, 'ja').map((c) => c.id), ['old-ja', 'new-ja']);
+  const log = studyNewReview({ day: date, count: 20 }, date, 'zh');
+  assert.deepEqual([studyNewCount(log, date, 'en'), studyNewCount(log, date, 'zh'), studyNewCount(log, date, 'ja')], [20, 1, 0]);
+  assert.equal(studyNewCount(log, '2026-11-19', 'zh'), 0);
+  assert.equal(studyNewCount(log, date), 21);
+});
+
+test('import keeps identical prompts in different languages and skips duplicates within a language', () => {
+  const existing = [{ id: 'en-one', front: '1', back: 'One', deck: 'General' }];
+  const items = [
+    { front: '1', back: 'One', deck: 'General' },
+    { front: '1', back: 'いち', language: 'ja', deck: 'Numbers' },
+    { front: '1', back: 'いち', deck: 'Japanese' },
+  ];
+  const { cards, added } = importCardPack(existing, items, '2026-11-18', () => 'ja-one');
+  assert.equal(added, 1);
+  assert.deepEqual(cards.map((c) => [c.id, c.language]), [['en-one', undefined], ['ja-one', 'ja']]);
+});
+
+test('Chinese and Japanese starter packs are complete and import into their own study versions', () => {
+  const { STUDY_LANGUAGE_PACKS } = require('../ui/study-language-packs.js');
+  const { studyLanguageCards } = require('../ui/logic.js');
+  const items = Object.values(STUDY_LANGUAGE_PACKS).flatMap(({ deck, language, cards }) =>
+    cards.map(([front, back]) => ({ deck, language, front, back })));
+  const { cards, added } = importCardPack([], items, '2026-11-18', (i) => `starter-${i}`);
+  assert.equal(added, 48);
+  for (const [id, script] of [['zh', /\p{Script=Han}/u], ['ja', /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}]/u]]) {
+    const scoped = studyLanguageCards(cards, id);
+    assert.equal(scoped.length, 24);
+    assert.ok(scoped.every((c) => script.test(c.front) && c.back.trim()));
+  }
+  assert.equal(studyLanguageCards(cards, 'en').length, 0);
+});
+
 test('study sessions sample from the full eligible pool while keeping due reviews ahead of new cards', () => {
   const { studySample } = require('../ui/logic.js');
   const today = '2026-11-16';

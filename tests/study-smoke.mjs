@@ -163,13 +163,35 @@ try {
   await click('#study-due');
   assert.match(await evaluate("document.querySelector('.study-progress span').textContent"), /Review · 1 \/ 2/);
   await click('.study-progress button');
+  for (const [option, lang, deck] of [[2, 'zh', 'Mandarin Starter'], [3, 'ja', 'Japanese Starter']]) {
+    await choose('language', option);
+    assert.equal(await evaluate("$('study-test').disabled"), true);
+    assert.match(await evaluate("$('study-starter').textContent"), new RegExp(deck));
+    await click('#study-starter');
+    await until(() => saved().cards.cards.filter((card) => card.language === lang).length === 24, deck + ' saved');
+    assert.equal(await evaluate("$('study-starter').hidden"), true);
+    assert.match(await evaluate("$('study-due').textContent"), /\(20\)/);
+    await click('#study-test');
+    assert.equal(await evaluate("document.querySelector('.fc-card-front').lang"), lang);
+    assert.equal(await evaluate("document.querySelector('.fc-card-meta span').textContent"), deck);
+    const prompt = await front();
+    await click('#study-reveal');
+    await key('Digit3', '3');
+    await until(async () => await front() !== prompt, deck + ' rating');
+    assert.equal(saved().cards.newLog.byLanguage[lang], 1);
+    assert.equal(saved().cards.cards.filter((card) => card.language === lang && card.memory?.version === 7).length, 1);
+    await click('.study-progress button');
+  }
+  await choose('language', 1);
+  assert.equal(await evaluate("[...$('study-deck').options].map(o => o.textContent).join('|')"), 'All decks|Sample A|Sample B');
   await click('#view-home');
+  assert.equal(await evaluate("$('tile-study').querySelector('b').textContent"), '48 due now');
   if (!await evaluate("$('pack-smart').open")) await click('#pack-smart > summary');
   await click('#card-study .mod-remove');
   await until(() => evaluate("!$('view-study') && !$('study-view') && !$('style-study')"), 'Study removed');
-  assert.equal(saved().cards.cards.filter((card) => card.memory?.version === 7).length, 10);
+  assert.equal(saved().cards.cards.filter((card) => card.memory?.version === 7).length, 12);
   assert.deepEqual(errors, []);
-  console.log('Study smoke passed: module lifecycle, deck and test size, ten unique cards, keyboard/mouse, FSRS-7 persistence, narrow layout, due reviews');
+  console.log('Study smoke passed: module lifecycle, three language versions, starter imports, random tests, keyboard/mouse, FSRS-7 persistence and narrow layout');
 } finally {
   cleanup();
 }

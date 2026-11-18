@@ -46,8 +46,15 @@
   const save = () => saveModule('cards', data).catch((e) => tell('Could not save: ' + (e.message || e)));
   const root = () => $('cards-view');
   const today = () => localDay(new Date());
-  const newDone = (t) => (data.newLog?.day === t ? Number(data.newLog.count) || 0 : 0);
+  const newDone = (t, language) => studyNewCount(data.newLog, t, language);
   const effectiveLimit = () => (data.newLimit > 0 ? data.newLimit + (data.extraDay === today() ? data.extraToday || 0 : 0) : 0);
+
+  function dueTotal() {
+    const day = today();
+    const newLimit = effectiveLimit();
+    return CARD_LANGUAGES.reduce((total, [id]) => total + studyQueue(studyLanguageCards(data.cards, id), day,
+      { newLimit, newDoneToday: newDone(day, id) }).queue.length, 0);
+  }
 
   function build() {
     root().replaceChildren(
@@ -66,6 +73,8 @@
         el('div', { id: 'fc-stage' })),
       el('aside', { className: 'fc-side', ariaLabel: 'Add a flashcard' },
         el('form', { id: 'fc-form', onsubmit: add },
+          el('div', { className: 'fc-field' }, 'Language', el('select', { id: 'fc-language', ariaLabel: 'Card language' },
+            ...CARD_LANGUAGES.map(([value, label]) => el('option', { value }, label)))),
           el('div', { className: 'fc-form-row' },
             el('label', { className: 'fc-field' }, 'Deck', el('input', { id: 'fc-deck', maxLength: 40, autocomplete: 'off', placeholder: 'Oxford, TOEIC, AI' })),
             el('label', { className: 'fc-field' }, 'POS (optional)', el('input', { id: 'fc-pos', maxLength: 24, autocomplete: 'off', placeholder: 'n., v., adj.' }))),
@@ -75,18 +84,20 @@
           el('p', { className: 'fc-tip' }, 'Tip: add n., v., adj. for single words so you practice both meaning and word class.'),
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add card'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'fc-msg', className: 'fc-msg', role: 'status' }))));
+    enhanceSelect($('fc-language'));
     mobileSheet(root(), root().querySelector('.fc-side'), 'New card');
   }
 
   function add(e) {
     e.preventDefault();
     const deck = $('fc-deck').value.trim() || 'General';
+    const language = $('fc-language').value;
     const pos = ($('fc-pos')?.value || '').trim();
     const front = $('fc-front').value.trim();
     const back = $('fc-back').value.trim();
     const example = $('fc-example').value.trim();
     if (!front || !back) { $('fc-msg').textContent = 'Fill in both the front and the back of the card.'; return; }
-    data.cards.push({ id: crypto.randomUUID(), deck, front, back, ...(pos ? { pos } : {}), ...(example ? { example } : {}), box: 1, next: today(), lastReviewed: null, reviews: 0 });
+    data.cards.push({ id: crypto.randomUUID(), deck, language, front, back, ...(pos ? { pos } : {}), ...(example ? { example } : {}), box: 1, next: today(), lastReviewed: null, reviews: 0 });
     save();
     if ($('fc-pos')) $('fc-pos').value = '';
     $('fc-front').value = '';
@@ -110,7 +121,7 @@
     const rated = fsrsReview(card, grade, now);
     const oldLog = data.newLog;
     const day = localDay(new Date(now));
-    if (!card.lastReviewed) data.newLog = { day, count: newDone(day) + 1 };
+    if (!card.lastReviewed) data.newLog = studyNewReview(data.newLog, day, cardLanguage(card));
     const log = data.newLog;
     data.cards[index] = rated;
     try {
@@ -155,22 +166,18 @@
     save();
     paint();
   }
-  const cardKey = (front, pos) => {
-    const f = String(front || '').trim().toLowerCase();
-    const p = String(pos || '').trim().toLowerCase();
-    return f ? (p ? `${f}\u0000${p}` : f) : '';
-  };
-  const existingKeys = () => new Set(data.cards.map((c) => cardKey(c.front, c.pos)).filter(Boolean));
+  const existingKeys = () => new Set(data.cards.map(cardKey).filter(Boolean));
 
   function packRemaining(pack) {
     const have = existingKeys();
-    return pack.cards.filter(([front, , , pos]) => !have.has(cardKey(front, pos))).length;
+    return packToItems(pack).filter((card) => !have.has(cardKey(card))).length;
   }
 
   function packToItems(pack) {
     const deck = pack.deck || pack.label;
     return (pack.cards || []).map(([front, back, example, pos]) => ({
       deck,
+      language: pack.language,
       front,
       back,
       example,
@@ -178,12 +185,16 @@
     }));
   }
 
-  function loadPack(pack, groupLabel = 'chunks') {
+  function importPack(pack) {
     const res = importCardPack(data.cards, packToItems(pack), today());
-    if (!res.added) { $('fc-msg').textContent = `All ${groupLabel} from "${pack.label}" are already in your deck.`; return; }
-    data.cards = res.cards;
-    save();
-    $('fc-msg').textContent = `Added ${res.added} ${groupLabel} (${pack.label}).`;
+    if (res.added) { data.cards = res.cards; save(); }
+    return res.added;
+  }
+
+  function loadPack(pack, groupLabel = 'chunks') {
+    const added = importPack(pack);
+    if (!added) { $('fc-msg').textContent = `All ${groupLabel} from "${pack.label}" are already in your deck.`; return; }
+    $('fc-msg').textContent = `Added ${added} ${groupLabel} (${pack.label}).`;
     paint();
   }
 
@@ -1765,13 +1776,12 @@
       advBtn.ariaPressed = String(Boolean(data.advanceMode));
       advBtn.textContent = data.advanceMode ? '✓ Advance · Oxford 5000' : 'Advance · Oxford 5000';
     }
-    const qAll = studyQueue(data.cards, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
     const s = deckSummary(data.cards, t);
     const fig = (label, value) => el('div', {}, el('small', {}, label), el('b', {}, value));
     if ($('fc-sum')) {
       $('fc-sum').hidden = isMockActive;
       $('fc-sum').replaceChildren(
-        fig('Due now', String(qAll.queue.length)),
+        fig('Due now', String(dueTotal())),
         fig('Mastered (10+ days)', String(s.mastered)),
         fig('Total cards', String(s.total)));
     }
@@ -1879,7 +1889,13 @@
 
   defineModule('cards', {
     front: renderWordLine,
-    studyData() { return { cards: data.cards, newLimit: data.newLimit, effectiveLimit: effectiveLimit(), newDoneToday: newDone(today()) }; },
+    studyData(language) {
+      return { cards: language ? studyLanguageCards(data.cards, language) : data.cards,
+        newLimit: data.newLimit, effectiveLimit: effectiveLimit(), newDoneToday: newDone(today(), language) };
+    },
+    importStudyPack: importPack,
+    dueTotal,
+    setCardLanguage(language) { $('fc-language').value = language; },
     setStudyLimit(limit) { data.newLimit = limit; data.extraToday = 0; save(); },
     rateCard,
     weekly(since, until) {

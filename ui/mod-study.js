@@ -7,30 +7,36 @@
   let revealed = false;
   let busy = false;
   let refreshTimer;
+  const language = () => $('study-language').value;
 
   const choices = (id, label, values, onchange) => el('div', { className: 'study-field' },
     el('span', {}, label),
     el('select', { id, ariaLabel: label, onchange }, ...values.map(([value, title]) => el('option', { value }, title))));
 
   function scoped() {
-    const { cards, effectiveLimit, newDoneToday } = registry.cards.studyData();
+    const { cards, effectiveLimit, newDoneToday } = registry.cards.studyData(language());
     const filter = $('study-deck').value;
     const selected = cards.filter((card) => !filter || (filter.startsWith('group:')
       ? (card.deck || 'General').startsWith(filter.slice(6)) : (card.deck || 'General') === filter.slice(5)));
-    return { selected, newLimit: effectiveLimit, newDoneToday };
+    return { cards, selected, newLimit: effectiveLimit, newDoneToday };
   }
 
   function updateSetup() {
     clearTimeout(refreshTimer);
-    const { selected, newLimit, newDoneToday } = scoped();
+    const { cards, selected, newLimit, newDoneToday } = scoped();
     const now = Date.now();
     const due = studyQueue(selected, localDay(new Date(now)), { newLimit, newDoneToday, now }).queue.length;
     const count = Number($('study-size').value);
     $('study-test').disabled = !selected.length;
     $('study-due').disabled = !due;
     $('study-due').textContent = `Review due (${due})`;
+    const pack = STUDY_LANGUAGE_PACKS[language()];
+    const keys = new Set(cards.map(cardKey));
+    const starter = $('study-starter');
+    starter.hidden = !pack || pack.cards.every(([front]) => keys.has(cardKey({ front, language: pack.language })));
+    if (pack) starter.textContent = `Add ${pack.deck} cards`;
     $('study-available').textContent = !selected.length
-      ? 'Add or import cards in Cards to get started.'
+      ? (cards.length ? 'No cards in this deck.' : 'No cards in this language yet.')
       : selected.length < count
         ? `Only ${selected.length} cards available. The test will use all of them.`
         : 'Test ratings update your review schedule.';
@@ -123,7 +129,7 @@
       el('article', { className: 'fc-card study-card' },
         el('div', { className: 'fc-card-meta' }, el('span', {}, card.deck || 'General'),
           el('span', {}, recall === null ? (card.lastReviewed ? 'Reviewed before' : 'New card') : `${Math.round(recall * 100)}% recall`)),
-        el('div', { className: 'fc-card-front' }, registry.cards.front(card.front, card.pos)),
+        el('div', { className: 'fc-card-front', lang: cardLanguage(card) }, registry.cards.front(card.front, card.pos)),
         ...(revealed ? [
           el('div', { className: 'fc-card-back' }, card.back),
           ...(card.example ? [el('p', { className: 'fc-card-example' }, card.example)] : []),
@@ -136,7 +142,7 @@
   }
 
   function show() {
-    const { cards, newLimit } = registry.cards.studyData();
+    const { cards, newLimit } = registry.cards.studyData(language());
     const names = [...new Set(cards.map((card) => card.deck || 'General'))].sort();
     const deck = $('study-deck');
     const selected = deck.value;
@@ -150,23 +156,32 @@
     else updateSetup();
   }
 
+  function changeLanguage() {
+    try { localStorage.setItem('study-language', language()); } catch {}
+    $('study-deck').value = '';
+    $('study-result').replaceChildren();
+    show();
+  }
+
   const commands = () => [{ label: 'Study flashcards', hint: 'Study', kind: 'Command', run: () => setView('study') }];
   const shortcuts = { module: 'study', title: 'Study', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Rate recall']] };
   defineModule('study', {
     summary() {
-      const { cards, effectiveLimit, newDoneToday } = registry.cards.studyData();
+      const { cards } = registry.cards.studyData();
       if (!cards.length) return null;
       const day = localDay(new Date());
-      const due = studyQueue(cards, day, { newLimit: effectiveLimit, newDoneToday }).queue.length;
+      const due = registry.cards.dueTotal();
       const { mastered, total } = deckSummary(cards, day);
       return { label: 'Study', value: String(due), unit: 'due now', warn: due > 0, sub: `${mastered} of ${total} mastered` };
     },
-    start() {
+    async start() {
+      if (typeof STUDY_LANGUAGE_PACKS === 'undefined') await loadFile('script', { src: 'study-language-packs.js', id: 'script-study-languages' });
       $('study-view').replaceChildren(el('section', { className: 'study-main', ariaLabel: 'Study' },
         el('header', { className: 'fc-head study-head' },
           el('h2', {}, 'Study'), el('small', {}, 'FSRS-7')),
         el('div', { id: 'study-setup' },
           el('div', { className: 'study-fields' },
+            choices('study-language', 'Language', CARD_LANGUAGES, changeLanguage),
             choices('study-deck', 'Deck', [['', 'All decks']], updateSetup),
             choices('study-size', 'Cards per test', sizes.map((n) => [n, String(n)]), updateSetup),
             choices('study-limit', 'New cards per day', [[20, '20'], [50, '50'], [0, 'All']], (e) => {
@@ -177,11 +192,22 @@
             el('button', { id: 'study-test', className: 'primary', type: 'button', onclick: () => startSession('test') },
               el('span', {}, 'Start test'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
             el('button', { id: 'study-due', className: 'ghost', type: 'button', onclick: () => startSession('due') }, 'Review due'),
-            el('button', { id: 'study-library', className: 'linkish', type: 'button', onclick: () => setView('cards') }, 'Open Cards')),
+            el('button', { id: 'study-starter', className: 'ghost', type: 'button', hidden: true, onclick: () => {
+              registry.cards.importStudyPack(STUDY_LANGUAGE_PACKS[language()]);
+              show();
+            } }, 'Add starter cards'),
+            el('button', { id: 'study-library', className: 'linkish', type: 'button', onclick: () => {
+              registry.cards.setCardLanguage(language());
+              setView('cards');
+            } }, 'Open Cards')),
           el('p', { id: 'study-available', role: 'status' }),
           el('div', { id: 'study-result', role: 'status' })),
         el('div', { id: 'study-session' })));
-      for (const id of ['study-deck', 'study-size', 'study-limit']) enhanceSelect($(id));
+      for (const id of ['study-language', 'study-deck', 'study-size', 'study-limit']) enhanceSelect($(id));
+      try {
+        const saved = localStorage.getItem('study-language');
+        if (CARD_LANGUAGES.some(([id]) => id === saved)) $('study-language').value = saved;
+      } catch {}
       commandHooks.push(commands);
       shortcutGroups.push(shortcuts);
       show();

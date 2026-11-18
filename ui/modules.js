@@ -36,7 +36,7 @@ const MODULES = [
   { id: 'assistant', pack: 'smart', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
   { id: 'review', pack: 'smart', name: 'Review & Goals', subLabel: 'Review', about: 'Day/week/month/year Review dashboard, automated & manual Goals, and cross-module Insights in one analytics hub.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
   { id: 'cards', pack: 'smart', name: 'Flashcards', about: 'Manage your cards, load Oxford, Everyday and TOEIC decks, and take TOEIC and TOEFL mock exams.', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
-  { id: 'study', pack: 'smart', name: 'Study', about: 'Flip randomly selected flashcards, test yourself, and review on your FSRS-7 schedule.', script: 'mod-study.js', style: 'mod-study.css', view: 'Study', requires: ['cards'] },
+  { id: 'study', pack: 'smart', name: 'Study', about: 'Test yourself in English, Chinese or Japanese with shuffled cards and FSRS-7 reviews.', script: 'mod-study.js', style: 'mod-study.css', view: 'Study', requires: ['cards'] },
 ];
 
 // Packages: Home shows the modules in a few sets instead of one long list. A new module names its set with `pack`.
