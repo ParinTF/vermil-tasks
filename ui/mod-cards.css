@@ -248,6 +248,51 @@
 .fc-mk-script p { margin: 0; }
 .fc-mk-stage2box { display: grid; gap: 12px; padding: 28px 24px; border: 2px solid var(--ink); border-radius: 14px; text-align: center; justify-items: center; }
 
+/* TOEFL iBT 2026 4-Skill Runner */
+.tf-grid { grid-template-columns: repeat(auto-fill, minmax(156px, 1fr)); }
+.tf-work { display: grid; gap: 14px; }
+.tf-stack { display: grid; gap: 14px; }
+.tf-subbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 12px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.tf-card-block { display: grid; gap: 12px; padding: 18px; border: 1px solid var(--line); border-radius: 12px; background: var(--paper); }
+.tf-cloze-body { margin: 0; font-size: 16px; line-height: 2.05; color: var(--ink); }
+.tf-cloze-tok { display: inline-flex; align-items: baseline; margin: 0 2px; }
+.tf-cloze-tok b { font-weight: 700; color: var(--ink); }
+.tf-gap-in { padding: 1px 4px; border: 0; border-bottom: 1.5px solid color-mix(in srgb, var(--ink) 45%, transparent); background: color-mix(in srgb, var(--ink) 4%, transparent); font: inherit; font-weight: 600; color: var(--ink); border-radius: 4px 4px 0 0; }
+.tf-gap-in:focus { outline: 0; border-bottom-color: var(--accent); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.tf-gap-in.ok { border-bottom-color: var(--ink); background: color-mix(in srgb, var(--ink) 12%, transparent); }
+.tf-gap-in.bad { border-bottom-color: var(--accent); color: var(--accent-text); background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.tf-mcq { gap: 12px; padding: 18px; }
+.tf-audio-wrap { display: grid; gap: 8px; }
+.tf-audio-msg { font-size: 12px; color: var(--mute); flex: 1; }
+.tf-transcript { padding: 8px 12px; border: 1px solid var(--line); border-radius: 10px; font-size: 13.5px; color: var(--ink); background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.tf-transcript summary { cursor: pointer; font-weight: 600; color: var(--mute); font-size: 12.5px; }
+.tf-cue { margin: 0; font-size: 14px; color: var(--mute); }
+.tf-sentence-box { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-height: 52px; padding: 12px 14px; border: 1.5px solid var(--ink); border-radius: 10px; background: var(--paper); font-size: 15px; line-height: 1.5; }
+.tf-sentence-box.ok { border-color: var(--ink); background: color-mix(in srgb, var(--ink) 5%, var(--paper)); }
+.tf-sentence-box.bad { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 7%, var(--paper)); }
+.tf-fixed { font-weight: 600; color: var(--ink); }
+.tf-placeholder { font-size: 13px; color: var(--mute); }
+.tf-chip-bank { display: flex; flex-wrap: wrap; gap: 6px; }
+.tf-chip { padding: 6px 11px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 8px; background: var(--paper); font: inherit; font-size: 14px; font-weight: 600; color: var(--ink); cursor: pointer; }
+.tf-chip:hover:not(:disabled) { border-color: var(--ink); }
+.tf-chip.placed { border-color: var(--ink); background: var(--ink); color: var(--paper); }
+.tf-chip.used { opacity: .35; cursor: default; }
+.tf-chip-acts { display: flex; gap: 8px; }
+.tf-bullets { margin: 0; padding-left: 18px; display: grid; gap: 4px; font-size: 14px; }
+.tf-post { padding: 10px 12px; border-left: 2px solid var(--line); background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 0 8px 8px 0; font-size: 14px; line-height: 1.5; }
+.tf-editor-head { display: flex; justify-content: space-between; align-items: baseline; font-size: 13px; }
+.tf-editor-head span { color: var(--mute); font-variant-numeric: tabular-nums; }
+.tf-textarea { width: 100%; min-height: 110px; padding: 12px; border: 1px solid color-mix(in srgb, var(--ink) 30%, transparent); border-radius: 10px; background: var(--paper); font: inherit; font-size: 15px; line-height: 1.55; color: var(--ink); resize: vertical; }
+.tf-textarea:focus { outline: 0; border-color: var(--accent); }
+.tf-eval-box { display: grid; gap: 10px; }
+.tf-eval-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; }
+.tf-self-rate { display: flex; flex-wrap: wrap; align-items: center; gap: 5px; }
+.tf-self-rate small { font-size: 11.5px; color: var(--mute); margin-right: 4px; }
+.tf-ai-res p { margin: 2px 0; font-size: 13.5px; }
+.tf-mic-box { display: grid; gap: 8px; }
+.tf-mic-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+.tf-audio-player { height: 34px; max-width: 100%; }
+
 @media (max-width: 640px) {
   .cards-page { gap: 16px; padding-top: 12px; }
   .fc-head h2 { font-size: 24px; }

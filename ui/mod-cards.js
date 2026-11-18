@@ -1,8 +1,9 @@
-// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + Oxford 3000 & Advance Oxford 5000 (POS) + 1,000 Everyday + 1,000 TOEIC chunks
-// + Part 5 quizzes + 30 Full TOEIC Listening & Reading Mock Exams (Q1-100 Listening / Q101-200 Reading / Full 200-Q 10-990 scoring).
-// Data: { cards, newLimit, advanceMode, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, mockProgress }.
+// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + Oxford 3000 & Advance Oxford 5000 (POS) + 750 Oxford Phrases + Daily + TOEIC + TOEFL iBT 2026
+// + Part 5 quizzes + 30 Full TOEIC L&R Mock Exams + 10 Full 4-Skill TOEFL iBT 2026 Exams.
+// Data: { cards, newLimit, advanceMode, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, toeflScores, mockProgress }.
 (() => {
-  let data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {} };
+  let data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, toeflScores: {}, mockProgress: {} };
+  let toeflCtrl = null;
   let mode = 'study'; // 'study' | 'quiz' | 'browse'
   let activeDeck = '';
   let revealed = false;
@@ -537,6 +538,23 @@
   function stopMockAll() {
     stopMockTimer();
     stopAudioPlayback();
+    if (toeflCtrl) toeflCtrl.stopAll();
+  }
+
+  async function ensureToeflCtrl() {
+    if (!toeflCtrl) {
+      if (typeof createToeflController === 'undefined' && !$('script-toefl-ui')) {
+        await loadFile('script', { src: 'toefl-ui.js', id: 'script-toefl-ui' });
+      }
+      if (typeof createToeflController === 'function') {
+        toeflCtrl = createToeflController({
+          el, $, ask, tell, loadFile, today, save, emit,
+          getData: () => data,
+          paint, sourceBar, pickVoice, formatClock, shuffleWith,
+        });
+      }
+    }
+    return toeflCtrl;
   }
 
   function sectionLimitSec(sess = mockSession) {
@@ -1088,7 +1106,8 @@
     const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
     const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
     return el('div', { className: 'fc-qz-sources', role: 'group', ariaLabel: 'Test bank' },
-      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'mock' ? ' active' : ''), onclick: () => { quizSource = 'mock'; refreshPackStatus(); paint(); } }, 'Mock Exam (30 Full L+R Sets)'),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'mock' ? ' active' : ''), onclick: () => { stopMockAll(); quizSource = 'mock'; refreshPackStatus(); paint(); } }, 'TOEIC Mock (30 Sets)'),
+      el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'toefl' ? ' active' : ''), onclick: () => { stopMockAll(); quizSource = 'toefl'; ensureToeflCtrl().then(() => paint()); } }, 'TOEFL iBT (10 Sets · 2026)'),
       el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'sets' ? ' active' : ''), onclick: () => { stopMockAll(); startQuiz('sets', { set: quizSet }); } }, 'Part 5 Sets (20 × 50 Qs)'),
       el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'topic' ? ' active' : ''), onclick: () => { stopMockAll(); startQuiz('topic', { tag: quizTag, count: quizCount }); } }, `By Topic (${tags.length})`),
       el('button', { type: 'button', className: 'tag-pill' + (quizSource === 'cards' ? ' active' : ''), onclick: () => { stopMockAll(); startQuiz('cards', { count: quizCount }); } }, `My Decks / Chunks (${data.cards.length})`));
@@ -1564,6 +1583,11 @@
 
   function paintQuiz(stage) {
     if (quizSource === 'mock') { paintMock(stage); return; }
+    if (quizSource === 'toefl') {
+      if (toeflCtrl) toeflCtrl.paint(stage);
+      else stage.replaceChildren(el('div', { className: 'fc-qz-bar' }, sourceBar()), el('p', { className: 'empty' }, 'Loading TOEFL iBT 2026 simulator…'));
+      return;
+    }
     const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
     const tags = [...new Set(curated.map((x) => x.tag).filter(Boolean))];
     const setNums = [...new Set(curated.map((x) => Number(x.set)).filter((n) => n > 0))].sort((a, b) => a - b);
@@ -1742,7 +1766,7 @@
 
   function paint() {
     const t = today();
-    const isMockActive = mode === 'quiz' && quizSource === 'mock' && Boolean(mockSession);
+    const isMockActive = mode === 'quiz' && ((quizSource === 'mock' && Boolean(mockSession)) || (quizSource === 'toefl' && Boolean(toeflCtrl?.isActive?.())));
     root()?.classList?.toggle('mock-active', isMockActive);
     $('fc-m-study').ariaSelected = String(mode === 'study');
     if ($('fc-m-quiz')) $('fc-m-quiz').ariaSelected = String(mode === 'quiz');
@@ -1898,6 +1922,7 @@
   const commandFn = () => [
     { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'study'; paint(); } },
     { label: 'TOEIC: Full Listening & Reading Mock Exam (30 Sets × 200 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; quizSource = 'mock'; refreshPackStatus(); paint(); } },
+    { label: 'TOEFL iBT (2026): Full 4-Skill Mock Exams (10 Sets · 1–6 Band)', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; quizSource = 'toefl'; await ensureToeflCtrl(); paint(); } },
     { label: 'TOEIC: Part 5 Practice Sets (20 × 50 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
     { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
     { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
@@ -1943,7 +1968,7 @@
       if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
         await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' }).catch(() => {});
       }
-      data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
+      data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, toeflScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
       if (data.advanceMode || data.cards.some((c) => String(c?.deck || '').startsWith('Oxford 5000 · '))) {
         await ensureOxford5k();
       }

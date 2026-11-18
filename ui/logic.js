@@ -1898,4 +1898,98 @@ function scoreFullToeicExam(listenReport, readReport) {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+// ── TOEFL iBT (2026 Redesign · 1–6 Band + Adaptive Router + 0–120 Concordance) ──
+const TOEFL_CONCORDANCE = {
+  '6.0': { range: '114–120', mid: 117, cefr: 'C2' },
+  '5.5': { range: '107–113', mid: 110, cefr: 'C1' },
+  '5.0': { range: '95–106', mid: 101, cefr: 'C1' },
+  '4.5': { range: '86–94', mid: 90, cefr: 'B2' },
+  '4.0': { range: '72–85', mid: 79, cefr: 'B2' },
+  '3.5': { range: '58–71', mid: 65, cefr: 'B1' },
+  '3.0': { range: '44–57', mid: 51, cefr: 'B1' },
+  '2.5': { range: '34–43', mid: 39, cefr: 'A2' },
+  '2.0': { range: '24–33', mid: 29, cefr: 'A2' },
+  '1.5': { range: '12–23', mid: 18, cefr: 'A1' },
+  '1.0': { range: '0–11', mid: 6, cefr: 'A1' },
+};
+
+function snapToeflBand(val) {
+  const n = Number(val);
+  if (!Number.isFinite(n)) return 1.0;
+  return Math.max(1.0, Math.min(6.0, Math.round(n * 2) / 2));
+}
+
+function toeflCefrBand(band) {
+  const s = snapToeflBand(band);
+  return TOEFL_CONCORDANCE[s.toFixed(1)]?.cefr || 'A1';
+}
+
+function toeflComparable120(band) {
+  const s = snapToeflBand(band);
+  const info = TOEFL_CONCORDANCE[s.toFixed(1)] || TOEFL_CONCORDANCE['1.0'];
+  return { band: s, ...info };
+}
+
+function toeflOverallBand(...sectionBands) {
+  const nums = sectionBands.map(Number).filter((x) => Number.isFinite(x) && x > 0);
+  if (!nums.length) return 1.0;
+  const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+  return snapToeflBand(avg);
+}
+
+function toeflAdaptiveBranch(correct, total) {
+  const ratio = Number(total) > 0 ? Number(correct) / Number(total) : 0;
+  return ratio >= 0.65 ? 'stage2b' : 'stage2a';
+}
+
+function toeflBandScore(correct, total, branch = 'full') {
+  const p = Math.max(0, Math.min(1, Number(total) > 0 ? Number(correct) / Number(total) : 0));
+  if (branch === 'lower' || branch === 'stage2a') return snapToeflBand(1.0 + Math.round(p * 7) * 0.5);
+  if (branch === 'upper' || branch === 'stage2b') return snapToeflBand(3.0 + Math.round(p * 6) * 0.5);
+  return snapToeflBand(1.0 + Math.round(p * 10) * 0.5);
+}
+
+function scoreToeflWordGap(userInput, expectedSuffix) {
+  const u = String(userInput || '').trim().toLowerCase();
+  const e = String(expectedSuffix || '').trim().toLowerCase();
+  return Boolean(e) && u === e;
+}
+
+function normalizeSentenceText(text) {
+  return String(text || '')
+    .trim()
+    .replace(/\s+/g, ' ')
+    .replace(/\s+([,.?!;:])/g, '$1')
+    .replace(/[.?!]+$/g, '')
+    .trim()
+    .toLowerCase();
+}
+
+function scoreToeflBuildSentence(builtTokens, item) {
+  if (!item) return false;
+  const joined = Array.isArray(builtTokens)
+    ? `${String(item.prefix || '').trim()} ${builtTokens.join(' ')}${item.suffix || ''}`
+    : String(builtTokens || '');
+  const norm = normalizeSentenceText(joined);
+  if (!norm) return false;
+  const accepted = [item.ans, ...(item.alts || [])].map(normalizeSentenceText).filter(Boolean);
+  return accepted.includes(norm);
+}
+
+function parseToeflAiEval(rawText) {
+  const txt = String(rawText || '').trim().replace(/^```(?:json)?\s*|\s*```$/gi, '').trim();
+  if (!txt) return null;
+  try {
+    const obj = JSON.parse(txt);
+    if (!obj || typeof obj !== 'object') return null;
+    const band = snapToeflBand(obj.band ?? obj.score ?? 3.0);
+    const summary = String(obj.summary || obj.feedback || '').trim().slice(0, 600);
+    const strengths = Array.isArray(obj.strengths) ? obj.strengths.map((s) => String(s).trim()).filter(Boolean).slice(0, 4) : [];
+    const improvements = Array.isArray(obj.improvements) ? obj.improvements.map((s) => String(s).trim()).filter(Boolean).slice(0, 4) : [];
+    return { band, cefr: toeflCefrBand(band), summary, strengths, improvements };
+  } catch {
+    return null;
+  }
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };

@@ -1,11 +1,13 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
 const { OXFORD_5K_PACKS } = require('../ui/oxford5k-pack.js');
 const { OXFORD_PHRASE_PACKS } = require('../ui/oxford-phrase-pack.js');
+const { TOEFL_SETS_1 } = require('../ui/toefl-sets-1.js');
+const { TOEFL_SETS_2 } = require('../ui/toefl-sets-2.js');
 const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 const { TOEIC_MOCK_P6 } = require('../ui/toeic-mock-p6.js');
 const { TOEIC_MOCK_VOL1 } = require('../ui/toeic-mock-1.js');
@@ -511,4 +513,86 @@ test('OXFORD_PACKS provides 2,983 official CEFR words with POS tags, preserves p
   const phraseQuiz = buildCardQuiz(withPhrases.cards, { count: 25, deck: 'Oxford Phrases · *' });
   assert.equal(phraseQuiz.length, 25);
   assert.ok(phraseQuiz.every((q) => String(q.tag || '').startsWith('Oxford Phrases · ') && VALID_PHRASE_POS.test(q.pos)));
+});
+
+test('TOEFL iBT (2026) scoring helpers, adaptive routing, and all 10 4-skill sets validate cleanly', () => {
+  assert.equal(toeflOverallBand(5.5, 5.0, 5.0, 5.0), 5.0); // 5.125 -> 5.0
+  assert.equal(toeflOverallBand(5.5, 5.5, 5.0, 5.0), 5.5); // 5.25 -> 5.5
+  assert.equal(toeflCefrBand(6.0), 'C2');
+  assert.equal(toeflCefrBand(5.5), 'C1');
+  assert.equal(toeflCefrBand(4.5), 'B2');
+  assert.equal(toeflCefrBand(3.0), 'B1');
+  assert.equal(toeflCefrBand(2.0), 'A2');
+  assert.equal(toeflCefrBand(1.5), 'A1');
+  assert.equal(toeflComparable120(5.5).range, '107–113');
+  assert.equal(toeflComparable120(6.0).range, '114–120');
+
+  assert.equal(toeflAdaptiveBranch(12, 18), 'stage2b');
+  assert.equal(toeflAdaptiveBranch(11, 18), 'stage2a');
+  assert.equal(toeflBandScore(10, 10, 'lower'), 4.5);
+  assert.equal(toeflBandScore(10, 10, 'upper'), 6.0);
+  assert.equal(toeflBandScore(0, 10, 'upper'), 3.0);
+
+  assert.equal(scoreToeflWordGap('orbs', 'orbs'), true);
+  assert.equal(scoreToeflWordGap(' ORBS ', 'orbs'), true);
+  assert.equal(scoreToeflWordGap('bad', 'orbs'), false);
+
+  const aiParsed = parseToeflAiEval('```json\n{"band": 5.3, "summary": "Clear", "strengths": ["Coherent"], "improvements": ["Vary verbs"]}\n```');
+  assert.deepEqual(aiParsed, { band: 5.5, cefr: 'C1', summary: 'Clear', strengths: ['Coherent'], improvements: ['Vary verbs'] });
+  assert.equal(parseToeflAiEval('not json'), null);
+
+  const allSets = [...TOEFL_SETS_1, ...TOEFL_SETS_2];
+  assert.equal(allSets.length, 10);
+  const mcqs = [0, 0, 0, 0];
+  let totalCloze = 0;
+  let totalBuild = 0;
+  let totalRepeat = 0;
+  let totalInterview = 0;
+
+  allSets.forEach((s, idx) => {
+    assert.equal(s.set, idx + 1);
+    assert.ok(s.theme && s.theme.length > 5);
+
+    for (const sk of ['stage1', 'stage2a', 'stage2b']) {
+      const rst = s.reading[sk];
+      const gaps = rst.cloze.segments.filter((x) => typeof x === 'object');
+      assert.equal(gaps.length, 10, `Set ${s.set} R.${sk} must have 10 gaps`);
+      for (const g of gaps) {
+        totalCloze++;
+        assert.ok(scoreToeflWordGap(g.ans, g.ans));
+      }
+      for (const d of rst.daily) {
+        for (const q of d.qs) { assert.equal(q.choices.length, 4); mcqs[q.ans]++; }
+      }
+      assert.equal(rst.academic.qs.length, 5);
+      for (const q of rst.academic.qs) { assert.equal(q.choices.length, 4); mcqs[q.ans]++; }
+
+      const lst = s.listening[sk];
+      for (const r of lst.responses) { assert.ok(r.prompt && r.choices.length === 4); mcqs[r.ans]++; }
+      for (const ln of lst.conversation.lines) { assert.ok(ln.role && ln.text && (ln.sex === 'm' || ln.sex === 'f')); }
+      for (const q of lst.conversation.qs) { assert.equal(q.choices.length, 4); mcqs[q.ans]++; }
+      for (const q of lst.announcement.qs) { assert.equal(q.choices.length, 4); mcqs[q.ans]++; }
+      for (const q of lst.talk.qs) { assert.equal(q.choices.length, 4); mcqs[q.ans]++; }
+    }
+
+    assert.equal(s.writing.build.length, 10);
+    for (const b of s.writing.build) {
+      totalBuild++;
+      assert.ok(Array.isArray(b.chunks) && b.chunks.length >= 5);
+      assert.equal(scoreToeflBuildSentence(b.ans, b), true, `Invalid build item in Set ${s.set}: ${b.ans}`);
+    }
+    assert.ok(s.writing.email.bullets.length === 3 && s.writing.email.model.length > 80);
+    assert.ok(s.writing.discussion.posts.length === 2 && s.writing.discussion.model.length > 80);
+
+    assert.equal(s.speaking.repeat.length, 5);
+    totalRepeat += s.speaking.repeat.length;
+    assert.equal(s.speaking.interview.questions.length, 4);
+    totalInterview += s.speaking.interview.questions.length;
+  });
+
+  assert.equal(totalCloze, 300);
+  assert.equal(totalBuild, 100);
+  assert.equal(totalRepeat, 50);
+  assert.equal(totalInterview, 40);
+  assert.deepEqual(mcqs, [158, 157, 157, 158]);
 });
