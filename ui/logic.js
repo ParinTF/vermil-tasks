@@ -1438,7 +1438,8 @@ function shuffleWith(list, rng = Math.random) {
 
 function buildCardQuiz(cards = [], { count = 10, deck = '', rng = Math.random } = {}) {
   const all = (cards || []).filter((c) => c && c.front && c.back);
-  const deckOk = (d) => (!deck ? true : deck.endsWith('*') ? String(d || '').startsWith(deck.slice(0, -1)) : d === deck);
+  const deckParts = deck ? String(deck).split('|').filter(Boolean) : [];
+  const deckOk = (d) => (!deckParts.length ? true : deckParts.some((f) => (f.endsWith('*') ? String(d || '').startsWith(f.slice(0, -1)) : d === f)));
   const scoped = all.filter((c) => deckOk(c.deck));
   if (all.length < 4 || !scoped.length) return [];
   const chosen = shuffleWith(scoped, rng).slice(0, Math.min(count > 0 ? count : scoped.length, scoped.length));

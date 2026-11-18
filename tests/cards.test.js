@@ -5,6 +5,7 @@ const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
 const { OXFORD_5K_PACKS } = require('../ui/oxford5k-pack.js');
+const { OXFORD_PHRASE_PACKS } = require('../ui/oxford-phrase-pack.js');
 const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 const { TOEIC_MOCK_P6 } = require('../ui/toeic-mock-p6.js');
 const { TOEIC_MOCK_VOL1 } = require('../ui/toeic-mock-1.js');
@@ -474,4 +475,40 @@ test('OXFORD_PACKS provides 2,983 official CEFR words with POS tags, preserves p
   const full5kQuiz = buildCardQuiz(withAdv.cards, { count: 25, deck: 'Oxford*' });
   assert.equal(full5kQuiz.length, 25);
   assert.ok(full5kQuiz.every((q) => String(q.tag || '').startsWith('Oxford')));
+
+  // Oxford Phrase List (750 idioms & phrases across A1-C1) combines cleanly to 5,731 cards
+  assert.equal(OXFORD_PHRASE_PACKS.length, 10);
+  const VALID_PHRASE_POS = /^(phr\.|phr\. v\.|idiom)$/;
+  const phraseLevels = { A1: 0, A2: 0, B1: 0, B2: 0, C1: 0 };
+  const phraseItems = [];
+  for (const pack of OXFORD_PHRASE_PACKS) {
+    assert.ok(pack.deck.startsWith('Oxford Phrases · '), `Invalid phrase deck: ${pack.deck}`);
+    const lm = pack.deck.match(/^Oxford Phrases · (A1|A2|B1|B2|C1) · /);
+    assert.ok(lm, `Missing CEFR level in phrase deck: ${pack.deck}`);
+    for (const [phrase, back, example, pos] of pack.cards) {
+      assert.ok(phrase && phrase.trim().length > 0, `Empty phrase in ${pack.id}`);
+      assert.ok(VALID_PHRASE_POS.test(pos), `Invalid phrase tag "${pos}" for "${phrase}"`);
+      assert.ok(/[\u0E00-\u0E7F]/.test(back) && !/[\/()]/.test(back), `Invalid phrase back "${back}" for "${phrase}"`);
+      assert.ok(example && example.trim().length >= 8 && !/[\u0E00-\u0E7F]/.test(example), `Invalid phrase example "${example}" for "${phrase}"`);
+      phraseLevels[lm[1]]++;
+      phraseItems.push({ deck: pack.deck, front: phrase, back, example, pos });
+    }
+  }
+  assert.equal(phraseItems.length, 750);
+  assert.deepEqual(phraseLevels, { A1: 199, A2: 176, B1: 175, B2: 125, C1: 75 });
+
+  const withPhrases = importCardPack(withAdv.cards, phraseItems, '2026-11-18', () => `oxp-${++seq}`);
+  assert.equal(withPhrases.added, 750);
+  assert.equal(withPhrases.cards.length, 5731);
+
+  assert.ok(withPhrases.cards.find((c) => c.front === 'because of' && c.pos === 'prep.'));
+  assert.ok(withPhrases.cards.find((c) => c.front === 'because of' && c.pos === 'phr.'));
+
+  const wordsOnlyQuiz = buildCardQuiz(withPhrases.cards, { count: 40, deck: 'Oxford · *|Oxford 5000 · *' });
+  assert.equal(wordsOnlyQuiz.length, 40);
+  assert.ok(wordsOnlyQuiz.every((q) => !String(q.tag || '').startsWith('Oxford Phrases · ')));
+
+  const phraseQuiz = buildCardQuiz(withPhrases.cards, { count: 25, deck: 'Oxford Phrases · *' });
+  assert.equal(phraseQuiz.length, 25);
+  assert.ok(phraseQuiz.every((q) => String(q.tag || '').startsWith('Oxford Phrases · ') && VALID_PHRASE_POS.test(q.pos)));
 });
