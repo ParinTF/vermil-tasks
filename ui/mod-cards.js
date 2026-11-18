@@ -1,5 +1,5 @@
-// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + 1,000 TOEIC chunks + Part 5 quizzes
-// + 30 Full TOEIC Listening & Reading Mock Exams (Q1-100 Listening / Q101-200 Reading / Full 200-Q 10-990 scoring).
+// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + Oxford 3000 (POS) + 1,000 Everyday + 1,000 TOEIC chunks
+// + Part 5 quizzes + 30 Full TOEIC Listening & Reading Mock Exams (Q1-100 Listening / Q101-200 Reading / Full 200-Q 10-990 scoring).
 // Data: { cards, newLimit, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, mockProgress }.
 (() => {
   let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {} };
@@ -62,15 +62,17 @@
         el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
         el('div', { id: 'fc-decks', className: 'tag-bar', hidden: true }),
         el('div', { id: 'fc-packs', className: 'fc-packs-wrap', hidden: true }),
-        el('input', { id: 'fc-search', type: 'search', placeholder: 'Search chunks, meanings or examples…', ariaLabel: 'Search flashcards', hidden: true, oninput: paint }),
+        el('input', { id: 'fc-search', type: 'search', placeholder: 'Search words, chunks, POS, meanings or examples…', ariaLabel: 'Search flashcards', hidden: true, oninput: paint }),
         el('div', { id: 'fc-stage' })),
       el('aside', { className: 'fc-side', ariaLabel: 'Add a flashcard' },
         el('form', { id: 'fc-form', onsubmit: add },
-          el('label', { className: 'fc-field' }, 'Deck', el('input', { id: 'fc-deck', maxLength: 40, autocomplete: 'off', placeholder: 'TOEIC, Leetcode, AI' })),
-          el('label', { className: 'fc-field' }, 'Front (meaning, or a sentence with a ___ gap)', el('textarea', { id: 'fc-front', rows: 3, maxLength: 300, placeholder: 'All staff must ___ the new safety rules.' })),
-          el('label', { className: 'fc-field' }, 'Back (the chunk or answer)', el('textarea', { id: 'fc-back', rows: 2, maxLength: 500, placeholder: 'comply with (the rules)' })),
-          el('label', { className: 'fc-field' }, 'Example sentence (optional)', el('textarea', { id: 'fc-example', rows: 2, maxLength: 300, placeholder: 'Our suppliers comply with every safety regulation.' })),
-          el('p', { className: 'fc-tip' }, 'Tip: for English, learn chunks (collocations and phrases) in a sentence, not lone words.'),
+          el('div', { className: 'fc-form-row' },
+            el('label', { className: 'fc-field' }, 'Deck', el('input', { id: 'fc-deck', maxLength: 40, autocomplete: 'off', placeholder: 'Oxford, TOEIC, AI' })),
+            el('label', { className: 'fc-field' }, 'POS (optional)', el('input', { id: 'fc-pos', maxLength: 24, autocomplete: 'off', placeholder: 'n., v., adj.' }))),
+          el('label', { className: 'fc-field' }, 'Front (word, meaning, or a ___ gap sentence)', el('textarea', { id: 'fc-front', rows: 3, maxLength: 300, placeholder: 'abandon  OR  All staff must ___ the rules.' })),
+          el('label', { className: 'fc-field' }, 'Back (meaning or answer)', el('textarea', { id: 'fc-back', rows: 2, maxLength: 500, placeholder: 'ละทิ้ง, ทอดทิ้ง  OR  comply with' })),
+          el('label', { className: 'fc-field' }, 'Example sentence (optional)', el('textarea', { id: 'fc-example', rows: 2, maxLength: 300, placeholder: 'They had to abandon the car in heavy rain.' })),
+          el('p', { className: 'fc-tip' }, 'Tip: add n., v., adj. for single words so you practice both meaning and word class.'),
           el('button', { className: 'primary', type: 'submit' }, el('span', {}, 'Add card'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
           el('div', { id: 'fc-msg', className: 'fc-msg', role: 'status' }))));
     mobileSheet(root(), root().querySelector('.fc-side'), 'New card');
@@ -79,12 +81,14 @@
   function add(e) {
     e.preventDefault();
     const deck = $('fc-deck').value.trim() || 'General';
+    const pos = ($('fc-pos')?.value || '').trim();
     const front = $('fc-front').value.trim();
     const back = $('fc-back').value.trim();
     const example = $('fc-example').value.trim();
     if (!front || !back) { $('fc-msg').textContent = 'Fill in both the front and the back of the card.'; return; }
-    data.cards.push({ id: crypto.randomUUID(), deck, front, back, ...(example ? { example } : {}), box: 1, next: today(), lastReviewed: null, reviews: 0 });
+    data.cards.push({ id: crypto.randomUUID(), deck, front, back, ...(pos ? { pos } : {}), ...(example ? { example } : {}), box: 1, next: today(), lastReviewed: null, reviews: 0 });
     save();
+    if ($('fc-pos')) $('fc-pos').value = '';
     $('fc-front').value = '';
     $('fc-back').value = '';
     $('fc-example').value = '';
@@ -127,23 +131,35 @@
     paint();
   }
 
+  const oxfordPacks = () => (typeof OXFORD_PACKS !== 'undefined' ? OXFORD_PACKS : []);
   const toeicPacks = () => (typeof TOEIC_PACKS !== 'undefined' ? TOEIC_PACKS : []);
   const dailyPacks = () => (typeof DAILY_PACKS !== 'undefined' ? DAILY_PACKS : []);
-  const existingKeys = () => new Set(data.cards.map((c) => `${c.front.trim().toLowerCase()}\n${c.back.trim().toLowerCase()}`));
+  const cardKey = (front, pos) => {
+    const f = String(front || '').trim().toLowerCase();
+    const p = String(pos || '').trim().toLowerCase();
+    return f ? (p ? `${f}\u0000${p}` : f) : '';
+  };
+  const existingKeys = () => new Set(data.cards.map((c) => cardKey(c.front, c.pos)).filter(Boolean));
 
   function packRemaining(pack) {
     const have = existingKeys();
-    return pack.cards.filter(([front, back]) => !have.has(`${front.trim().toLowerCase()}\n${back.trim().toLowerCase()}`)).length;
+    return pack.cards.filter(([front, , , pos]) => !have.has(cardKey(front, pos))).length;
   }
 
   function packToItems(pack) {
     const deck = pack.deck || pack.label;
-    return (pack.cards || []).map(([front, back, example]) => ({ deck, front, back, example }));
+    return (pack.cards || []).map(([front, back, example, pos]) => ({
+      deck,
+      front,
+      back,
+      example,
+      ...(pos ? { pos } : {}),
+    }));
   }
 
   function loadPack(pack, groupLabel = 'chunks') {
     const res = importCardPack(data.cards, packToItems(pack), today());
-    if (!res.added) { $('fc-msg').textContent = `All chunks from "${pack.label}" are already in your deck.`; return; }
+    if (!res.added) { $('fc-msg').textContent = `All ${groupLabel} from "${pack.label}" are already in your deck.`; return; }
     data.cards = res.cards;
     save();
     $('fc-msg').textContent = `Added ${res.added} ${groupLabel} (${pack.label}).`;
@@ -1518,6 +1534,10 @@
     paint();
   }
 
+  const renderWordLine = (text, pos) => (pos
+    ? el('span', { className: 'fc-word-line' }, el('span', {}, text), el('span', { className: 'fc-pos' }, pos))
+    : text);
+
   function paintQuiz(stage) {
     if (quizSource === 'mock') { paintMock(stage); return; }
     const curated = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
@@ -1570,7 +1590,7 @@
     if (!quizState || !quizState.questions.length) {
       stage.replaceChildren(toolbar, el('div', { className: 'fc-done-box' },
         el('h3', {}, quizSource === 'cards' ? 'Need at least 4 cards in your decks' : 'No questions found'),
-        el('p', {}, quizSource === 'cards' ? 'Load one of the TOEIC Chunk Packs above or add 4 cards to test yourself.' : 'Switch topics or select a test set above to begin.')));
+        el('p', {}, quizSource === 'cards' ? 'Load Oxford 3000, Everyday, or TOEIC packs above or add 4 cards to test yourself.' : 'Switch topics or select a test set above to begin.')));
       finishMount();
       return;
     }
@@ -1603,7 +1623,7 @@
           ...(sc.missed.length
             ? [el('ul', { className: 'fc-qz-review' }, ...sc.missed.map(({ question: q, pick }) => el('li', { className: 'fc-qz-rev-item' },
                 el('div', { className: 'fc-qz-rev-meta' }, el('span', { className: 'task-tag' }, q.tag)),
-                el('p', { className: 'fc-qz-rev-q' }, q.q),
+                el('p', { className: 'fc-qz-rev-q' }, q.pos ? renderWordLine(q.stem || q.q, q.pos) : q.q),
                 el('p', { className: 'fc-qz-rev-pick' }, `Your answer: (${LETTERS[pick]}) ${q.choices[pick]}  →  Correct: (${LETTERS[q.ans]}) ${q.choices[q.ans]}`),
                 el('p', { className: 'fc-qz-why' }, q.why))))]
             : [el('p', { className: 'fc-qz-perfect' }, 'Perfect score — every question answered correctly!')])));
@@ -1624,7 +1644,7 @@
       el('div', { className: 'fc-card-meta' },
         el('span', {}, `${q.set && quizSource === 'sets' ? `Set ${q.set} · ` : ''}${q.tag} · Q${index + 1}/${questions.length}`),
         el('span', {}, `Score: ${sc.correct}/${sc.answered}`)),
-      el('div', { className: 'fc-qz-q' }, q.q),
+      el('div', { className: 'fc-qz-q' }, q.pos ? renderWordLine(q.stem || q.q, q.pos) : q.q),
       el('div', { className: 'fc-qz-choices' }, ...q.choices.map((ch, ci) => {
         let cls = 'fc-qz-opt';
         if (answered) {
@@ -1651,9 +1671,9 @@
     finishMount();
   }
 
-  const packOpen = { daily: true, toeic: false };
+  const packOpen = { oxford: true, daily: false, toeic: false };
 
-  function buildPackSection(key, title, unitLabel, list) {
+  function buildPackSection(key, title, unitLabel, groupName, list) {
     if (!list.length) return null;
     const total = list.reduce((n, p) => n + p.cards.length, 0);
     const leftAll = list.reduce((n, p) => n + packRemaining(p), 0);
@@ -1669,7 +1689,7 @@
     }));
     const sec = el('details', { className: 'fc-packs' },
       el('summary', {},
-        el('span', {}, `${title} · ${total} chunks (${list.length} topics)`),
+        el('span', {}, `${title} · ${total} ${unitLabel} (${list.length} ${groupName})`),
         el('small', {}, leftAll ? `${leftAll} available` : 'All installed')),
       el('div', { className: 'fc-pack-body' }, allBtn, grid));
     sec.open = Boolean(packOpen[key]);
@@ -1679,13 +1699,15 @@
 
   function paintPacks() {
     const box = $('fc-packs');
+    const oxList = oxfordPacks();
     const dailyList = dailyPacks();
     const toeicList = toeicPacks();
-    if (!box || (!dailyList.length && !toeicList.length)) return;
+    if (!box || (!oxList.length && !dailyList.length && !toeicList.length)) return;
     box.hidden = false;
     const sections = [
-      buildPackSection('daily', 'Everyday Conversation Library', 'everyday chunks', dailyList),
-      buildPackSection('toeic', 'TOEIC Business Library', 'TOEIC chunks', toeicList),
+      buildPackSection('oxford', 'Oxford 3000 Word Library (A1–B2 · n./v./adj.)', 'Oxford words', 'sets', oxList),
+      buildPackSection('daily', 'Everyday Conversation Library', 'everyday chunks', 'topics', dailyList),
+      buildPackSection('toeic', 'TOEIC Business Library', 'TOEIC chunks', 'topics', toeicList),
     ].filter(Boolean);
     box.replaceChildren(...sections);
   }
@@ -1721,26 +1743,42 @@
     }
     if ($('fc-search')) $('fc-search').hidden = mode !== 'browse';
 
-    if (activeDeck && !activeDeck.endsWith('*') && !s.decks.includes(activeDeck)) activeDeck = '';
-    if (activeDeck === 'Daily · *' && !s.decks.some((d) => d.startsWith('Daily · '))) activeDeck = '';
-    if (activeDeck === 'TOEIC · *' && !s.decks.some((d) => d.startsWith('TOEIC · '))) activeDeck = '';
+    const activeExists = !activeDeck || (activeDeck.endsWith('*')
+      ? s.decks.some((d) => d.startsWith(activeDeck.slice(0, -1)))
+      : s.decks.includes(activeDeck));
+    if (!activeExists) activeDeck = '';
     const deckBar = $('fc-decks');
     deckBar.hidden = !s.decks.length || (mode === 'quiz' && quizSource !== 'cards');
     if (s.decks.length) {
-      const hasDaily = s.decks.some((d) => d.startsWith('Daily · '));
-      const hasToeic = s.decks.some((d) => d.startsWith('TOEIC · '));
+      const groupDefs = [
+        ['Oxford · ', 'Oxford · *', 'Oxford (All)'],
+        ['Daily · ', 'Daily · *', 'Everyday (All)'],
+        ['TOEIC · ', 'TOEIC · *', 'TOEIC (All)'],
+      ];
+      const activeGroups = groupDefs.filter(([prefix]) => s.decks.some((d) => d.startsWith(prefix)));
+      const hasOxford = activeGroups.some(([, pat]) => pat === 'Oxford · *');
+      const cefrPills = hasOxford
+        ? ['A1', 'A2', 'B1', 'B2']
+            .map((lvl) => [`Oxford · ${lvl}*`, `Oxford ${lvl}`])
+            .filter(([pat]) => s.decks.some((d) => d.startsWith(pat.slice(0, -1))))
+        : [];
       const pickDeck = (val) => { activeDeck = val; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); };
-      const shownDecks = s.decks.filter((d) => {
-        if (activeDeck === 'Daily · *' || activeDeck.startsWith('Daily · ')) return !hasToeic || d.startsWith('Daily · ');
-        if (activeDeck === 'TOEIC · *' || activeDeck.startsWith('TOEIC · ')) return !hasDaily || d.startsWith('TOEIC · ');
-        return true;
-      });
+      const subPrefix = /^Oxford · (A1|A2|B1|B2)/.test(activeDeck)
+        ? activeDeck.slice(0, 11)
+        : groupDefs.find(([prefix]) => activeDeck.startsWith(prefix))?.[0] || '';
+      const isLibDeck = (d) => groupDefs.some(([prefix]) => d.startsWith(prefix));
+      const shownDecks = s.decks.filter((d) => (subPrefix ? d.startsWith(subPrefix) : (s.decks.length <= 24 || !isLibDeck(d))));
+      const quickPills = [
+        ...(activeGroups.length > 1 || cefrPills.length ? activeGroups.map(([, pat, lbl]) => [pat, lbl]) : []),
+        ...cefrPills,
+      ];
       deckBar.replaceChildren(
         el('button', { type: 'button', className: 'tag-pill' + (!activeDeck ? ' active' : ''), onclick: () => pickDeck('') }, 'All decks'),
-        ...(hasDaily && hasToeic ? [
-          el('button', { type: 'button', className: 'tag-pill' + (activeDeck === 'Daily · *' ? ' active' : ''), onclick: () => pickDeck(activeDeck === 'Daily · *' ? '' : 'Daily · *') }, 'Everyday (All)'),
-          el('button', { type: 'button', className: 'tag-pill' + (activeDeck === 'TOEIC · *' ? ' active' : ''), onclick: () => pickDeck(activeDeck === 'TOEIC · *' ? '' : 'TOEIC · *') }, 'TOEIC (All)'),
-        ] : []),
+        ...quickPills.map(([pat, lbl]) => el('button', {
+          type: 'button',
+          className: 'tag-pill' + (activeDeck === pat ? ' active' : ''),
+          onclick: () => pickDeck(activeDeck === pat ? '' : pat),
+        }, lbl)),
         ...shownDecks.map((d) => el('button', { type: 'button', className: 'tag-pill' + (activeDeck === d ? ' active' : ''), onclick: () => pickDeck(activeDeck === d ? '' : d) }, d)));
     }
     if (mode !== 'quiz') paintPacks();
@@ -1759,7 +1797,7 @@
             el('h3', {}, data.cards.length ? 'All caught up for today' : 'No flashcards yet'),
             el('p', {}, data.cards.length
               ? (waiting ? `You finished today’s pacing target! ${qs.newDue} unseen cards are queued for upcoming days.` : 'You have reviewed every card due today. Come back tomorrow or add new cards.')
-              : 'Load the 1,000 Everyday or 1,000 TOEIC chunks above, or add your own flashcard on the right.'),
+              : 'Load the Oxford 3000 words, Everyday, or TOEIC libraries above, or add your own flashcard on the right.'),
             ...(waiting ? [el('button', {
               type: 'button', className: 'primary fc-more-btn',
               onclick: () => { data.extraDay = t; data.extraToday = (data.extraDay === t ? data.extraToday || 0 : 0) + 20; paint(); },
@@ -1775,7 +1813,7 @@
         el('div', { className: 'fc-card-meta' },
           el('span', {}, cur.deck || 'General'),
           el('span', {}, `${recall} · ${due.length} left today`)),
-        el('div', { className: 'fc-card-front' }, cur.front),
+        el('div', { className: 'fc-card-front' }, renderWordLine(cur.front, cur.pos)),
         ...(revealed
           ? [
               el('div', { className: 'fc-card-back' }, cur.back),
@@ -1791,7 +1829,7 @@
       stage.replaceChildren(cardBox);
     } else {
       const needle = ($('fc-search')?.value || '').trim().toLowerCase();
-      const list = data.cards.filter((c) => matchesDeck(c, activeDeck) && (!needle || `${c.front}\n${c.back}\n${c.example || ''}\n${c.deck || ''}`.toLowerCase().includes(needle)));
+      const list = data.cards.filter((c) => matchesDeck(c, activeDeck) && (!needle || `${c.front}\n${c.pos || ''}\n${c.back}\n${c.example || ''}\n${c.deck || ''}`.toLowerCase().includes(needle)));
       stage.replaceChildren(
         list.length
           ? el('ul', { className: 'fc-list' }, ...list.slice(0, 200).map((c) => {
@@ -1799,7 +1837,7 @@
               const stab = fsrsStability(c);
               return el('li', { className: 'fc-row' },
                 el('div', { className: 'fc-row-main' },
-                  el('b', {}, c.front),
+                  el('b', {}, renderWordLine(c.front, c.pos)),
                   el('span', {}, c.back + (c.example ? ` · "${c.example}"` : ''))),
                 el('div', { className: 'fc-row-meta' },
                   el('span', { className: 'task-tag' }, c.deck || 'General'),
@@ -1817,12 +1855,14 @@
     { label: 'TOEIC: Part 5 Practice Sets (20 × 50 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
     { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
     { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
-    { label: `TOEIC: Load all ${packs().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(); } },
-    ...packs().map((p) => ({
+    { label: `Oxford 3000: Load all ${oxfordPacks().reduce((n, p) => n + p.cards.length, 0)} words`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(oxfordPacks(), 'Oxford words'); } },
+    { label: `Everyday: Load all ${dailyPacks().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(dailyPacks(), 'everyday chunks'); } },
+    { label: `TOEIC: Load all ${toeicPacks().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(toeicPacks(), 'TOEIC chunks'); } },
+    ...toeicPacks().map((p) => ({
       label: `TOEIC: Add ${p.label} (${p.cards.length} chunks)`,
       hint: 'Flashcards',
       kind: 'Command',
-      run: async () => { await setView('cards'); loadPack(p); },
+      run: async () => { await setView('cards'); loadPack(p, 'TOEIC chunks'); },
     })),
   ];
 
@@ -1839,6 +1879,9 @@
       return { title: 'Flashcards', lines: [`${rev} card${rev === 1 ? '' : 's'} reviewed`] };
     },
     async start() {
+      if (typeof OXFORD_PACKS === 'undefined' && !$('script-oxford-pack')) {
+        await loadFile('script', { src: 'oxford-pack.js', id: 'script-oxford-pack' }).catch(() => {});
+      }
       if (typeof DAILY_PACKS === 'undefined' && !$('script-daily-pack')) {
         await loadFile('script', { src: 'daily-pack.js', id: 'script-daily-pack' }).catch(() => {});
       }

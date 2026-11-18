@@ -1377,7 +1377,12 @@ function studyQueue(cards = [], today, { newLimit = 20, newDoneToday = 0 } = {})
 }
 
 function importCardPack(existingCards = [], items = [], today, nextId) {
-  const seen = new Set((existingCards || []).map((c) => String(c?.front || '').trim().toLowerCase()).filter(Boolean));
+  const cardKey = (front, pos) => {
+    const f = String(front || '').trim().toLowerCase();
+    const p = String(pos || '').trim().toLowerCase();
+    return f ? (p ? `${f}\u0000${p}` : f) : '';
+  };
+  const seen = new Set((existingCards || []).map((c) => cardKey(c?.front, c?.pos)).filter(Boolean));
   const added = [];
   const makeId = nextId || ((i) => (globalThis.crypto?.randomUUID ? globalThis.crypto.randomUUID() : `fc-${Date.now()}-${i}`));
   for (const raw of items || []) {
@@ -1385,9 +1390,10 @@ function importCardPack(existingCards = [], items = [], today, nextId) {
     const deck = String(raw.deck || 'General').trim() || 'General';
     const front = String(raw.front || '').trim();
     const back = String(raw.back || '').trim();
+    const pos = String(raw.pos || '').trim();
     const example = String(raw.example || '').trim();
     if (!front || !back) continue;
-    const key = front.toLowerCase();
+    const key = cardKey(front, pos);
     if (seen.has(key)) continue;
     seen.add(key);
     added.push({
@@ -1395,6 +1401,7 @@ function importCardPack(existingCards = [], items = [], today, nextId) {
       deck,
       front,
       back,
+      ...(pos ? { pos } : {}),
       ...(example ? { example } : {}),
       box: 1,
       next: today,
@@ -1440,10 +1447,11 @@ function buildCardQuiz(cards = [], { count = 10, deck = '', rng = Math.random } 
     const answerLabel = cleanChoiceLabel(target.back);
     if (!answerLabel) continue;
     const sameDeck = shuffleWith(all.filter((c) => c !== target && c.deck === target.deck), rng);
-    const otherDecks = shuffleWith(all.filter((c) => c !== target && c.deck !== target.deck), rng);
+    const sameKind = shuffleWith(all.filter((c) => c !== target && c.deck !== target.deck && Boolean(c.pos) === Boolean(target.pos)), rng);
+    const otherDecks = shuffleWith(all.filter((c) => c !== target && c.deck !== target.deck && Boolean(c.pos) !== Boolean(target.pos)), rng);
     const seenLabels = new Set([answerLabel.toLowerCase()]);
     const distractors = [];
-    for (const cand of [...sameDeck, ...otherDecks]) {
+    for (const cand of [...sameDeck, ...sameKind, ...otherDecks]) {
       const lbl = cleanChoiceLabel(cand.back);
       const low = lbl.toLowerCase();
       if (!lbl || seenLabels.has(low)) continue;
@@ -1454,13 +1462,14 @@ function buildCardQuiz(cards = [], { count = 10, deck = '', rng = Math.random } 
     }
     if (distractors.length < 3) continue;
     const { stem, cue } = stripGapCue(target.front);
+    const pos = String(target.pos || '').trim();
     const opts = shuffleWith([
       { label: answerLabel, correct: true },
       ...distractors.map((d) => ({ label: d.label, correct: false })),
     ], rng);
     const ans = opts.findIndex((o) => o.correct);
     const parts = [];
-    parts.push(`คำตอบ: "${target.back}"${cue ? ` — ${cue}` : ''}`);
+    parts.push(`คำตอบ: "${target.back}"${pos ? ` (${pos})` : ''}${cue ? ` — ${cue}` : ''}`);
     if (target.example) parts.push(`ตัวอย่าง: ${target.example}`);
     const otherNotes = distractors.map((d) => (d.cue ? `${d.label} (${d.cue})` : d.label)).join(' · ');
     if (otherNotes) parts.push(`ตัวเลือกอื่น: ${otherNotes}`);
@@ -1468,7 +1477,8 @@ function buildCardQuiz(cards = [], { count = 10, deck = '', rng = Math.random } 
       id: target.id || stem,
       cardId: target.id || null,
       tag: target.deck || 'Flashcards',
-      q: stem,
+      q: pos ? `${stem} (${pos})` : stem,
+      ...(pos ? { stem, pos } : {}),
       choices: opts.map((o) => o.label),
       ans,
       why: parts.join('\n'),

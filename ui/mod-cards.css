@@ -19,6 +19,8 @@
 .fc-card { display: grid; gap: 18px; padding: 24px; border: 2px solid var(--ink); border-radius: 16px; background: color-mix(in srgb, var(--ink) 2.5%, transparent); cursor: pointer; }
 .fc-card-meta { display: flex; align-items: center; justify-content: space-between; font-size: 11.5px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
 .fc-card-front { font-size: clamp(20px, 2.4vw, 28px); font-weight: 700; line-height: 1.35; overflow-wrap: anywhere; }
+.fc-word-line { display: inline-flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.fc-pos { display: inline-flex; align-items: center; padding: 2px 8px; border: 1px solid color-mix(in srgb, var(--accent) 40%, var(--line)); border-radius: 6px; font-size: 12px; font-weight: 700; letter-spacing: .02em; text-transform: none; color: var(--accent-text); background: color-mix(in srgb, var(--accent) 8%, transparent); line-height: 1.35; }
 .fc-card-back { padding-top: 16px; border-top: 1px solid var(--line); font-size: 17px; font-weight: 600; line-height: 1.5; color: var(--ink); overflow-wrap: anywhere; }
 .fc-card-example { margin: -8px 0 0; font-size: 14px; font-style: italic; line-height: 1.5; color: var(--mute); overflow-wrap: anywhere; }
 .fc-card-acts { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 4px; }
@@ -105,12 +107,16 @@
 .fc-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px 16px; padding: 12px 0; border-bottom: 1px solid var(--line); }
 .fc-row-main { display: grid; gap: 3px; min-width: 180px; flex: 1; }
 .fc-row-main b { font-size: 15px; font-weight: 600; overflow-wrap: anywhere; }
+.fc-row-main .fc-pos { padding: 1px 6px; font-size: 11px; }
 .fc-row-main span { font-size: 13.5px; color: var(--mute); overflow-wrap: anywhere; }
+.fc-row-main .fc-word-line { gap: 4px 8px; }
+.fc-row-main .fc-word-line > span:first-child { font-size: inherit; color: inherit; }
 .fc-row-meta { display: inline-flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--mute); }
 .fc-del { padding: 0 4px; border: 0; background: none; font-size: 12px; color: var(--mute); cursor: pointer; }
 .fc-del:hover { color: var(--accent-text); }
 
 .fc-side form { display: grid; gap: 14px; }
+.fc-form-row { display: grid; grid-template-columns: 1.25fr .75fr; gap: 12px; }
 .fc-field { display: grid; gap: 4px; font-size: 11px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--mute); }
 .fc-field input, .fc-field textarea { min-width: 0; padding: 8px 0; border: 0; border-bottom: 1px solid color-mix(in srgb, var(--ink) 33%, transparent); border-radius: 0; background: none; font: inherit; font-size: 15px; letter-spacing: 0; text-transform: none; color: var(--ink); resize: vertical; }
 .fc-field input:focus, .fc-field textarea:focus { outline: 0; border-color: var(--accent); box-shadow: 0 1px 0 var(--accent); }

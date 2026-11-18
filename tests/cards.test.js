@@ -3,6 +3,7 @@ const assert = require('node:assert');
 const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
+const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
 const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 const { TOEIC_MOCK_P6 } = require('../ui/toeic-mock-p6.js');
 const { TOEIC_MOCK_VOL1 } = require('../ui/toeic-mock-1.js');
@@ -389,4 +390,50 @@ test('DAILY_PACKS provides 1,000 unique everyday chunks separated cleanly from T
   const toeicQuiz = buildCardQuiz(imported.cards, { count: 20, deck: 'TOEIC · *' });
   assert.equal(toeicQuiz.length, 20);
   assert.ok(toeicQuiz.every((q) => String(q.tag || '').startsWith('TOEIC · ')));
+});
+
+test('OXFORD_PACKS provides 2,983 official CEFR words with POS tags, preserves pos on import, and scopes quizzes cleanly', () => {
+  assert.equal(OXFORD_PACKS.length, 30);
+  const VALID_POS = /^(n\.|v\.|adj\.|adv\.|prep\.|conj\.|pron\.|det\.|art\.|excl\.|num\.|ord\.|modal v\.|aux\. v\.|link\. v\.|inf\. marker)(,\s*(n\.|v\.|adj\.|adv\.|prep\.|conj\.|pron\.|det\.|art\.|excl\.|num\.|ord\.|modal v\.|aux\. v\.|link\. v\.|inf\. marker))*$/;
+  const seenKeys = new Set();
+  const levelCounts = { A1: 0, A2: 0, B1: 0, B2: 0 };
+  const oxItems = [];
+
+  for (const pack of OXFORD_PACKS) {
+    assert.ok(pack.deck.startsWith('Oxford · '), `Oxford pack deck must start with "Oxford · ": ${pack.deck}`);
+    const lvlMatch = pack.deck.match(/^Oxford · (A1|A2|B1|B2) · /);
+    assert.ok(lvlMatch, `Missing CEFR level in deck: ${pack.deck}`);
+    assert.ok(Array.isArray(pack.cards) && pack.cards.length >= 90, `Unexpected size in ${pack.id}`);
+    for (const [word, back, example, pos] of pack.cards) {
+      assert.ok(word && word.trim().length > 0, `Empty word in ${pack.id}`);
+      assert.ok(VALID_POS.test(pos), `Invalid POS "${pos}" for "${word}"`);
+      assert.ok(/[\u0E00-\u0E7F]/.test(back) && !/[\/()]/.test(back), `Invalid back "${back}" for "${word}"`);
+      assert.ok(example && example.trim().length >= 8 && !/[\u0E00-\u0E7F]/.test(example), `Invalid example "${example}" for "${word}"`);
+      const k = `${word.trim().toLowerCase()}\0${pos.trim().toLowerCase()}`;
+      assert.ok(!seenKeys.has(k), `Duplicate Oxford word+POS: ${word} (${pos})`);
+      seenKeys.add(k);
+      levelCounts[lvlMatch[1]]++;
+      oxItems.push({ deck: pack.deck, front: word, back, example, pos });
+    }
+  }
+  assert.equal(oxItems.length, 2983);
+  assert.deepEqual(levelCounts, { A1: 900, A2: 794, B1: 691, B2: 598 });
+
+  let seq = 0;
+  const imported = importCardPack([], oxItems, '2026-11-18', () => `ox-${++seq}`);
+  assert.equal(imported.added, 2983);
+  assert.equal(imported.cards.length, 2983);
+
+  const itLower = imported.cards.find((c) => c.front === 'it');
+  const itTech = imported.cards.find((c) => c.front === 'IT');
+  assert.equal(itLower?.pos, 'pron.');
+  assert.equal(itTech?.pos, 'n.');
+
+  const reimported = importCardPack(imported.cards, oxItems, '2026-11-18', () => `ox-${++seq}`);
+  assert.equal(reimported.added, 0);
+
+  const a1Quiz = buildCardQuiz(imported.cards, { count: 25, deck: 'Oxford · A1*' });
+  assert.equal(a1Quiz.length, 25);
+  assert.ok(a1Quiz.every((q) => String(q.tag || '').startsWith('Oxford · A1') && q.pos && q.q.endsWith(`(${q.pos})`)));
+  assert.ok(a1Quiz.every((q) => q.choices.every((c) => /[\u0E00-\u0E7F]/.test(c))));
 });
