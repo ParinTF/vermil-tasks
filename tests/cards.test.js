@@ -119,6 +119,36 @@ test('Chinese and Japanese starter packs are complete and import into their own 
   assert.equal(studyLanguageCards(cards, 'en').length, 0);
 });
 
+test('new HSK imports all 11,000 syllabus entries including same-spelling entries', () => {
+  const { HSK_2025 } = require('../ui/hsk-2025.js');
+  const { HSK_BANDS, hskStudyItems } = require('../ui/logic.js');
+  const counts = [300, 200, 500, 1000, 1600, 1800, 5600];
+  const entries = HSK_BANDS.flatMap(([band], i) => {
+    const rows = hskStudyItems(band, HSK_2025[band]);
+    assert.equal(rows.length, counts[i]);
+    assert.ok(rows.every((row) => row.language === 'zh' && row.front && row.back));
+    return rows;
+  });
+  assert.deepEqual(entries.map((row) => row.hskId), Array.from({ length: 11000 }, (_, i) => i + 1));
+  const { cards, added } = importCardPack([], entries, '2026-11-18', (i) => `hsk-${i}`);
+  assert.equal(added, 11000);
+  assert.ok(cards.filter((card) => card.front === '和').length > 1);
+  assert.equal(importCardPack(cards, entries, '2026-11-18').added, 0);
+  assert.equal(cards.find((card) => card.front === '爱').back, 'ài');
+  assert.equal(cards.at(-1).deck, 'HSK 7–9');
+});
+
+test('Mandarin audio prefers a local Mainland voice and never falls back to an English or Cantonese voice', () => {
+  const { mandarinVoice } = require('../ui/logic.js');
+  const en = { lang: 'en-US', localService: true };
+  const yue = { lang: 'zh-HK', localService: true };
+  const cloud = { lang: 'zh-CN', localService: false };
+  const local = { lang: 'zh-Hans-CN', localService: true };
+  assert.equal(mandarinVoice([en, yue]), undefined);
+  assert.equal(mandarinVoice([en, yue, cloud]), cloud);
+  assert.equal(mandarinVoice([en, cloud, local]), local);
+});
+
 test('study sessions sample from the full eligible pool while keeping due reviews ahead of new cards', () => {
   const { studySample } = require('../ui/logic.js');
   const today = '2026-11-16';

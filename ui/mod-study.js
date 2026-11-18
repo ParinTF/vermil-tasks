@@ -7,6 +7,7 @@
   let revealed = false;
   let busy = false;
   let refreshTimer;
+  let speaking = null;
   const language = () => $('study-language').value;
 
   const choices = (id, label, values, onchange) => el('div', { className: 'study-field' },
@@ -35,6 +36,7 @@
     const starter = $('study-starter');
     starter.hidden = !pack || pack.cards.every(([front]) => keys.has(cardKey({ front, language: pack.language })));
     if (pack) starter.textContent = `Add ${pack.deck} cards`;
+    $('study-hsk').hidden = language() !== 'zh';
     $('study-available').textContent = !selected.length
       ? (cards.length ? 'No cards in this deck.' : 'No cards in this language yet.')
       : selected.length < count
@@ -57,6 +59,7 @@
   }
 
   function stopSession(focus = true) {
+    stopPronunciation();
     session = null;
     revealed = false;
     $('study-session').replaceChildren();
@@ -76,8 +79,64 @@
     paintSession(true);
   }
 
+  async function addHsk() {
+    const band = $('study-hsk-level').value;
+    const button = $('study-hsk-add');
+    const status = $('study-hsk-status');
+    button.disabled = true;
+    status.textContent = 'Loading vocabulary…';
+    try {
+      if (typeof HSK_2025 === 'undefined') await loadFile('script', { src: 'hsk-2025.js' });
+      if (!button.isConnected) return;
+      const added = registry.cards.importStudyCards(hskStudyItems(band, HSK_2025[band]));
+      const deck = hskDeck(band);
+      show();
+      if (language() === 'zh') {
+        $('study-deck').value = 'deck:' + deck;
+        updateSetup();
+      }
+      status.textContent = added ? `Added ${added.toLocaleString('en-US')} cards to ${deck}.` : `${deck} is already added.`;
+    } catch {
+      status.textContent = 'Could not load HSK vocabulary. Try again.';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  function stopPronunciation() {
+    if (!speaking) return;
+    speaking = null;
+    window.speechSynthesis?.cancel();
+  }
+
+  function playPronunciation(card) {
+    const status = $('study-audio-status');
+    stopPronunciation();
+    const speech = window.speechSynthesis;
+    const voice = mandarinVoice(speech?.getVoices() || []);
+    if (!voice || typeof SpeechSynthesisUtterance === 'undefined') {
+      status.textContent = 'Add a Chinese (Simplified, China) text-to-speech voice in your device settings and restart Vermil.';
+      return;
+    }
+    const utterance = new SpeechSynthesisUtterance(card.front);
+    utterance.lang = voice.lang;
+    utterance.voice = voice;
+    utterance.rate = 0.85;
+    const finish = (message) => {
+      if (speaking !== utterance) return;
+      speaking = null;
+      status.textContent = message;
+    };
+    utterance.onend = () => finish('');
+    utterance.onerror = () => finish('Could not play Mandarin audio. Try again.');
+    speaking = utterance;
+    status.textContent = 'Playing…';
+    speech.speak(utterance);
+  }
+
   async function rate(id, grade) {
     if (!session || !revealed || busy || session.ids[session.index] !== id) return;
+    stopPronunciation();
     const run = session;
     const now = Date.now();
     busy = true;
@@ -122,6 +181,8 @@
     const now = Date.now();
     const preview = revealed ? fsrsPreview(card, now) : null;
     const recall = fsrsRetrievability(card, now);
+    const hsk = Number.isInteger(card.hskId);
+    if (hsk) window.speechSynthesis?.getVoices(); // The available voices can arrive asynchronously.
     $('study-session').replaceChildren(
       el('div', { className: 'study-progress' },
         el('span', { role: 'status' }, `${kind === 'test' ? 'Test' : 'Review'} · ${session.index + 1} / ${ids.length}`),
@@ -130,8 +191,11 @@
         el('div', { className: 'fc-card-meta' }, el('span', {}, card.deck || 'General'),
           el('span', {}, recall === null ? (card.lastReviewed ? 'Reviewed before' : 'New card') : `${Math.round(recall * 100)}% recall`)),
         el('div', { className: 'fc-card-front', lang: cardLanguage(card) }, registry.cards.front(card.front, card.pos)),
+        ...(hsk ? [el('div', { className: 'study-speech' },
+          el('button', { id: 'study-audio', type: 'button', className: 'ghost', onclick: () => playPronunciation(card) }, 'Play pronunciation'),
+          el('span', { id: 'study-audio-status', role: 'status' }))] : []),
         ...(revealed ? [
-          el('div', { className: 'fc-card-back' }, card.back),
+          el('div', { className: 'fc-card-back', ...(hsk ? { lang: 'zh-Latn-pinyin' } : {}) }, card.back),
           ...(card.example ? [el('p', { className: 'fc-card-example' }, card.example)] : []),
           el('div', { className: 'fc-card-acts fc-grades', role: 'group', ariaLabel: 'Rate your recall' },
             ...grades.map((label, i) => el('button', { type: 'button', className: 'fc-grade ' + label.toLowerCase(), title: `${label} (${i + 1})`, onclick: () => rate(card.id, i + 1) },
@@ -201,9 +265,15 @@
               setView('cards');
             } }, 'Open Cards')),
           el('p', { id: 'study-available', role: 'status' }),
+          el('details', { id: 'study-hsk', className: 'study-hsk', hidden: true },
+            el('summary', {}, 'HSK 3.0 vocabulary'),
+            el('div', { className: 'study-hsk-controls' },
+              choices('study-hsk-level', 'HSK level', HSK_BANDS.map(([band, count]) => [band, `${hskDeck(band)} · ${count.toLocaleString('en-US')} entries`])),
+              el('button', { id: 'study-hsk-add', className: 'ghost', type: 'button', onclick: addHsk }, 'Add HSK deck')),
+            el('p', { id: 'study-hsk-status', role: 'status' })),
           el('div', { id: 'study-result', role: 'status' })),
         el('div', { id: 'study-session' })));
-      for (const id of ['study-language', 'study-deck', 'study-size', 'study-limit']) enhanceSelect($(id));
+      for (const id of ['study-language', 'study-deck', 'study-size', 'study-limit', 'study-hsk-level']) enhanceSelect($(id));
       try {
         const saved = localStorage.getItem('study-language');
         if (CARD_LANGUAGES.some(([id]) => id === saved)) $('study-language').value = saved;
@@ -214,10 +284,12 @@
     },
     stop() {
       clearTimeout(refreshTimer);
+      stopPronunciation();
       session = null;
       commandHooks.splice(commandHooks.indexOf(commands), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(shortcuts), 1);
     },
+    leave: stopPronunciation,
     show,
     keys(e) {
       if (!session || e.repeat || e.ctrlKey || e.altKey || e.metaKey || e.target.closest?.('.dd, input, select, textarea')) return;

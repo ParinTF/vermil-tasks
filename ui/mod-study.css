@@ -13,6 +13,14 @@
 #study-result h3 { margin: 0; }
 .study-card { cursor: default; }
 .study-actions button:disabled { opacity: .55; cursor: default; }
+.study-hsk { border-top: 1px solid var(--line); padding-top: 12px; }
+.study-hsk summary { cursor: pointer; font-weight: 600; }
+.study-hsk-controls, .study-speech { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; }
+.study-hsk-controls { margin-top: 10px; }
+.study-hsk-controls .study-field { flex: 0 1 260px; }
+.study-speech { align-items: center; }
+#study-hsk-status, #study-audio-status { font-size: 13px; color: var(--mute); }
+#study-hsk-status:empty { display: none; }
 
 @media (max-width: 640px) {
   .study-page { padding-top: 12px; }

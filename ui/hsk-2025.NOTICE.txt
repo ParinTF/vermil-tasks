@@ -1,0 +1,36 @@
+HSK examination syllabus vocabulary, November 2025 edition
+Source syllabus: https://www.chinesetest.cn/syllabus
+Center for Language Education and Cooperation / Chinese Testing International.
+
+Source for the factual vocabulary table:
+https://github.com/harukicoder/hsk30/blob/90c82a2f77ed8b75c989e613374b207809ea2ae8/corpus/syllabus2025/syllabus2025_entries.tsv
+Upstream provenance:
+https://github.com/harukicoder/hsk30/blob/90c82a2f77ed8b75c989e613374b207809ea2ae8/corpus/syllabus2025/PROVENANCE.md
+
+Vermil groups the entries by first syllabus band and stores index, simplified
+word, pinyin and part of speech. The syllabus ID distinguishes homographs.
+No exam questions, examples, answer keys or recordings are included.
+
+Upstream license for the derived level tables:
+
+MIT License
+
+Copyright (c) 2026 Alvaro Serrano
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -250,13 +250,14 @@ tabBar.addEventListener('pointerdown', (e) => {
   if (!tab || tabBar.querySelectorAll(movableTab).length < 2) return;
   tabDrag = { id: e.pointerId, tab, x: e.clientX, time: e.timeStamp, anchor: null, after: false };
 });
-tabBar.addEventListener('pointermove', (e) => {
+addEventListener('pointermove', (e) => {
   const drag = tabDrag;
   if (!drag || e.pointerId !== drag.id) return;
+  if (e.pointerType === 'mouse' && !(e.buttons & 1)) { cancelTabDrag(); return; }
   if (!suppressTabClick) {
     if (Math.abs(e.clientX - drag.x) < 5 || (e.pointerType === 'touch' && e.timeStamp - drag.time < 200)) return;
     suppressTabClick = true;
-    tabBar.setPointerCapture(drag.id);
+    if (e.pointerType !== 'mouse') tabBar.setPointerCapture(drag.id);
     drag.tab.classList.add('tab-moving');
   }
   const tabs = [...tabBar.querySelectorAll(movableTab)];

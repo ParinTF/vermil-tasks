@@ -141,7 +141,12 @@ try {
   await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...cardsTab, buttons: 0 });
   await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...cardsTab, button: 'left', buttons: 1, clickCount: 1 });
   await until(() => evaluate("tabDrag?.tab.id === 'view-cards'"), 'mouse press on Cards');
-  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...afterStudy, buttons: 1 });
+  for (const step of [.2, .4, .6, .8, 1]) {
+    await send('Input.dispatchMouseEvent', {
+      type: 'mouseMoved', x: cardsTab.x + (afterStudy.x - cardsTab.x) * step, y: cardsTab.y, buttons: 1,
+    });
+    await delay(20);
+  }
   await until(() => evaluate("$('view-study').classList.contains('tab-drop-after')"), 'mouse drop indicator');
   assert.deepEqual(await evaluate('[...VIEWS]'), ['home', 'cards', 'study']);
   await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...afterStudy, button: 'left', buttons: 0, clickCount: 1 });
@@ -217,12 +222,48 @@ try {
   assert.equal(await evaluate("[...$('study-deck').options].map(o => o.textContent).join('|')"), 'All decks|Sample A|Sample B');
   await click('#view-home');
   assert.equal(await evaluate("$('tile-study').querySelector('b').textContent"), '48 due now');
+  await click('#view-study');
+  assert.equal(await evaluate("$('study-hsk').hidden && typeof HSK_2025 === 'undefined'"), true);
+  await choose('language', 2);
+  await click('#study-hsk summary');
+  assert.deepEqual(await evaluate("[...$('study-hsk-level').options].map(o => o.value)"), ['1', '2', '3', '4', '5', '6', '7-9']);
+  await click('#study-hsk-add');
+  await until(() => saved().cards.cards.filter((card) => card.deck === 'HSK 1').length === 300, 'HSK 1 cards saved');
+  assert.equal(await evaluate("$('study-deck').value"), 'deck:HSK 1');
+  await click('#study-hsk-add');
+  assert.match(await evaluate("$('study-hsk-status').textContent"), /already added/);
+  await click('#study-test');
+  assert.equal(await evaluate("document.querySelector('.fc-card-meta span').textContent"), 'HSK 1');
+  await click('#study-reveal');
+  assert.equal(await evaluate("document.querySelector('#study-session [lang=\"zh-Latn-pinyin\"]').textContent.length > 0"), true);
+  const realMandarin = await evaluate("!!mandarinVoice(window.speechSynthesis?.getVoices() || [])");
+  if (!realMandarin) {
+    await click('#study-audio');
+    assert.match(await evaluate("$('study-audio-status').textContent"), /text-to-speech voice/);
+  }
+  await evaluate(`(() => {
+    const speech = window.speechSynthesis;
+    const original = [speech.getVoices, speech.speak, speech.cancel, window.SpeechSynthesisUtterance];
+    speech.getVoices = () => [{ lang: 'zh-CN', localService: true }];
+    speech.cancel = () => {};
+    speech.speak = (utterance) => { window.testPronunciation = [utterance.text, utterance.lang]; utterance.onend(); };
+    window.SpeechSynthesisUtterance = class { constructor(text) { this.text = text; } };
+    window.restorePronunciation = () => { [speech.getVoices, speech.speak, speech.cancel, window.SpeechSynthesisUtterance] = original; };
+  })()`);
+  await click('#study-audio');
+  assert.deepEqual(await evaluate('window.testPronunciation'), [await evaluate(
+    "document.querySelector('#study-session .fc-word-line > span')?.textContent ?? document.querySelector('#study-session .fc-card-front').textContent"), 'zh-CN']);
+  await evaluate('window.restorePronunciation()');
+  await click('#study-session .fc-grade.good');
+  await until(() => saved().cards.cards.some((card) => card.deck === 'HSK 1' && card.memory?.version === 7), 'HSK review saved');
+  await click('.study-progress button');
+  await click('#view-home');
   if (!await evaluate("$('pack-smart').open")) await click('#pack-smart > summary');
   await click('#card-study .mod-remove');
   await until(() => evaluate("!$('view-study') && !$('study-view') && !$('style-study')"), 'Study removed');
-  assert.equal(saved().cards.cards.filter((card) => card.memory?.version === 7).length, 12);
+  assert.equal(saved().cards.cards.filter((card) => card.memory?.version === 7).length, 13);
   assert.deepEqual(errors, []);
-  console.log('Study smoke passed: module lifecycle, language versions, random tests, FSRS-7, and mouse/touch tab order with Settings');
+  console.log(`Study smoke passed: language versions, HSK import and pinyin, pronunciation route, FSRS-7, and tab order (Mandarin voice: ${realMandarin ? 'available' : 'not installed'})`);
 } finally {
   cleanup();
 }

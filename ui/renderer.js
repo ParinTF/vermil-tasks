@@ -262,6 +262,7 @@ async function setView(next) {
   if (next === 'settings') lastView = view;
   else try { localStorage.setItem('last-view', next); } catch {}
   await registry.notes?.leave?.(); // typing in a note is saved before the view changes
+  if (view === 'study') registry.study?.leave?.();
   view = next;
   for (const n of document.querySelectorAll('main[id$="-view"]')) { n.hidden = n.id !== view + '-view'; n.classList.remove('sheet-open'); }
   for (const b of document.querySelectorAll('.views button[role=tab]')) b.ariaSelected = String(b.id === 'view-' + hubId);

@@ -185,11 +185,12 @@
     }));
   }
 
-  function importPack(pack) {
-    const res = importCardPack(data.cards, packToItems(pack), today());
+  function importItems(items) {
+    const res = importCardPack(data.cards, items, today());
     if (res.added) { data.cards = res.cards; save(); }
     return res.added;
   }
+  const importPack = (pack) => importItems(packToItems(pack));
 
   function loadPack(pack, groupLabel = 'chunks') {
     const added = importPack(pack);
@@ -1894,6 +1895,7 @@
         newLimit: data.newLimit, effectiveLimit: effectiveLimit(), newDoneToday: newDone(today(), language) };
     },
     importStudyPack: importPack,
+    importStudyCards: importItems,
     dueTotal,
     setCardLanguage(language) { $('fc-language').value = language; },
     setStudyLimit(limit) { data.newLimit = limit; data.extraToday = 0; save(); },

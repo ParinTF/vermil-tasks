@@ -1363,6 +1363,15 @@ function studyQueue(cards = [], today, { newLimit = 20, newDoneToday = 0, now = 
 const studySample = (cards, count, rng = Math.random) => shuffleWith(cards, rng).slice(0, count);
 
 const CARD_LANGUAGES = [['en', 'English'], ['zh', 'Chinese'], ['ja', 'Japanese']];
+const HSK_BANDS = [['1', 300], ['2', 200], ['3', 500], ['4', 1000], ['5', 1600], ['6', 1800], ['7-9', 5600]];
+const hskDeck = (band) => 'HSK ' + band.replace('-', '–');
+const hskStudyItems = (band, rows) => rows.map(([hskId, front, back, pos]) =>
+  ({ hskId, deck: hskDeck(band), language: 'zh', front, back, pos }));
+
+function mandarinVoice(voices) {
+  const matching = voices.filter((voice) => /^(?:cmn(?:-|$)|zh(?:-cn|-hans(?:-[a-z]+)?|-sg)?$)/i.test(voice.lang));
+  return matching.find((voice) => voice.localService) || matching[0];
+}
 
 function cardLanguage(card) {
   if (CARD_LANGUAGES.some(([id]) => id === card?.language)) return card.language;
@@ -1387,6 +1396,7 @@ function studyNewReview(log, day, language) {
 }
 
 function cardKey(card) {
+  if (Number.isInteger(card?.hskId)) return 'hsk:' + card.hskId;
   const front = String(card?.front || '').trim().toLowerCase();
   const pos = String(card?.pos || '').trim().toLowerCase();
   return front ? [cardLanguage(card), front, pos].join('\u0000') : '';
@@ -1405,7 +1415,8 @@ function importCardPack(existingCards = [], items = [], today, nextId) {
     const example = String(raw.example || '').trim();
     if (!front || !back) continue;
     const language = cardLanguage(raw);
-    const key = cardKey({ front, pos, language });
+    const hsk = Number.isInteger(raw.hskId) ? { hskId: raw.hskId } : {};
+    const key = cardKey({ front, pos, language, ...hsk });
     if (seen.has(key)) continue;
     seen.add(key);
     added.push({
@@ -1414,6 +1425,7 @@ function importCardPack(existingCards = [], items = [], today, nextId) {
       language,
       front,
       back,
+      ...hsk,
       ...(pos ? { pos } : {}),
       ...(example ? { example } : {}),
       box: 1,
@@ -2005,4 +2017,4 @@ function parseToeflAiEval(rawText) {
   }
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, studySample, CARD_LANGUAGES, cardLanguage, studyLanguageCards, studyNewCount, studyNewReview, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, moveTabBeside, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, studySample, CARD_LANGUAGES, HSK_BANDS, hskDeck, hskStudyItems, mandarinVoice, cardLanguage, studyLanguageCards, studyNewCount, studyNewReview, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, moveTabBeside, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
