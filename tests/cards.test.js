@@ -4,6 +4,7 @@ const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, f
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
+const { OXFORD_5K_PACKS } = require('../ui/oxford5k-pack.js');
 const { TOEIC_QUIZ } = require('../ui/toeic-quiz.js');
 const { TOEIC_MOCK_P6 } = require('../ui/toeic-mock-p6.js');
 const { TOEIC_MOCK_VOL1 } = require('../ui/toeic-mock-1.js');
@@ -436,4 +437,41 @@ test('OXFORD_PACKS provides 2,983 official CEFR words with POS tags, preserves p
   assert.equal(a1Quiz.length, 25);
   assert.ok(a1Quiz.every((q) => String(q.tag || '').startsWith('Oxford · A1') && q.pos && q.q.endsWith(`(${q.pos})`)));
   assert.ok(a1Quiz.every((q) => q.choices.every((c) => /[\u0E00-\u0E7F]/.test(c))));
+
+  // Advance Mode: Oxford 5000 B2-C1 expansion combines cleanly to 4,981 unique cards
+  assert.equal(OXFORD_5K_PACKS.length, 20);
+  const advLevels = { B2: 0, C1: 0 };
+  const advItems = [];
+  for (const pack of OXFORD_5K_PACKS) {
+    assert.ok(pack.deck.startsWith('Oxford 5000 · '), `Invalid Oxford 5000 deck: ${pack.deck}`);
+    const lm = pack.deck.match(/^Oxford 5000 · (B2|C1) · /);
+    assert.ok(lm, `Missing B2/C1 level in deck: ${pack.deck}`);
+    for (const [word, back, example, pos] of pack.cards) {
+      assert.ok(VALID_POS.test(pos), `Invalid Advance POS "${pos}" for "${word}"`);
+      assert.ok(/[\u0E00-\u0E7F]/.test(back) && !/[\/()]/.test(back), `Invalid Advance back "${back}" for "${word}"`);
+      assert.ok(example && example.trim().length >= 8 && !/[\u0E00-\u0E7F]/.test(example), `Invalid Advance example "${example}" for "${word}"`);
+      advLevels[lm[1]]++;
+      advItems.push({ deck: pack.deck, front: word, back, example, pos });
+    }
+  }
+  assert.equal(advItems.length, 1998);
+  assert.deepEqual(advLevels, { B2: 701, C1: 1297 });
+
+  const withAdv = importCardPack(imported.cards, advItems, '2026-11-18', () => `ox5-${++seq}`);
+  assert.equal(withAdv.added, 1998);
+  assert.equal(withAdv.cards.length, 4981);
+
+  const fineAdj = withAdv.cards.find((c) => c.front === 'fine' && c.pos === 'adj.');
+  const fineNv = withAdv.cards.find((c) => c.front === 'fine' && c.pos === 'n., v.');
+  const monthMarch = withAdv.cards.find((c) => c.front === 'March');
+  const verbMarch = withAdv.cards.find((c) => c.front === 'march');
+  assert.ok(fineAdj && fineNv && monthMarch && verbMarch);
+
+  const c1Quiz = buildCardQuiz(withAdv.cards, { count: 25, deck: 'Oxford 5000 · C1*' });
+  assert.equal(c1Quiz.length, 25);
+  assert.ok(c1Quiz.every((q) => String(q.tag || '').startsWith('Oxford 5000 · C1') && q.pos));
+
+  const full5kQuiz = buildCardQuiz(withAdv.cards, { count: 25, deck: 'Oxford*' });
+  assert.equal(full5kQuiz.length, 25);
+  assert.ok(full5kQuiz.every((q) => String(q.tag || '').startsWith('Oxford')));
 });

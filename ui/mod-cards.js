@@ -1,8 +1,8 @@
-// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + Oxford 3000 (POS) + 1,000 Everyday + 1,000 TOEIC chunks
+// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + Oxford 3000 & Advance Oxford 5000 (POS) + 1,000 Everyday + 1,000 TOEIC chunks
 // + Part 5 quizzes + 30 Full TOEIC Listening & Reading Mock Exams (Q1-100 Listening / Q101-200 Reading / Full 200-Q 10-990 scoring).
-// Data: { cards, newLimit, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, mockProgress }.
+// Data: { cards, newLimit, advanceMode, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, mockProgress }.
 (() => {
-  let data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {} };
+  let data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {} };
   let mode = 'study'; // 'study' | 'quiz' | 'browse'
   let activeDeck = '';
   let revealed = false;
@@ -54,10 +54,12 @@
       el('section', { className: 'fc-main', ariaLabel: 'Flashcards' },
         el('div', { className: 'fc-head' },
           el('h2', {}, 'Flashcards'),
-          el('div', { className: 'fc-modes', role: 'tablist', ariaLabel: 'Flashcards mode' },
-            el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'study'; revealed = false; paint(); } }, 'Study'),
-            el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (quizSource !== 'mock' && !quizState) startQuiz(); else { refreshPackStatus(); paint(); } } }, 'Test'),
-            el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'browse'; paint(); } }, 'All cards'))),
+          el('div', { className: 'fc-head-tools' },
+            el('div', { className: 'fc-modes', role: 'tablist', ariaLabel: 'Flashcards mode' },
+              el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'study'; revealed = false; paint(); } }, 'Study'),
+              el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (quizSource !== 'mock' && !quizState) startQuiz(); else { refreshPackStatus(); paint(); } } }, 'Test'),
+              el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'browse'; paint(); } }, 'All cards')),
+            el('button', { id: 'fc-adv-toggle', type: 'button', className: 'fc-adv-btn', ariaPressed: 'false', onclick: toggleAdvance }, 'Advance · Oxford 5000'))),
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
         el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
         el('div', { id: 'fc-decks', className: 'tag-bar', hidden: true }),
@@ -132,8 +134,29 @@
   }
 
   const oxfordPacks = () => (typeof OXFORD_PACKS !== 'undefined' ? OXFORD_PACKS : []);
+  const oxford5kPacks = () => (typeof OXFORD_5K_PACKS !== 'undefined' ? OXFORD_5K_PACKS : []);
   const toeicPacks = () => (typeof TOEIC_PACKS !== 'undefined' ? TOEIC_PACKS : []);
   const dailyPacks = () => (typeof DAILY_PACKS !== 'undefined' ? DAILY_PACKS : []);
+
+  async function ensureOxford5k() {
+    if (typeof OXFORD_5K_PACKS === 'undefined' && !$('script-oxford5k-pack')) {
+      await loadFile('script', { src: 'oxford5k-pack.js', id: 'script-oxford5k-pack' }).catch(() => {});
+    }
+  }
+
+  async function toggleAdvance(force) {
+    const next = typeof force === 'boolean' ? force : !data.advanceMode;
+    data.advanceMode = next;
+    if (next) {
+      await ensureOxford5k();
+      packOpen.ox5k = true;
+      packOpen.oxford = false;
+    } else if (activeDeck.startsWith('Oxford 5000') || activeDeck === 'Oxford*') {
+      activeDeck = '';
+    }
+    save();
+    paint();
+  }
   const cardKey = (front, pos) => {
     const f = String(front || '').trim().toLowerCase();
     const p = String(pos || '').trim().toLowerCase();
@@ -1671,7 +1694,7 @@
     finishMount();
   }
 
-  const packOpen = { oxford: true, daily: false, toeic: false };
+  const packOpen = { oxford: true, ox5k: false, daily: false, toeic: false };
 
   function buildPackSection(key, title, unitLabel, groupName, list) {
     if (!list.length) return null;
@@ -1700,11 +1723,13 @@
   function paintPacks() {
     const box = $('fc-packs');
     const oxList = oxfordPacks();
+    const ox5kList = data.advanceMode ? oxford5kPacks() : [];
     const dailyList = dailyPacks();
     const toeicList = toeicPacks();
-    if (!box || (!oxList.length && !dailyList.length && !toeicList.length)) return;
+    if (!box || (!oxList.length && !ox5kList.length && !dailyList.length && !toeicList.length)) return;
     box.hidden = false;
     const sections = [
+      ...(data.advanceMode ? [buildPackSection('ox5k', 'Oxford 5000 Advance Library (B2–C1 · n./v./adj.)', 'Advance words', 'sets', ox5kList)] : []),
       buildPackSection('oxford', 'Oxford 3000 Word Library (A1–B2 · n./v./adj.)', 'Oxford words', 'sets', oxList),
       buildPackSection('daily', 'Everyday Conversation Library', 'everyday chunks', 'topics', dailyList),
       buildPackSection('toeic', 'TOEIC Business Library', 'TOEIC chunks', 'topics', toeicList),
@@ -1719,6 +1744,12 @@
     $('fc-m-study').ariaSelected = String(mode === 'study');
     if ($('fc-m-quiz')) $('fc-m-quiz').ariaSelected = String(mode === 'quiz');
     $('fc-m-browse').ariaSelected = String(mode === 'browse');
+    const advBtn = $('fc-adv-toggle');
+    if (advBtn) {
+      advBtn.hidden = isMockActive;
+      advBtn.ariaPressed = String(Boolean(data.advanceMode));
+      advBtn.textContent = data.advanceMode ? '✓ Advance · Oxford 5000' : 'Advance · Oxford 5000';
+    }
     const qAll = studyQueue(data.cards, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
     const s = deckSummary(data.cards, t);
     const fig = (label, value) => el('div', {}, el('small', {}, label), el('b', {}, value));
@@ -1750,23 +1781,31 @@
     const deckBar = $('fc-decks');
     deckBar.hidden = !s.decks.length || (mode === 'quiz' && quizSource !== 'cards');
     if (s.decks.length) {
+      const hasOx3k = s.decks.some((d) => d.startsWith('Oxford · '));
+      const hasOx5k = s.decks.some((d) => d.startsWith('Oxford 5000 · '));
       const groupDefs = [
-        ['Oxford · ', 'Oxford · *', 'Oxford (All)'],
+        ...(hasOx3k && hasOx5k ? [['Oxford', 'Oxford*', 'Oxford 5000 (All)']] : []),
+        ['Oxford · ', 'Oxford · *', hasOx5k ? 'Oxford 3000' : 'Oxford (All)'],
+        ['Oxford 5000 · ', 'Oxford 5000 · *', 'Advance (5k only)'],
         ['Daily · ', 'Daily · *', 'Everyday (All)'],
         ['TOEIC · ', 'TOEIC · *', 'TOEIC (All)'],
       ];
       const activeGroups = groupDefs.filter(([prefix]) => s.decks.some((d) => d.startsWith(prefix)));
-      const hasOxford = activeGroups.some(([, pat]) => pat === 'Oxford · *');
-      const cefrPills = hasOxford
-        ? ['A1', 'A2', 'B1', 'B2']
-            .map((lvl) => [`Oxford · ${lvl}*`, `Oxford ${lvl}`])
-            .filter(([pat]) => s.decks.some((d) => d.startsWith(pat.slice(0, -1))))
-        : [];
+      const cefrPills = [
+        ...['A1', 'A2', 'B1', 'B2'].map((lvl) => [`Oxford · ${lvl}*`, `Oxford ${lvl}`]),
+        ...['B2', 'C1'].map((lvl) => [`Oxford 5000 · ${lvl}*`, `Adv ${lvl}`]),
+      ].filter(([pat]) => s.decks.some((d) => d.startsWith(pat.slice(0, -1))));
       const pickDeck = (val) => { activeDeck = val; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); };
-      const subPrefix = /^Oxford · (A1|A2|B1|B2)/.test(activeDeck)
-        ? activeDeck.slice(0, 11)
-        : groupDefs.find(([prefix]) => activeDeck.startsWith(prefix))?.[0] || '';
-      const isLibDeck = (d) => groupDefs.some(([prefix]) => d.startsWith(prefix));
+      const ox5kLvl = activeDeck.match(/^Oxford 5000 · (B2|C1)/);
+      const ox3kLvl = activeDeck.match(/^Oxford · (A1|A2|B1|B2)/);
+      const subPrefix = ox5kLvl
+        ? ox5kLvl[0]
+        : ox3kLvl
+          ? ox3kLvl[0]
+          : activeDeck === 'Oxford*'
+            ? ''
+            : groupDefs.find(([prefix]) => prefix !== 'Oxford' && activeDeck.startsWith(prefix))?.[0] || '';
+      const isLibDeck = (d) => ['Oxford · ', 'Oxford 5000 · ', 'Daily · ', 'TOEIC · '].some((p) => d.startsWith(p));
       const shownDecks = s.decks.filter((d) => (subPrefix ? d.startsWith(subPrefix) : (s.decks.length <= 24 || !isLibDeck(d))));
       const quickPills = [
         ...(activeGroups.length > 1 || cefrPills.length ? activeGroups.map(([, pat, lbl]) => [pat, lbl]) : []),
@@ -1856,6 +1895,8 @@
     { label: 'TOEIC: Practice Test by Grammar Topic', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('topic', { tag: quizTag, count: quizCount || 10 }); } },
     { label: 'Quiz from my flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('cards', { count: 10 }); } },
     { label: `Oxford 3000: Load all ${oxfordPacks().reduce((n, p) => n + p.cards.length, 0)} words`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(oxfordPacks(), 'Oxford words'); } },
+    { label: 'Oxford 5000: Toggle Advance Mode (B2–C1)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); await toggleAdvance(); } },
+    { label: 'Oxford 5000: Load all 1,998 Advance words (B2–C1)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); await toggleAdvance(true); loadAllPacks(oxford5kPacks(), 'Advance words'); } },
     { label: `Everyday: Load all ${dailyPacks().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(dailyPacks(), 'everyday chunks'); } },
     { label: `TOEIC: Load all ${toeicPacks().reduce((n, p) => n + p.cards.length, 0)} chunks`, hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); loadAllPacks(toeicPacks(), 'TOEIC chunks'); } },
     ...toeicPacks().map((p) => ({
@@ -1891,7 +1932,10 @@
       if (typeof TOEIC_QUIZ === 'undefined' && !$('script-toeic-quiz')) {
         await loadFile('script', { src: 'toeic-quiz.js', id: 'script-toeic-quiz' }).catch(() => {});
       }
-      data = { cards: [], newLimit: 20, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
+      data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, mockProgress: {}, ...(moduleData.cards || {}) };
+      if (data.advanceMode || data.cards.some((c) => String(c?.deck || '').startsWith('Oxford 5000 · '))) {
+        await ensureOxford5k();
+      }
       if (window.__TAURI__?.event?.listen && !unlistenProgress) {
         unlistenProgress = await window.__TAURI__.event.listen('listening-progress', (ev) => {
           const p = ev?.payload;
