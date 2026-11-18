@@ -99,6 +99,7 @@ function loadFile(tag, props) {
 
 // the tab bar and VIEWS follow what is switched on: Home first, then the modules with a view, in list order
 function syncViews() {
+  cancelTabDrag();
   const want = ['home', ...orderTabs(MODULES.filter((m) => m.view && !m.hub && started.has(m.id)).map((m) => m.id), prefsNow.tabOrder)];
   VIEWS.splice(0, VIEWS.length, ...want);
   const activeHub = hubOf(view);
@@ -106,11 +107,18 @@ function syncViews() {
   more.onclick = toggleTabMenu;
   document.querySelector('.views').replaceChildren(...want.map((id) => {
     const tab = el('button', { id: 'view-' + id, role: 'tab', type: 'button', ariaSelected: String(activeHub === id) }, id === 'home' ? 'Home' : byId(id).view);
+    if (id !== 'home') tab.title = 'Hold and drag to reorder';
     tab.onclick = () => setView(id);
     return tab;
   }), more);
   layoutTabs();
   renderHubBar(view);
+}
+
+function saveTabOrder(tabOrder) {
+  setPrefs({ tabOrder });
+  syncViews();
+  if (view === 'settings') renderSettings();
 }
 
 function openDrawer() {
@@ -214,7 +222,77 @@ function toggleTabMenu() {
 }
 addEventListener('pointerdown', (e) => { if (tabMenu && !e.target.closest?.('.views-menu, .views-more-btn')) closeTabMenu(); });
 addEventListener('keydown', (e) => { if (e.key === 'Escape' && tabMenu) { e.stopPropagation(); closeTabMenu(); document.querySelector('.views-more-btn')?.focus(); } }, true);
-new ResizeObserver(() => layoutTabs()).observe(document.querySelector('.views'));
+const tabBar = document.querySelector('.views');
+new ResizeObserver(() => layoutTabs()).observe(tabBar);
+
+let tabDrag = null;
+let suppressTabClick = false;
+const tabId = (tab) => tab.id.slice(5);
+const movableTab = 'button[role=tab]:not(#view-home):not([hidden])';
+const tabMiddle = (tab) => {
+  const r = tab.getBoundingClientRect();
+  return r.left + r.width / 2;
+};
+
+function cancelTabDrag() {
+  if (!tabDrag) return;
+  const { id, tab, anchor } = tabDrag;
+  tabDrag = null;
+  tab.classList.remove('tab-moving');
+  anchor?.classList.remove('tab-drop-before', 'tab-drop-after');
+  if (tabBar.hasPointerCapture(id)) tabBar.releasePointerCapture(id);
+}
+
+tabBar.addEventListener('pointerdown', (e) => {
+  if (!e.isPrimary || e.button !== 0) return;
+  suppressTabClick = false;
+  const tab = e.target.closest(movableTab);
+  if (!tab || tabBar.querySelectorAll(movableTab).length < 2) return;
+  tabDrag = { id: e.pointerId, tab, x: e.clientX, time: e.timeStamp, anchor: null, after: false };
+});
+tabBar.addEventListener('pointermove', (e) => {
+  const drag = tabDrag;
+  if (!drag || e.pointerId !== drag.id) return;
+  if (!suppressTabClick) {
+    if (Math.abs(e.clientX - drag.x) < 5 || (e.pointerType === 'touch' && e.timeStamp - drag.time < 200)) return;
+    suppressTabClick = true;
+    tabBar.setPointerCapture(drag.id);
+    drag.tab.classList.add('tab-moving');
+  }
+  const tabs = [...tabBar.querySelectorAll(movableTab)];
+  const i = tabs.indexOf(drag.tab);
+  const x = e.clientX;
+  const before = i < 0 ? null : tabs.slice(0, i).find((tab) => x < tabMiddle(tab));
+  const after = i < 0 ? null : tabs.slice(i + 1).findLast((tab) => x > tabMiddle(tab));
+  drag.anchor?.classList.remove('tab-drop-before', 'tab-drop-after');
+  drag.anchor = before || after || null;
+  drag.after = !!after;
+  drag.anchor?.classList.add(drag.after ? 'tab-drop-after' : 'tab-drop-before');
+});
+addEventListener('pointerup', (e) => {
+  const drag = tabDrag;
+  if (!drag || e.pointerId !== drag.id) return;
+  cancelTabDrag();
+  if (!drag.anchor?.matches(movableTab) || !drag.tab.matches(movableTab)) return;
+  const id = tabId(drag.tab);
+  saveTabOrder(moveTabBeside(VIEWS.slice(1), id, tabId(drag.anchor), drag.after));
+  $('view-' + id)?.focus();
+});
+addEventListener('pointercancel', (e) => { if (tabDrag?.id === e.pointerId) cancelTabDrag(); });
+tabBar.addEventListener('lostpointercapture', (e) => {
+  // A touch starts captured by its button before the bar takes over.
+  if (e.target === tabBar && tabDrag?.id === e.pointerId) cancelTabDrag();
+});
+addEventListener('blur', cancelTabDrag);
+addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && tabDrag) { e.preventDefault(); e.stopPropagation(); cancelTabDrag(); }
+}, true);
+tabBar.addEventListener('click', (e) => {
+  if (!suppressTabClick || !e.detail) return;
+  suppressTabClick = false;
+  e.preventDefault();
+  e.stopImmediatePropagation();
+}, true);
 
 async function startModule(m) {
   if (started.has(m.id)) return;

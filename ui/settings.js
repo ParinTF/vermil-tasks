@@ -102,9 +102,7 @@ function dragTab(li, e) {
     list.onpointermove = list.onpointerup = list.onpointercancel = null;
     li.classList.remove('dragging');
     if (!moved) return;
-    setPrefs({ tabOrder: [...list.children].map((x) => x.dataset.id) });
-    syncViews();
-    renderSettings();
+    saveTabOrder([...list.children].map((x) => x.dataset.id));
   };
 }
 
@@ -128,12 +126,11 @@ function generalSection() {
   const remind = el('select', { id: 'st-remind', ariaLabel: 'Default reminder', onchange: () => { setPrefs({ defaultRemind: remind.value }); if (typeof editingId !== 'undefined' && !editingId) $('remind').value = remind.value; } },
     ...[['0', 'At due time'], ['10', '10 minutes before'], ['60', '1 hour before'], ['1440', '1 day before'], ['', 'No reminder']].map(([v, l]) => el('option', { value: v, selected: v === p.defaultRemind }, l)));
 
-  const views = MODULES.filter((m) => m.view && started.has(m.id));
-  const ordered = orderTabs(views.map((m) => m.id), p.tabOrder);
+  const ordered = VIEWS.slice(1);
   const tabRows = ordered.map((id, i) => {
     const up = el('button', { type: 'button', className: 'linkish st-mv', ariaLabel: `Move ${byId(id).view} left`, textContent: '←', disabled: i === 0 });
     const down = el('button', { type: 'button', className: 'linkish st-mv', ariaLabel: `Move ${byId(id).view} right`, textContent: '→', disabled: i === ordered.length - 1 });
-    const move = (d) => () => { const next = [...ordered]; [next[i], next[i + d]] = [next[i + d], next[i]]; setPrefs({ tabOrder: next }); syncViews(); renderSettings(); };
+    const move = (d) => () => saveTabOrder(moveTabBeside(ordered, id, ordered[i + d], d > 0));
     up.onclick = move(-1);
     down.onclick = move(1);
     const li = el('li', { title: 'Drag to reorder' }, el('span', {}, byId(id).view), up, down);

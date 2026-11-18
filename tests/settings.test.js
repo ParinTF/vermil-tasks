@@ -2,6 +2,15 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { weekDays, monthGrid, timeRange, hotkeyFromEvent, orderTabs, setWeekStart } = require('../ui/logic.js');
 
+test('moving a tab beside a visible neighbour preserves the order of hidden tabs', () => {
+  const { moveTabBeside } = require('../ui/logic.js');
+  const tabs = ['tasks', 'review', 'cards', 'study', 'calendar'];
+  assert.deepEqual(moveTabBeside(tabs, 'study', 'tasks', false), ['study', 'tasks', 'review', 'cards', 'calendar']);
+  assert.deepEqual(moveTabBeside(tabs, 'tasks', 'study', true), ['review', 'cards', 'study', 'tasks', 'calendar']);
+  assert.deepEqual(moveTabBeside(tabs, 'study', 'missing', false), tabs);
+  assert.deepEqual(tabs, ['tasks', 'review', 'cards', 'study', 'calendar']);
+});
+
 test('settings: tabs follow the chosen order and new ones come last', () => {
   assert.deepEqual(orderTabs(['tasks', 'notes', 'money'], []), ['tasks', 'notes', 'money']);
   assert.deepEqual(orderTabs(['tasks', 'notes', 'money'], ['money', 'tasks']), ['money', 'tasks', 'notes']);

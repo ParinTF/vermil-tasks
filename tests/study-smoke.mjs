@@ -132,6 +132,27 @@ try {
   await until(() => evaluate("!!$('tile-study') && !$('tile-cards')"), 'Today strip links to Study');
   await click('#view-study');
   await until(() => evaluate("$('view-study').ariaSelected === 'true' && !$('study-test').disabled"), 'Study available');
+  const tabPoint = (id, at = .5) => evaluate(`(() => {
+    const r = $('view-${id}').getBoundingClientRect();
+    return { x: r.left + r.width * ${at}, y: r.top + r.height / 2 };
+  })()`);
+  const cardsTab = await tabPoint('cards');
+  const afterStudy = await tabPoint('study', .8);
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...cardsTab, buttons: 0 });
+  await send('Input.dispatchMouseEvent', { type: 'mousePressed', ...cardsTab, button: 'left', buttons: 1, clickCount: 1 });
+  await until(() => evaluate("tabDrag?.tab.id === 'view-cards'"), 'mouse press on Cards');
+  await send('Input.dispatchMouseEvent', { type: 'mouseMoved', ...afterStudy, buttons: 1 });
+  await until(() => evaluate("$('view-study').classList.contains('tab-drop-after')"), 'mouse drop indicator');
+  assert.deepEqual(await evaluate('[...VIEWS]'), ['home', 'cards', 'study']);
+  await send('Input.dispatchMouseEvent', { type: 'mouseReleased', ...afterStudy, button: 'left', buttons: 0, clickCount: 1 });
+  assert.deepEqual(await evaluate("JSON.parse(localStorage.getItem('prefs')).tabOrder"), ['study', 'cards']);
+  assert.equal(await evaluate('view'), 'study');
+  await click('#settings-btn');
+  await click('#st-tab-General');
+  assert.deepEqual(await evaluate("[...$('st-tabs').children].map(row => row.dataset.id)"), ['study', 'cards']);
+  await click('#st-tabs button[aria-label="Move Cards left"]');
+  assert.deepEqual(await evaluate('[...VIEWS]'), ['home', 'cards', 'study']);
+  await click('#view-study');
   assert.deepEqual(await evaluate("[...$('study-size').options].map(o => +o.value)"), [10, 20, 50, 100, 200]);
   await choose('deck', 2);
   await choose('size', 5);
@@ -160,6 +181,16 @@ try {
   assert.equal(saved().cards.cards.filter((card) => card.memory?.version === 7 && card.dueAt > card.reviewedAt).length, 10);
   await send('Emulation.setDeviceMetricsOverride', { width: 540, height: 700, deviceScaleFactor: 1, mobile: false });
   assert.ok(await evaluate("$('study-view').scrollWidth <= $('study-view').clientWidth"));
+  await send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 1 });
+  await send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [await tabPoint('study')] });
+  await delay(240);
+  await send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [await tabPoint('cards', .2)] });
+  await until(() => evaluate("$('view-cards').classList.contains('tab-drop-before')"), 'touch drop indicator');
+  await send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+  await until(() => evaluate("VIEWS[1] === 'study'"), 'touch tab order saved');
+  await send('Emulation.setTouchEmulationEnabled', { enabled: false });
+  assert.deepEqual(await evaluate('[...VIEWS]'), ['home', 'study', 'cards']);
+  assert.equal(await evaluate('view'), 'study');
   await click('#study-due');
   assert.match(await evaluate("document.querySelector('.study-progress span').textContent"), /Review · 1 \/ 2/);
   await click('.study-progress button');
@@ -191,7 +222,7 @@ try {
   await until(() => evaluate("!$('view-study') && !$('study-view') && !$('style-study')"), 'Study removed');
   assert.equal(saved().cards.cards.filter((card) => card.memory?.version === 7).length, 12);
   assert.deepEqual(errors, []);
-  console.log('Study smoke passed: module lifecycle, three language versions, starter imports, random tests, keyboard/mouse, FSRS-7 persistence and narrow layout');
+  console.log('Study smoke passed: module lifecycle, language versions, random tests, FSRS-7, and mouse/touch tab order with Settings');
 } finally {
   cleanup();
 }

@@ -83,6 +83,13 @@ button { cursor: pointer; }
 .views button { position: relative; padding: 0; border: 0; background: none; font-size: 13px; font-weight: 600; letter-spacing: .1em; text-transform: uppercase; color: var(--mute); }
 .views button:hover, .views button[aria-selected="true"] { color: var(--ink); }
 .views button[aria-selected="true"]::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: var(--accent); }
+.views button[role=tab]:not(:where(#view-home)) { cursor: grab; touch-action: none; user-select: none; }
+.views button.tab-moving { opacity: .55; cursor: grabbing; }
+.views button.tab-drop-before::before, .views button.tab-drop-after::before {
+  content: ""; position: absolute; top: 8px; bottom: 8px; width: 2px; background: var(--accent);
+}
+.views button.tab-drop-before::before { left: 0; }
+.views button.tab-drop-after::before { right: 0; }
 .brand i { display: inline-block; width: 8px; height: 8px; margin-left: 8px; border-radius: 50%; background: var(--accent); }
 #today { color: var(--mute); }
 .update {
