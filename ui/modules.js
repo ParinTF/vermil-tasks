@@ -11,7 +11,7 @@
 // Its data goes through saveModule(id, value) into the same data file. summary() returns { label, value, unit, sub, warn } for the Today strip on Home (or null).
 const MODULES = [
   { id: 'tasks', pack: 'work', name: 'Tasks', about: 'A to-do list with due dates, reminders, repeats, history and stats.', view: 'Tasks', static: true, script: 'mod-tasks.js', recommended: true },
-  { id: 'notes', pack: 'work', name: 'Notes & Knowledge', subLabel: 'Notes', about: 'Rich notes with templates and checklists, saved Bookmarks to read later, and Spaced-Repetition Flashcards in one hub.', view: 'Notes', static: true, script: 'mod-notes.js' },
+  { id: 'notes', pack: 'work', name: 'Notes & Knowledge', subLabel: 'Notes', about: 'Rich notes with templates and checklists, and saved bookmarks to read later.', view: 'Notes', static: true, script: 'mod-notes.js' },
   { id: 'calendar', pack: 'work', name: 'Calendar & Plan', subLabel: 'Month & Day', about: 'Month grid, hour-by-hour day timeline, 7-day Week Plan and event Countdowns in one hub.', view: 'Calendar', static: true, script: 'mod-calendar.js', requires: ['tasks'] },
   { id: 'pomodoro', pack: 'work', name: 'Focus timer', about: 'A Pomodoro timer for a task. Adds up the time you really focus on each one.', script: 'mod-pomodoro.js', style: 'mod-pomodoro.css', requires: ['tasks'] },
   { id: 'money', pack: 'money', name: 'Money & Bills', about: 'Online & Cash accounts, PayLater (BNPL), monthly expenses & budgets, subscriptions and household bills in one hub.', script: 'mod-money.js', style: 'mod-money.css', view: 'Money' },
@@ -35,7 +35,8 @@ const MODULES = [
   { id: 'insights', hub: 'review', pack: 'smart', name: 'Insights', subLabel: 'Insights', about: 'Finds patterns across your modules, like how your sleep goes with your mood or your spending. Needs a few weeks of data, and shows patterns, not causes.', script: 'mod-insights.js', style: 'mod-insights.css', view: 'Insights' },
   { id: 'assistant', pack: 'smart', name: 'Assistant', about: 'Ask about your week or say what to add, and an AI (Google Gemini, with your own key) answers. It sees only what you tick, and does nothing until you confirm.', script: 'mod-assistant.js', style: 'mod-assistant.css', view: 'Assistant' },
   { id: 'review', pack: 'smart', name: 'Review & Goals', subLabel: 'Review', about: 'Day/week/month/year Review dashboard, automated & manual Goals, and cross-module Insights in one analytics hub.', script: 'mod-review.js', style: 'mod-review.css', view: 'Review' },
-  { id: 'cards', hub: 'notes', pack: 'smart', name: 'Flashcards', subLabel: 'Flashcards', about: 'FSRS flashcards, Oxford 3000/5000 & 750 Phrase List, Everyday & TOEIC chunks, 30 full 200-Q TOEIC L&R mocks, and 10 full 4-skill TOEFL iBT (2026) adaptive exams.', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
+  { id: 'cards', pack: 'smart', name: 'Flashcards', about: 'Manage your cards, load Oxford, Everyday and TOEIC decks, and take TOEIC and TOEFL mock exams.', script: 'mod-cards.js', style: 'mod-cards.css', view: 'Cards' },
+  { id: 'study', pack: 'smart', name: 'Study', about: 'Flip randomly selected flashcards, test yourself, and review on your FSRS-7 schedule.', script: 'mod-study.js', style: 'mod-study.css', view: 'Study', requires: ['cards'] },
 ];
 
 // Packages: Home shows the modules in a few sets instead of one long list. A new module names its set with `pack`.
@@ -564,6 +565,10 @@ invoke('get_modules').then(async (saved) => {
       if (!moduleData._on.includes(m.id)) moduleData._on.push(m.id);
       for (const r of m.requires || []) if (!moduleData._on.includes(r)) moduleData._on.push(r);
     }
+  }
+  if (!moduleData._study_split) {
+    if (moduleOn('cards') && !moduleOn('study')) await saveModule('_on', [...moduleData._on, 'study']);
+    await saveModule('_study_split', true);
   }
   for (const m of MODULES) if (moduleOn(m.id)) await startModule(m).catch((e) => console.error(m.id, e));
   syncViews();

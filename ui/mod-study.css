@@ -1,0 +1,25 @@
+.study-page { padding-top: 24px; }
+.study-main { width: min(100%, 800px); margin-inline: auto; padding-bottom: 18px; }
+.study-head { border-bottom: 1px solid var(--ink); padding-bottom: 14px; }
+.study-head small, .study-field > span, .study-progress span {
+  font-size: 12px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--mute);
+}
+.study-fields { display: grid; grid-template-columns: minmax(0, 2fr) repeat(2, minmax(0, 1fr)); gap: 14px; }
+.study-field { display: grid; gap: 4px; min-width: 0; }
+.study-actions, .study-progress { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-top: 16px; }
+.study-progress { justify-content: space-between; margin: 0 0 12px; }
+#study-available, #study-result p { color: var(--mute); font-size: 14px; }
+#study-result:not(:empty) { margin-top: 24px; border-top: 1px solid var(--line); padding-top: 12px; }
+#study-result h3 { margin: 0; }
+.study-card { cursor: default; }
+.study-actions button:disabled { opacity: .55; cursor: default; }
+
+@media (max-width: 640px) {
+  .study-page { padding-top: 12px; }
+  .study-fields { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+  .study-field:first-child { grid-column: 1 / -1; }
+}
+
+@media (min-width: 860px) {
+  .study-page { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: thin; }
+}

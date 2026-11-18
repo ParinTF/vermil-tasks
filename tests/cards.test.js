@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsStability, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
@@ -40,34 +40,52 @@ test('Spaced flashcards Leitner boxes advance on Got it and reset to Box 1 on Ag
   assert.equal(c3.reviews, 2);
 });
 
-test('FSRS-4.5 schedules initial grades, subsequent intervals, lapses and retrievability', () => {
-  const c0 = { id: 'f1', deck: 'TOEIC', front: 'All staff must ___ the rules.', back: 'comply with', example: 'Suppliers comply with safety laws.', next: '2026-11-16', reviews: 0 };
-  assert.equal(fsrsRetrievability(c0, '2026-11-16'), 1);
-
-  const pv0 = fsrsPreview(c0, '2026-11-16');
-  assert.deepEqual(pv0, { 1: 1, 2: 1, 3: 4, 4: 14 });
-
-  const c1 = fsrsReview(c0, 3, '2026-11-16'); // Good
-  assert.equal(c1.ivl, 4);
-  assert.equal(c1.next, '2026-11-20');
+test('FSRS-7 uses the published slow and fast traces and keeps its fractional due time', () => {
+  const now = new Date(2026, 10, 16, 9).getTime();
+  const c0 = { id: 'f1', deck: 'TOEIC', next: '2026-11-16', reviews: 0 };
+  const c1 = fsrsReview(c0, 3, now);
+  // Reference values from ts-fsrs 6.0.0 / FSRS7Model with default weights.
+  assert.deepEqual(c1.memory, { version: 7, stability: 3.9221, stabilityFast: 3.13768, difficulty: 3.53072398 });
   assert.equal(c1.reviews, 1);
-  assert.ok(Math.abs(fsrsRetrievability(c1, '2026-11-20') - 0.9) < 0.02);
+  assert.equal(c1.reviewedAt, now);
+  assert.ok(Math.abs(c1.ivl - 4.777721809) < 0.00001);
+  assert.equal(fsrsPreview(c0, now)[3], c1.ivl);
+  assert.equal(cardDue(c1, c1.next, c1.dueAt - 1), false);
+  assert.equal(cardDue(c1, c1.next, c1.dueAt), true);
+  assert.ok(Math.abs(fsrsRetrievability(c1, c1.dueAt) - 0.9) < 0.001);
 
-  const pv1 = fsrsPreview(c1, '2026-11-20');
-  assert.ok(pv1[1] < pv1[2] && pv1[2] < pv1[3] && pv1[3] < pv1[4]);
-
-  const c2 = fsrsReview(c1, 3, '2026-11-20'); // Good again
-  assert.ok(c2.s > c1.s && c2.ivl >= 10);
-
-  const lapsed = fsrsReview(c2, 1, c2.next); // Again -> lapse
-  assert.equal(lapsed.ivl, 1);
+  const laterToday = now + 0.08 * 86400000;
+  assert.deepEqual(fsrsReview(c1, 4, laterToday).memory,
+    { version: 7, stability: 6.72408871, stabilityFast: 82.41789787, difficulty: 1 });
+  const lapsed = fsrsReview(c1, 1, c1.dueAt);
   assert.equal(lapsed.lapses, 1);
-  assert.ok(lapsed.s < c2.s);
-  assert.ok(lapsed.d > c2.d);
+  assert.ok(lapsed.ivl > 0 && lapsed.ivl < 1 / 24);
+});
 
-  // Legacy Leitner cards keep their progress instead of resetting to 0
-  const legacy = { id: 'old', box: 3, lastReviewed: '2026-11-09', next: '2026-11-16' };
-  assert.equal(fsrsStability(legacy), 7);
+test('legacy cards keep their due date and counts before building FSRS-7 memory at the next rating', () => {
+  const legacy = { id: 'old', box: 3, s: 7, d: 4, lastReviewed: '2026-11-09', next: '2026-11-16', reviews: 5 };
+  const now = new Date(2026, 10, 16, 9).getTime();
+  assert.equal(cardDue(legacy, '2026-11-15', now), false);
+  assert.equal(cardDue(legacy, '2026-11-16', now), true);
+  assert.equal(fsrsRetrievability(legacy, now), null);
+  const updated = fsrsReview(legacy, 3, now);
+  assert.equal(updated.reviews, 6);
+  assert.deepEqual(updated.memory, fsrsReview({}, 3, now).memory);
+  assert.equal(legacy.next, '2026-11-16');
+});
+
+test('study sessions sample from the full eligible pool while keeping due reviews ahead of new cards', () => {
+  const { studySample } = require('../ui/logic.js');
+  const today = '2026-11-16';
+  const cards = [
+    { id: 'a', next: today }, { id: 'b', next: today }, { id: 'c', next: today },
+    { id: 'due', next: today, lastReviewed: '2026-11-15' }, { id: 'future', next: '2026-12-01' },
+  ];
+  const session = studyQueue(cards, today, { newLimit: 2, newDoneToday: 1, rng: () => 0 });
+  assert.deepEqual(session.queue.map((c) => c.id), ['due', 'b']);
+  assert.deepEqual(studySample(cards, 3, () => 0).map((c) => c.id), ['b', 'c', 'due']);
+  assert.equal(new Set(studySample(cards, 200, () => 0).map((c) => c.id)).size, 5);
+  assert.equal(cards[0].id, 'a');
 });
 
 test('deckSummary counts due, mastered (s >= 10 or Box 4-5) and sorted deck names, plus review XP', () => {

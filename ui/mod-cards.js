@@ -1,12 +1,11 @@
-// Spaced Flashcards module: FSRS-4.5 DSR spaced-repetition scheduler + Oxford 3000 & Advance Oxford 5000 (POS) + 750 Oxford Phrases + Daily + TOEIC + TOEFL iBT 2026
+// Spaced Flashcards module: FSRS-7 spaced repetition + Oxford 3000 & Advance Oxford 5000 (POS) + 750 Oxford Phrases + Daily + TOEIC + TOEFL iBT 2026
 // + Part 5 quizzes + 30 Full TOEIC L&R Mock Exams + 10 Full 4-Skill TOEFL iBT 2026 Exams.
 // Data: { cards, newLimit, advanceMode, newLog, extraToday, quizScores, mockScores, listenScores, fullScores, toeflScores, mockProgress }.
 (() => {
   let data = { cards: [], newLimit: 20, advanceMode: false, newLog: { day: '', count: 0 }, extraToday: 0, quizScores: {}, mockScores: {}, listenScores: {}, fullScores: {}, toeflScores: {}, mockProgress: {} };
   let toeflCtrl = null;
-  let mode = 'study'; // 'study' | 'quiz' | 'browse'
+  let mode = 'browse'; // 'quiz' | 'browse'
   let activeDeck = '';
-  let revealed = false;
   let quizSource = 'mock'; // 'mock' | 'sets' | 'topic' | 'cards'
   let quizSet = 1;
   let quizTag = '';
@@ -57,12 +56,10 @@
           el('h2', {}, 'Flashcards'),
           el('div', { className: 'fc-head-tools' },
             el('div', { className: 'fc-modes', role: 'tablist', ariaLabel: 'Flashcards mode' },
-              el('button', { id: 'fc-m-study', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'study'; revealed = false; paint(); } }, 'Study'),
               el('button', { id: 'fc-m-quiz', type: 'button', role: 'tab', onclick: () => { mode = 'quiz'; if (quizSource !== 'mock' && !quizState) startQuiz(); else { refreshPackStatus(); paint(); } } }, 'Test'),
               el('button', { id: 'fc-m-browse', type: 'button', role: 'tab', onclick: () => { stopMockAll(); mode = 'browse'; paint(); } }, 'All cards')),
             el('button', { id: 'fc-adv-toggle', type: 'button', className: 'fc-adv-btn', ariaPressed: 'false', onclick: toggleAdvance }, 'Advance · Oxford 5000'))),
         el('div', { id: 'fc-sum', className: 'fc-sum' }),
-        el('div', { id: 'fc-pace', className: 'fc-pace', role: 'group', ariaLabel: 'Daily new card limit' }),
         el('div', { id: 'fc-decks', className: 'tag-bar', hidden: true }),
         el('div', { id: 'fc-packs', className: 'fc-packs-wrap', hidden: true }),
         el('input', { id: 'fc-search', type: 'search', placeholder: 'Search words, chunks, POS, meanings or examples…', ariaLabel: 'Search flashcards', hidden: true, oninput: paint }),
@@ -106,26 +103,25 @@
     return String(filter).split('|').filter(Boolean).some((f) => (f.endsWith('*') ? d.startsWith(f.slice(0, -1)) : d === f));
   }
 
-  function queueState() {
-    const t = today();
-    const scoped = data.cards.filter((c) => matchesDeck(c, activeDeck));
-    return studyQueue(scoped, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
-  }
-  const dueList = () => queueState().queue;
-
-  function gradeCurrent(grade) {
-    const list = dueList();
-    const cur = list[0];
-    if (!cur) return;
-    const t = today();
-    const wasNew = cur.reviews === 0;
-    const updated = fsrsReview(cur, grade, t);
-    data.cards = data.cards.map((c) => (c.id === cur.id ? updated : c));
-    if (wasNew) data.newLog = { day: t, count: (data.newLog?.day === t ? data.newLog.count || 0 : 0) + 1 };
-    save();
-    emit('card-reviewed', { key: `card:${cur.id}:${t}` });
-    revealed = false;
-    paint();
+  async function rateCard(id, grade, now = Date.now()) {
+    const index = data.cards.findIndex((card) => card.id === id);
+    if (index < 0) return false;
+    const card = data.cards[index];
+    const rated = fsrsReview(card, grade, now);
+    const oldLog = data.newLog;
+    const day = localDay(new Date(now));
+    if (!card.lastReviewed) data.newLog = { day, count: newDone(day) + 1 };
+    const log = data.newLog;
+    data.cards[index] = rated;
+    try {
+      await saveModule('cards', data);
+    } catch (error) {
+      const current = data.cards.indexOf(rated);
+      if (current >= 0) data.cards[current] = card;
+      if (data.newLog === log) data.newLog = oldLog;
+      throw error;
+    }
+    return true;
   }
 
   function remove(card) {
@@ -209,6 +205,10 @@
   function isField(t) {
     return t.matches('input, textarea, select') && t.type !== 'checkbox';
   }
+
+  const renderWordLine = (text, pos) => pos
+    ? el('span', { className: 'fc-word-line' }, el('span', {}, text), el('span', { className: 'fc-pos' }, pos))
+    : text;
 
   function formatClock(sec) {
     const s = Math.max(0, Math.floor(sec || 0));
@@ -1565,21 +1565,10 @@
     quizState.answers[i] = idx;
     const ok = idx === q.ans;
     const t = today();
-    if (quizSyncFsrs && q.cardId) {
-      const card = data.cards.find((c) => c.id === q.cardId);
-      if (card) {
-        const updated = fsrsReview(card, ok ? 3 : 1, t);
-        data.cards = data.cards.map((c) => (c.id === card.id ? updated : c));
-        save();
-      }
-    }
+    if (quizSyncFsrs && q.cardId) rateCard(q.cardId, ok ? 3 : 1).catch((error) => tell('Could not save: ' + error.message));
     emit('card-reviewed', { key: `quiz:${q.id}:${t}` });
     paint();
   }
-
-  const renderWordLine = (text, pos) => (pos
-    ? el('span', { className: 'fc-word-line' }, el('span', {}, text), el('span', { className: 'fc-pos' }, pos))
-    : text);
 
   function paintQuiz(stage) {
     if (quizSource === 'mock') { paintMock(stage); return; }
@@ -1768,7 +1757,6 @@
     const t = today();
     const isMockActive = mode === 'quiz' && ((quizSource === 'mock' && Boolean(mockSession)) || (quizSource === 'toefl' && Boolean(toeflCtrl?.isActive?.())));
     root()?.classList?.toggle('mock-active', isMockActive);
-    $('fc-m-study').ariaSelected = String(mode === 'study');
     if ($('fc-m-quiz')) $('fc-m-quiz').ariaSelected = String(mode === 'quiz');
     $('fc-m-browse').ariaSelected = String(mode === 'browse');
     const advBtn = $('fc-adv-toggle');
@@ -1783,22 +1771,11 @@
     if ($('fc-sum')) {
       $('fc-sum').hidden = isMockActive;
       $('fc-sum').replaceChildren(
-        fig('Due today', String(qAll.queue.length)),
+        fig('Due now', String(qAll.queue.length)),
         fig('Mastered (10+ days)', String(s.mastered)),
         fig('Total cards', String(s.total)));
     }
 
-    if ($('fc-pace')) {
-      $('fc-pace').hidden = mode !== 'study';
-      $('fc-pace').replaceChildren(
-        el('span', { className: 'fc-pace-label' }, 'New / day:'),
-        ...[[20, '20'], [50, '50'], [0, 'All']].map(([lim, lbl]) => el('button', {
-          type: 'button',
-          className: 'tag-pill' + ((data.newLimit ?? 20) === lim ? ' active' : ''),
-          onclick: () => { data.newLimit = lim; data.extraToday = 0; save(); paint(); },
-        }, lbl)),
-        ...(qAll.newDue > qAll.newShown ? [el('small', { className: 'fc-pace-info' }, `${qAll.newDue} waiting`)] : []));
-    }
     if ($('fc-search')) $('fc-search').hidden = mode !== 'browse';
 
     const activeExists = !activeDeck || String(activeDeck).split('|').filter(Boolean).some((f) => (f.endsWith('*')
@@ -1823,7 +1800,7 @@
         ...['A1', 'A2', 'B1', 'B2'].map((lvl) => [`Oxford · ${lvl}*`, `Oxford ${lvl}`]),
         ...['B2', 'C1'].map((lvl) => [`Oxford 5000 · ${lvl}*`, `Adv ${lvl}`]),
       ].filter(([pat]) => s.decks.some((d) => d.startsWith(pat.slice(0, -1))));
-      const pickDeck = (val) => { activeDeck = val; revealed = false; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); };
+      const pickDeck = (val) => { activeDeck = val; if (mode === 'quiz') startQuiz('cards', { count: quizCount }); else paint(); };
       const ox5kLvl = activeDeck.match(/^Oxford 5000 · (B2|C1)/);
       const ox3kLvl = activeDeck.match(/^Oxford · (A1|A2|B1|B2)/);
       const oxPhrLvl = activeDeck.match(/^Oxford Phrases · (A1|A2|B1|B2|C1)/);
@@ -1857,70 +1834,30 @@
     const stage = $('fc-stage');
     if (mode === 'quiz') { paintQuiz(stage); syncMockTimer(); return; }
     syncMockTimer();
-    if (mode === 'study') {
-      const qs = queueState();
-      const due = qs.queue;
-      if (!due.length) {
-        const waiting = qs.newDue > 0;
-        stage.replaceChildren(
-          el('div', { className: 'fc-done-box' },
-            el('h3', {}, data.cards.length ? 'All caught up for today' : 'No flashcards yet'),
-            el('p', {}, data.cards.length
-              ? (waiting ? `You finished today’s pacing target! ${qs.newDue} unseen cards are queued for upcoming days.` : 'You have reviewed every card due today. Come back tomorrow or add new cards.')
-              : 'Load the Oxford 3000 words, Everyday, or TOEIC libraries above, or add your own flashcard on the right.'),
-            ...(waiting ? [el('button', {
-              type: 'button', className: 'primary fc-more-btn',
-              onclick: () => { data.extraDay = t; data.extraToday = (data.extraDay === t ? data.extraToday || 0 : 0) + 20; paint(); },
-            }, el('span', {}, 'Study 20 more now'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))] : [])));
-        return;
-      }
-      const cur = due[0];
-      const pv = fsrsPreview(cur, t);
-      const days = (n) => (n >= 365 ? `${Math.round(n / 36.5) / 10}y` : n >= 30 ? `${Math.round(n / 3) / 10}mo` : `${n}d`);
-      const grades = [[1, 'Again', 'again'], [2, 'Hard', 'hard'], [3, 'Good', 'good'], [4, 'Easy', 'easy']];
-      const recall = cur.lastReviewed ? `${Math.round(fsrsRetrievability(cur, t) * 100)}% recall` : 'New card';
-      const cardBox = el('div', { className: 'fc-card' + (revealed ? ' revealed' : ''), onclick: () => { if (!revealed) { revealed = true; paint(); } } },
-        el('div', { className: 'fc-card-meta' },
-          el('span', {}, cur.deck || 'General'),
-          el('span', {}, `${recall} · ${due.length} left today`)),
-        el('div', { className: 'fc-card-front' }, renderWordLine(cur.front, cur.pos)),
-        ...(revealed
-          ? [
-              el('div', { className: 'fc-card-back' }, cur.back),
-              ...(cur.example ? [el('p', { className: 'fc-card-example' }, cur.example)] : []),
-              el('div', { className: 'fc-card-acts fc-grades' },
-                ...grades.map(([g, label, cls]) => el('button', { type: 'button', className: 'fc-grade ' + cls, title: `${label} (${g})`, onclick: (e) => { e.stopPropagation(); gradeCurrent(g); } },
-                  el('b', {}, label), el('small', {}, days(pv[g]))))),
-            ]
-          : [
-              el('button', { type: 'button', className: 'primary fc-reveal-btn', onclick: (e) => { e.stopPropagation(); revealed = true; paint(); } },
-                el('span', {}, 'Show answer (Space)'), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')),
-            ]));
-      stage.replaceChildren(cardBox);
-    } else {
-      const needle = ($('fc-search')?.value || '').trim().toLowerCase();
-      const list = data.cards.filter((c) => matchesDeck(c, activeDeck) && (!needle || `${c.front}\n${c.pos || ''}\n${c.back}\n${c.example || ''}\n${c.deck || ''}`.toLowerCase().includes(needle)));
-      stage.replaceChildren(
-        list.length
-          ? el('ul', { className: 'fc-list' }, ...list.slice(0, 200).map((c) => {
-              const del = el('button', { type: 'button', className: 'fc-del', ariaLabel: 'Delete card', textContent: '✕', onclick: () => remove(c) });
-              const stab = fsrsStability(c);
-              return el('li', { className: 'fc-row' },
-                el('div', { className: 'fc-row-main' },
-                  el('b', {}, renderWordLine(c.front, c.pos)),
-                  el('span', {}, c.back + (c.example ? ` · "${c.example}"` : ''))),
-                el('div', { className: 'fc-row-meta' },
-                  el('span', { className: 'task-tag' }, c.deck || 'General'),
-                  el('small', {}, `${stab ? `stable ${Math.round(stab)}d · ${Math.round(fsrsRetrievability(c, t) * 100)}%` : 'new'} · due ${c.next <= t ? 'today' : fmt(parseDay(c.next), { day: 'numeric', month: 'short' })}`),
-                  del));
-            }), ...(list.length > 200 ? [el('p', { className: 'fc-tip' }, `Showing first 200 of ${list.length} matching cards — use Search or deck filters above to narrow down.`)] : []))
-          : el('p', { className: 'empty' }, 'No cards match this filter.'));
-    }
+    const needle = ($('fc-search')?.value || '').trim().toLowerCase();
+    const list = data.cards.filter((c) => matchesDeck(c, activeDeck) && (!needle || `${c.front}\n${c.pos || ''}\n${c.back}\n${c.example || ''}\n${c.deck || ''}`.toLowerCase().includes(needle)));
+    stage.replaceChildren(
+      list.length
+        ? el('ul', { className: 'fc-list' }, ...list.slice(0, 200).map((c) => {
+            const del = el('button', { type: 'button', className: 'fc-del', ariaLabel: 'Delete card', textContent: '✕', onclick: () => remove(c) });
+            const recall = fsrsRetrievability(c);
+            const due = cardDue(c, t) ? 'now' : Number.isFinite(c.dueAt)
+              ? fmt(new Date(c.dueAt), { day: 'numeric', month: 'short', hour: 'numeric', minute: '2-digit' })
+              : fmt(parseDay(c.next), { day: 'numeric', month: 'short' });
+            return el('li', { className: 'fc-row' },
+              el('div', { className: 'fc-row-main' },
+                el('b', {}, renderWordLine(c.front, c.pos)),
+                el('span', {}, c.back + (c.example ? ` · "${c.example}"` : ''))),
+              el('div', { className: 'fc-row-meta' },
+                el('span', { className: 'task-tag' }, c.deck || 'General'),
+                el('small', {}, `${recall !== null ? Math.round(recall * 100) + '% recall' : c.lastReviewed ? 'reviewed' : 'new'} · due ${due}`),
+                del));
+          }), ...(list.length > 200 ? [el('p', { className: 'fc-tip' }, `Showing first 200 of ${list.length} matching cards — use Search or deck filters above to narrow down.`)] : []))
+        : el('p', { className: 'empty' }, 'No cards match this filter.'));
   }
 
-  const group = { module: 'cards', title: 'Flashcards', items: [['Space', 'Reveal answer'], ['1 2 3 4', 'Grade card / pick A B C D'], ['R', 'Replay listening clip'], ['Enter / Arrows', 'Next / prev question'], ['F', 'Flag mock question'], ['N', 'New card']] };
+  const group = { module: 'cards', title: 'Flashcards', items: [['1 2 3 4', 'Pick A B C D'], ['R', 'Replay listening clip'], ['Enter / Arrows', 'Next / prev question'], ['F', 'Flag mock question'], ['N', 'New card']] };
   const commandFn = () => [
-    { label: 'Study flashcards', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'study'; paint(); } },
     { label: 'TOEIC: Full Listening & Reading Mock Exam (30 Sets × 200 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { await setView('cards'); mode = 'quiz'; quizSource = 'mock'; refreshPackStatus(); paint(); } },
     { label: 'TOEFL iBT (2026): Full 4-Skill Mock Exams (10 Sets · 1–6 Band)', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; quizSource = 'toefl'; await ensureToeflCtrl(); paint(); } },
     { label: 'TOEIC: Part 5 Practice Sets (20 × 50 Qs)', hint: 'Flashcards', kind: 'Command', run: async () => { stopMockAll(); await setView('cards'); mode = 'quiz'; startQuiz('sets', { set: quizSet || 1 }); } },
@@ -1941,18 +1878,17 @@
   ];
 
   defineModule('cards', {
-    summary() {
-      if (!data.cards.length) return null;
-      const t = today();
-      const q = studyQueue(data.cards, t, { newLimit: effectiveLimit(), newDoneToday: newDone(t) });
-      const s = deckSummary(data.cards, t);
-      return { label: 'Flashcards', value: String(q.queue.length), unit: 'due today', warn: q.queue.length > 0, sub: `${s.mastered} of ${s.total} mastered` };
-    },
+    front: renderWordLine,
+    studyData() { return { cards: data.cards, newLimit: data.newLimit, effectiveLimit: effectiveLimit(), newDoneToday: newDone(today()) }; },
+    setStudyLimit(limit) { data.newLimit = limit; data.extraToday = 0; save(); },
+    rateCard,
     weekly(since, until) {
       const rev = data.cards.filter((c) => c.lastReviewed && c.lastReviewed >= since && c.lastReviewed <= until).length;
       return { title: 'Flashcards', lines: [`${rev} card${rev === 1 ? '' : 's'} reviewed`] };
     },
     async start() {
+      if (typeof VermilFSRS7 === 'undefined') await loadFile('script', { src: 'vendor/fsrs7.js', id: 'script-fsrs7' });
+      mode = 'browse';
       if (typeof OXFORD_PHRASE_PACKS === 'undefined' && !$('script-oxford-phrase-pack')) {
         await loadFile('script', { src: 'oxford-phrase-pack.js', id: 'script-oxford-phrase-pack' }).catch(() => {});
       }
@@ -2036,8 +1972,6 @@
         else if (answered && (e.key === 'Enter' || e.code === 'Space')) { e.preventDefault(); advanceQuiz(); }
         return;
       }
-      if (mode === 'study' && e.code === 'Space') { e.preventDefault(); if (!revealed) { revealed = true; paint(); } }
-      else if (mode === 'study' && revealed && num >= 1 && num <= 4) { e.preventDefault(); gradeCurrent(num); }
     },
   });
 })();
