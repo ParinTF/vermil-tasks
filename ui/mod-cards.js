@@ -766,37 +766,43 @@
     }
   }
 
-  function recordSectionScore(type, setNum, report) {
+  function nowStamp() {
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function recordSectionScore(type, setNum, report, extra = {}) {
     const key = String(setNum);
+    const stamp = extra.at || nowStamp();
     if (type === 'listening') {
       const prev = data.listenScores?.[key];
-      data.listenScores = {
-        ...(data.listenScores || {}),
-        [key]: {
-          bestScaled: Math.max(prev?.bestScaled || 0, report.scaled),
-          bestRaw: Math.max(prev?.bestRaw || 0, report.correct),
-          lastScaled: report.scaled,
-          lastRaw: report.correct,
-          band: toeicListeningCefr(Math.max(prev?.bestScaled || 0, report.scaled)),
-          attempts: (prev?.attempts || 0) + 1,
-          parts: report.parts,
-        },
-      };
+      const entry = recordMockScoreEntry(prev, {
+        section: 'listening',
+        report,
+        questions: extra.questions || [],
+        answers: extra.answers || [],
+        flags: extra.flags || [],
+        examMode: extra.examMode || mockSession?.examMode || 'exam',
+        at: stamp,
+      });
+      data.listenScores = { ...(data.listenScores || {}), [key]: entry };
+      return entry;
     } else if (type === 'reading') {
       const prev = data.mockScores?.[key];
-      data.mockScores = {
-        ...(data.mockScores || {}),
-        [key]: {
-          bestScaled: Math.max(prev?.bestScaled || 0, report.scaled),
-          bestRaw: Math.max(prev?.bestRaw || 0, report.correct),
-          lastScaled: report.scaled,
-          lastRaw: report.correct,
-          band: toeicCefrBand(Math.max(prev?.bestScaled || 0, report.scaled)),
-          attempts: (prev?.attempts || 0) + 1,
-          parts: report.parts,
-        },
-      };
+      const entry = recordMockScoreEntry(prev, {
+        section: 'reading',
+        report,
+        questions: extra.questions || [],
+        answers: extra.answers || [],
+        flags: extra.flags || [],
+        examMode: extra.examMode || mockSession?.examMode || 'exam',
+        at: stamp,
+      });
+      data.mockScores = { ...(data.mockScores || {}), [key]: entry };
+      return entry;
     }
+    return null;
   }
 
   async function submitMockExam(autoTimedOut = false) {
@@ -807,10 +813,17 @@
       if (!(await ask(`You still have ${unanswered} unanswered question${unanswered === 1 ? '' : 's'}. ${label}?`, label))) return;
     }
     stopMockAll();
+    const stamp = nowStamp();
 
     if (mockSession.stage === 'listening' && mockSession.isFull) {
       const lRep = scoreListeningExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
-      recordSectionScore('listening', mockSession.set, lRep);
+      recordSectionScore('listening', mockSession.set, lRep, {
+        questions: mockSession.questions,
+        answers: mockSession.answers,
+        flags: mockSession.flags,
+        examMode: mockSession.examMode,
+        at: stamp,
+      });
       mockSession.stage1 = {
         questions: mockSession.questions,
         answers: [...mockSession.answers],
@@ -829,31 +842,48 @@
 
     if (mockSession.stage === 'listening') {
       const report = scoreListeningExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
-      recordSectionScore('listening', mockSession.set, report);
+      const entry = recordSectionScore('listening', mockSession.set, report, {
+        questions: mockSession.questions,
+        answers: mockSession.answers,
+        flags: mockSession.flags,
+        examMode: mockSession.examMode,
+        at: stamp,
+      });
       mockSession.submitted = true;
       mockSession.report = report;
       mockSession.listenReport = report;
+      mockSession.activeAttempt = entry?.history?.[entry.history.length - 1]?.attempt || entry?.attempts || 1;
     } else if (mockSession.isFull && mockSession.stage1) {
       const rRep = scoreMockExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
-      recordSectionScore('reading', mockSession.set, rRep);
+      recordSectionScore('reading', mockSession.set, rRep, {
+        questions: mockSession.questions,
+        answers: mockSession.answers,
+        flags: mockSession.flags,
+        examMode: mockSession.examMode,
+        at: stamp,
+      });
       const lRep = mockSession.stage1.report;
       const fullRep = scoreFullToeicExam(lRep, rRep);
+      const fullQs = [...mockSession.stage1.questions, ...mockSession.questions];
+      const fullAns = [...mockSession.stage1.answers, ...mockSession.answers];
+      const fullFlags = [...mockSession.stage1.flags, ...mockSession.flags];
       const key = String(mockSession.set);
       const prev = data.fullScores?.[key];
-      data.fullScores = {
-        ...(data.fullScores || {}),
-        [key]: {
-          bestTotal: Math.max(prev?.bestTotal || 0, fullRep.totalScaled),
-          bestListen: Math.max(prev?.bestListen || 0, fullRep.listenScaled),
-          bestRead: Math.max(prev?.bestRead || 0, fullRep.readScaled),
-          lastTotal: fullRep.totalScaled,
-          band: toeicTotalCefr(Math.max(prev?.bestTotal || 0, fullRep.totalScaled)),
-          attempts: (prev?.attempts || 0) + 1,
-        },
-      };
-      mockSession.questions = [...mockSession.stage1.questions, ...mockSession.questions];
-      mockSession.answers = [...mockSession.stage1.answers, ...mockSession.answers];
-      mockSession.flags = [...mockSession.stage1.flags, ...mockSession.flags];
+      const fullEntry = recordMockScoreEntry(prev, {
+        section: 'full',
+        report: fullRep,
+        listenReport: lRep,
+        readReport: rRep,
+        questions: fullQs,
+        answers: fullAns,
+        flags: fullFlags,
+        examMode: mockSession.examMode,
+        at: stamp,
+      });
+      data.fullScores = { ...(data.fullScores || {}), [key]: fullEntry };
+      mockSession.questions = fullQs;
+      mockSession.answers = fullAns;
+      mockSession.flags = fullFlags;
       mockSession.submitted = true;
       mockSession.listenReport = lRep;
       mockSession.readReport = rRep;
@@ -862,12 +892,20 @@
         ...fullRep,
         missed: [...(lRep.missed || []), ...(rRep.missed || [])],
       };
+      mockSession.activeAttempt = fullEntry?.history?.[fullEntry.history.length - 1]?.attempt || fullEntry?.attempts || 1;
     } else {
       const report = scoreMockExam(mockSession.questions, mockSession.answers, mockSession.elapsed);
-      recordSectionScore('reading', mockSession.set, report);
+      const entry = recordSectionScore('reading', mockSession.set, report, {
+        questions: mockSession.questions,
+        answers: mockSession.answers,
+        flags: mockSession.flags,
+        examMode: mockSession.examMode,
+        at: stamp,
+      });
       mockSession.submitted = true;
       mockSession.report = report;
       mockSession.readReport = report;
+      mockSession.activeAttempt = entry?.history?.[entry.history.length - 1]?.attempt || entry?.attempts || 1;
     }
 
     mockSession.paused = false;
@@ -1161,6 +1199,210 @@
       }));
   }
 
+  function applyMockAttemptToSession(att, { section = mockSection } = {}) {
+    if (!mockSession || !att) return;
+    const isFull = Boolean(mockSession.isFull || section === 'full');
+    const isListen = !isFull && (section === 'listening' || mockSession.stage === 'listening');
+    mockSession.activeAttempt = att.attempt || 1;
+    mockSession.legacyAttempt = !att.hasAnswers ? att : null;
+    mockSession.aiDiagnosis = null;
+    mockSession.aiDiagnosisBusy = false;
+    mockSession.aiDiagnosisError = '';
+    mockSession.aiQuestions = {};
+
+    const len = mockSession.questions.length;
+    if (att.hasAnswers && att.answers.length === len) {
+      mockSession.answers = [...att.answers];
+      mockSession.flags = Array.isArray(att.flags) && att.flags.length === len ? [...att.flags] : new Array(len).fill(false);
+      mockSession.elapsed = att.elapsedSec || 0;
+      mockSession.examMode = att.examMode || 'exam';
+      if (isFull && len === 200) {
+        const lQs = mockSession.questions.slice(0, 100);
+        const rQs = mockSession.questions.slice(100);
+        const lRep = scoreListeningExam(lQs, mockSession.answers.slice(0, 100), Math.round((att.elapsedSec || 0) * 0.4));
+        const rRep = scoreMockExam(rQs, mockSession.answers.slice(100), Math.round((att.elapsedSec || 0) * 0.6));
+        const fullRep = scoreFullToeicExam(lRep, rRep);
+        mockSession.listenReport = lRep;
+        mockSession.readReport = rRep;
+        mockSession.fullReport = fullRep;
+        mockSession.report = { ...fullRep, missed: [...(lRep.missed || []), ...(rRep.missed || [])] };
+      } else if (isListen) {
+        const rep = scoreListeningExam(mockSession.questions, mockSession.answers, att.elapsedSec || 0);
+        mockSession.report = rep;
+        mockSession.listenReport = rep;
+        mockSession.readReport = null;
+        mockSession.fullReport = null;
+      } else {
+        const rep = scoreMockExam(mockSession.questions, mockSession.answers, att.elapsedSec || 0);
+        mockSession.report = rep;
+        mockSession.readReport = rep;
+        mockSession.listenReport = null;
+        mockSession.fullReport = null;
+      }
+      const firstMissed = mockSession.questions.findIndex((q, idx) => mockSession.answers[idx] !== q.ans);
+      mockSession.revFilter = firstMissed >= 0 ? 'missed' : 'all';
+      mockSession.revPart = 0;
+      mockSession.index = firstMissed >= 0 ? firstMissed : 0;
+    } else {
+      mockSession.answers = new Array(len).fill(null);
+      mockSession.flags = new Array(len).fill(false);
+      mockSession.elapsed = att.elapsedSec || 0;
+      mockSession.examMode = att.examMode || 'exam';
+      const fallbackParts = att.parts || {};
+      if (isFull) {
+        const lParts = {
+          1: fallbackParts[1] || { correct: 0, total: 6 },
+          2: fallbackParts[2] || { correct: 0, total: 25 },
+          3: fallbackParts[3] || { correct: 0, total: 39 },
+          4: fallbackParts[4] || { correct: 0, total: 30 },
+        };
+        const rParts = {
+          5: fallbackParts[5] || { correct: 0, total: 30 },
+          6: fallbackParts[6] || { correct: 0, total: 16 },
+          7: fallbackParts[7] || { correct: 0, total: 54, singleCorrect: 0, singleTotal: 29, multiCorrect: 0, multiTotal: 25 },
+        };
+        mockSession.listenReport = { scaled: att.listenScaled || 0, correct: 0, total: 100, parts: lParts, missed: [] };
+        mockSession.readReport = { scaled: att.readScaled || 0, correct: 0, total: 100, parts: rParts, missed: [] };
+        mockSession.fullReport = {
+          totalScaled: att.scaled,
+          listenScaled: att.listenScaled || 0,
+          readScaled: att.readScaled || 0,
+          band: att.band,
+          correct: att.correct,
+          total: att.total || 200,
+          elapsedSec: att.elapsedSec || 0,
+        };
+        mockSession.report = { ...mockSession.fullReport, missed: [] };
+      } else if (isListen) {
+        const rep = {
+          scaled: att.scaled,
+          band: att.band,
+          correct: att.correct,
+          total: att.total || 100,
+          pct: att.pct,
+          elapsedSec: att.elapsedSec || 0,
+          parts: {
+            1: fallbackParts[1] || { correct: 0, total: 6 },
+            2: fallbackParts[2] || { correct: 0, total: 25 },
+            3: fallbackParts[3] || { correct: 0, total: 39 },
+            4: fallbackParts[4] || { correct: 0, total: 30 },
+          },
+          missed: [],
+        };
+        mockSession.report = rep;
+        mockSession.listenReport = rep;
+        mockSession.readReport = null;
+        mockSession.fullReport = null;
+      } else {
+        const rep = {
+          scaled: att.scaled,
+          band: att.band,
+          correct: att.correct,
+          total: att.total || 100,
+          pct: att.pct,
+          elapsedSec: att.elapsedSec || 0,
+          parts: {
+            5: fallbackParts[5] || { correct: 0, total: 30 },
+            6: fallbackParts[6] || { correct: 0, total: 16 },
+            7: fallbackParts[7] || { correct: 0, total: 54, singleCorrect: 0, singleTotal: 29, multiCorrect: 0, multiTotal: 25 },
+          },
+          missed: [],
+        };
+        mockSession.report = rep;
+        mockSession.readReport = rep;
+        mockSession.listenReport = null;
+        mockSession.fullReport = null;
+      }
+      mockSession.revFilter = 'all';
+      mockSession.revPart = 0;
+      mockSession.index = 0;
+    }
+  }
+
+  async function openMockHistory(setNum = 1, { section = mockSection, attemptNum = 0 } = {}) {
+    const s = Number(setNum) || 1;
+    const scoreMap = section === 'full' ? (data.fullScores || {}) : section === 'listening' ? (data.listenScores || {}) : (data.mockScores || {});
+    const sc = scoreMap[String(s)];
+    const hist = normalizeMockHistory(sc, section);
+    if (!hist.length) {
+      await launchMockEntry(s, { section });
+      return;
+    }
+
+    loadingMockSet = s;
+    stopMockAll();
+    paint();
+    try {
+      const isFull = section === 'full';
+      const vol = Math.ceil(s / 5);
+      let questions = [];
+      if (section === 'listening') {
+        const rawL = await ensureListeningVolume(s);
+        questions = buildListeningExam(s, rawL);
+      } else if (section === 'reading') {
+        const p7Groups = await ensureReadingVolume(s);
+        const p5Pool = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+        const p6Passages = typeof TOEIC_MOCK_P6 !== 'undefined' ? TOEIC_MOCK_P6 : [];
+        questions = buildMockExam(s, { p5Pool, p6Passages, p7Groups });
+      } else {
+        const rawL = await ensureListeningVolume(s);
+        const lQs = buildListeningExam(s, rawL);
+        const p7Groups = await ensureReadingVolume(s);
+        const p5Pool = typeof TOEIC_QUIZ !== 'undefined' ? TOEIC_QUIZ : [];
+        const p6Passages = typeof TOEIC_MOCK_P6 !== 'undefined' ? TOEIC_MOCK_P6 : [];
+        const rQs = buildMockExam(s, { p5Pool, p6Passages, p7Groups });
+        questions = [...lQs, ...rQs];
+      }
+      loadingMockSet = 0;
+      if (!questions.length) {
+        tell(`Mock Set ${s} could not be loaded.`);
+        paint();
+        return;
+      }
+
+      const hasInstalledPack = Boolean(packStatus[vol]?.installed);
+      mockSession = {
+        set: s,
+        vol,
+        isFull,
+        stage: section === 'reading' ? 'reading' : 'listening',
+        intermission: false,
+        stage1: null,
+        ttsFallback: Boolean(window.__TAURI__?.core?.invoke && !hasInstalledPack),
+        examMode: 'exam',
+        questions,
+        answers: new Array(questions.length).fill(null),
+        flags: new Array(questions.length).fill(false),
+        index: 0,
+        elapsed: 0,
+        paused: false,
+        navOpen: false,
+        docTab: 'all',
+        submitted: true,
+        report: null,
+        listenReport: null,
+        readReport: null,
+        fullReport: null,
+        revFilter: 'missed',
+        revPart: 0,
+        activeAttempt: 1,
+        legacyAttempt: null,
+        aiDiagnosis: null,
+        aiDiagnosisBusy: false,
+        aiDiagnosisError: '',
+        aiQuestions: {},
+      };
+      const targetAtt = (attemptNum ? hist.find((h) => h.attempt === attemptNum) : null) || hist[hist.length - 1];
+      applyMockAttemptToSession(targetAtt, { section });
+      quizSource = 'mock';
+      paint();
+    } catch (e) {
+      loadingMockSet = 0;
+      tell('Could not open mock history: ' + (e.message || e));
+      paint();
+    }
+  }
+
   function paintMock(stage) {
     const LETTERS = ['A', 'B', 'C', 'D'];
     // Lobby when no active mock test session
@@ -1182,17 +1424,24 @@
       const resumeKey = inProgKeys.sort((a, b) => Number(b.replace(/^[LF]/, '')) - Number(a.replace(/^[LF]/, '')))[0];
       const resumeProg = resumeKey ? data.mockProgress[resumeKey] : null;
       const resumeSetNum = resumeKey ? Number(resumeKey.replace(/^[LF]/, '')) : 0;
+      const resumeHist = resumeSetNum && scoreMap[String(resumeSetNum)] ? normalizeMockHistory(scoreMap[String(resumeSetNum)], mockSection) : [];
 
       const resumeBanner = resumeProg
         ? el('div', { className: 'fc-mk-resume' },
             el('div', {},
               el('strong', {}, `Mock Set ${resumeSetNum} (${mockSection}) in progress · Q${(resumeProg.stage === 'reading' || mockSection === 'reading' ? 101 : 1) + (resumeProg.index || 0)}`),
               el('small', {}, `${resumeProg.answers.filter((a) => a !== null && a !== undefined).length}/100 answered · ${resumeProg.examMode === 'exam' ? 'Exam Mode' : 'Practice Mode'}`)),
-            el('button', {
-              type: 'button',
-              className: 'primary',
-              onclick: () => launchMockEntry(resumeSetNum, { section: mockSection, resume: true }),
-            }, el('span', {}, `Resume Set ${resumeSetNum}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→')))
+            el('div', { className: 'fc-mk-promptacts' },
+              ...(resumeHist.length ? [el('button', {
+                type: 'button',
+                className: 'tag-pill',
+                onclick: () => openMockHistory(resumeSetNum, { section: mockSection }),
+              }, `History (${resumeHist.length})`)] : []),
+              el('button', {
+                type: 'button',
+                className: 'primary',
+                onclick: () => launchMockEntry(resumeSetNum, { section: mockSection, resume: true }),
+              }, el('span', {}, `Resume Set ${resumeSetNum}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))))
         : null;
 
       const pendingVol = pendingPackSet ? Math.ceil(pendingPackSet / 5) : 0;
@@ -1223,6 +1472,7 @@
         ...Array.from({ length: 30 }, (_, idx) => {
           const s = idx + 1;
           const sc = scoreMap[String(s)];
+          const hist = sc ? normalizeMockHistory(sc, mockSection) : [];
           const pKey = `${progPrefix}${s}`;
           const prog = data.mockProgress?.[pKey];
           const hasProg = Boolean(prog && ((prog.answers || []).some((a) => a !== null && a !== undefined) || prog.stage === 'reading'));
@@ -1234,14 +1484,20 @@
               : hasProg
                 ? `Resume Q${(prog.stage === 'reading' || mockSection === 'reading' ? 101 : 1) + (prog.index || 0)}`
                 : mockSection === 'full' ? '200 Qs · Part 1–7' : mockSection === 'listening' ? '100 Qs · Part 1–4' : '100 Qs · Part 5–7';
+          const histLine = !isLoad && hist.length > 1
+            ? `#1 ${hist[0].correct} → #${hist[hist.length - 1].attempt} ${hist[hist.length - 1].correct}/${hist[hist.length - 1].total}`
+            : !isLoad && hist.length === 1 && !hasProg
+              ? '1 attempt · View Report'
+              : '';
           return el('button', {
             type: 'button',
             className: 'fc-mk-setcard' + (sc ? ' scored' : '') + (hasProg ? ' inprog' : '') + (isLoad ? ' disabled' : ''),
             disabled: loadingMockSet > 0,
-            onclick: () => launchMockEntry(s, { section: mockSection, resume: hasProg }),
+            onclick: () => (sc && !hasProg ? openMockHistory(s, { section: mockSection }) : launchMockEntry(s, { section: mockSection, resume: hasProg })),
           },
           el('b', {}, `Mock ${s}`, ...(sc ? [el('span', { className: 'fc-mk-band' }, sc.band)] : [])),
-          el('small', {}, subLabel));
+          el('small', {}, subLabel),
+          ...(histLine ? [el('span', { className: 'fc-mk-setcard-hist' }, histLine)] : []));
         }));
 
       const packStrip = renderPackStrip();
@@ -1581,6 +1837,7 @@
             ...aq.scriptLines.map((line) => el('p', {}, line)))
         : null;
 
+      const isLegacyView = Boolean(mockSession.legacyAttempt);
       const reviewAudio = aq?.audioKey ? renderAudioBar(aq, { inReview: true }) : null;
       const reviewDetail = aq
         ? el('div', { className: 'fc-mk-split' + (leftPane ? '' : ' single') },
@@ -1589,24 +1846,26 @@
               el('div', { className: 'fc-card fc-qz-card' },
                 el('div', { className: 'fc-card-meta' },
                   el('span', {}, `Q${aq.num} · Part ${aq.part} · ${aq.tag}`),
-                  el('span', {}, aPick === aq.ans ? '✓ Correct' : aPick === null ? '— Skipped' : '✕ Missed')),
+                  el('span', {}, isLegacyView ? `Answer: (${LETTERS[aq.ans]})` : aPick === aq.ans ? '✓ Correct' : aPick === null ? '— Skipped' : '✕ Missed')),
                 ...(reviewAudio ? [reviewAudio] : []),
                 el('div', { className: 'fc-qz-q' }, aq.prompt ? aq.prompt : aq.q),
                 el('div', { className: 'fc-qz-choices' }, ...aq.choices.map((ch, ci) => {
                   let cls = 'fc-qz-opt';
                   if (ci === aq.ans) cls += ' right';
-                  else if (ci === aPick) cls += ' wrong';
+                  else if (!isLegacyView && ci === aPick) cls += ' wrong';
                   else cls += ' dim';
                   return el('button', { type: 'button', className: cls, disabled: true },
                     el('b', { className: 'fc-qz-let' }, LETTERS[ci]), el('span', {}, ch));
                 })),
                 ...(scriptBox ? [scriptBox] : []),
-                el('div', { className: 'fc-qz-explain ' + (aPick === aq.ans ? 'ok' : 'bad') },
-                  el('strong', {}, aPick === aq.ans
-                    ? `✓ Correct (${LETTERS[aq.ans]})`
-                    : aPick === null || aPick === undefined
-                      ? `Unanswered — Correct answer is (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`
-                      : `✕ Your pick: (${LETTERS[aPick]})  →  Correct: (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`),
+                el('div', { className: 'fc-qz-explain ' + (isLegacyView || aPick === aq.ans ? 'ok' : 'bad') },
+                  el('strong', {}, isLegacyView
+                    ? `Answer Key: (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`
+                    : aPick === aq.ans
+                      ? `✓ Correct (${LETTERS[aq.ans]})`
+                      : aPick === null || aPick === undefined
+                        ? `Unanswered — Correct answer is (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`
+                        : `✕ Your pick: (${LETTERS[aPick]})  →  Correct: (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`),
                   el('div', { className: 'fc-qz-why' }, ...String(aq.why || '').split('\n').map((line) => el('p', {}, line)))),
                 renderMockQuestionAiBox(aq, aIdx, aPick))))
         : el('p', { className: 'fc-qz-perfect' }, 'No questions match this review filter — great work!');
@@ -1633,6 +1892,118 @@
       const heroBand = isFull ? mockSession.fullReport.band : r.band;
       const totalQCount = mockSession.questions.length;
       const totalCorrectCount = isFull ? mockSession.fullReport.correct : r.correct;
+      const secKey = isFull ? 'full' : isListenOnly ? 'listening' : 'reading';
+      const secScoreMap = secKey === 'full' ? (data.fullScores || {}) : secKey === 'listening' ? (data.listenScores || {}) : (data.mockScores || {});
+      const histList = normalizeMockHistory(secScoreMap[String(mockSession.set)], secKey);
+      const curAttemptNum = mockSession.activeAttempt || histList[histList.length - 1]?.attempt || 1;
+
+      const jumpToAttemptQuestion = (att, qNum) => {
+        if ((mockSession.activeAttempt || 1) !== att.attempt) {
+          applyMockAttemptToSession(att, { section: secKey });
+        }
+        const qIdx = mockSession.questions.findIndex((q) => q.num === qNum);
+        if (qIdx >= 0) {
+          mockSession.index = qIdx;
+          mockSession.revPart = 0;
+          if (mockSession.revFilter === 'flagged') mockSession.revFilter = 'all';
+          if (mockSession.revFilter === 'missed' && mockSession.answers[qIdx] === mockSession.questions[qIdx].ans) {
+            mockSession.revFilter = 'all';
+          }
+        }
+        paint();
+      };
+
+      const historyBox = histList.length
+        ? el('section', { id: 'fc-mk-history', className: 'fc-mk-histbox', ariaLabel: 'Attempt History' },
+            el('div', { className: 'fc-mk-histhead' },
+              el('div', { className: 'fc-mk-histtitle' },
+                el('strong', {},
+                  `Attempt History · ประวัติการทำข้อสอบชุดนี้ (${histList.length} ${histList.length === 1 ? 'รอบ' : 'รอบ'})`,
+                  ...(histList.length > 1
+                    ? [el('span', { className: 'fc-mk-histtrend' }, histList.map((h) => `รอบ ${h.attempt}: ${h.correct}/${h.total}`).join('  →  '))]
+                    : [])),
+                el('small', {}, 'Click any round to load its full answer sheet, or click a missed question chip (Q#) to inspect what went wrong.')),
+              el('button', {
+                type: 'button',
+                className: 'fc-grade',
+                onclick: () => launchMockEntry(mockSession.set, { section: secKey, resume: false, allowFallback: mockSession.ttsFallback }),
+              }, el('b', {}, `▶ Start Round #${(histList[histList.length - 1]?.attempt || histList.length) + 1}`))),
+            el('div', { className: 'fc-mk-histlist' },
+              ...histList.map((att) => {
+                const isCur = att.attempt === curAttemptNum;
+                const repeatSet = new Set(att.repeatedMissed || []);
+                const partEntries = att.parts
+                  ? Object.keys(att.parts).map(Number).sort((a, b) => a - b).filter((p) => att.parts[p]?.total)
+                  : [];
+                return el('div', { className: 'fc-mk-histrow' + (isCur ? ' active' : '') },
+                  el('div', { className: 'fc-mk-histtop' },
+                    el('div', { className: 'fc-mk-histmain' },
+                      el('span', { className: 'fc-mk-histround' }, `Round #${att.attempt}`),
+                      el('span', { className: 'fc-mk-histscore' },
+                        isFull && att.listenScaled !== null && att.readScaled !== null
+                          ? `${att.correct}/${att.total} (${att.pct}%) · ${att.scaled}/990 (L ${att.listenScaled} + R ${att.readScaled}) · CEFR ${att.band}`
+                          : `${att.correct}/${att.total} (${att.pct}%) · ${att.scaled}/${heroMax} · CEFR ${att.band}`),
+                      ...(att.deltaRaw !== null
+                        ? [el('span', { className: 'fc-mk-histdelta ' + (att.deltaRaw >= 0 ? 'up' : 'down') },
+                            `${att.deltaRaw >= 0 ? '+' : ''}${att.deltaRaw} ข้อ (${att.deltaScaled >= 0 ? '+' : ''}${att.deltaScaled} pts)`)]
+                        : []),
+                      ...(att.isBest && histList.length > 1
+                        ? [el('span', { className: 'fc-mk-aimodel' }, '★ Best')]
+                        : []),
+                      el('span', { className: 'fc-mk-histmeta' },
+                        [
+                          att.at ? att.at.replace('T', ' ') : '',
+                          att.elapsedSec ? formatClock(att.elapsedSec) : '',
+                          att.examMode === 'practice' ? 'Practice' : 'Exam',
+                        ].filter(Boolean).join(' · '))),
+                    el('button', {
+                      type: 'button',
+                      className: 'tag-pill' + (isCur ? ' active' : ''),
+                      onclick: () => { applyMockAttemptToSession(att, { section: secKey }); paint(); },
+                    }, isCur ? `● Viewing Round #${att.attempt}` : `View Round #${att.attempt}`)),
+                  ...(partEntries.length
+                    ? [el('div', { className: 'fc-mk-histparts' },
+                        ...partEntries.map((p) => {
+                          const pt = att.parts[p];
+                          const pct = pt.total ? Math.round((pt.correct / pt.total) * 100) : 0;
+                          return el('span', { className: 'fc-mk-histpart' }, `P${p}: ${pt.correct}/${pt.total} (${pct}%)`);
+                        }))]
+                    : []),
+                  el('div', { className: 'fc-mk-histmissed' },
+                    att.hasAnswers || att.missedNums.length > 0
+                      ? (att.missedNums.length === 0
+                        ? el('div', { className: 'fc-mk-histmline' }, el('span', { className: 'fc-mk-histmlbl' }, '✓ Perfect score — 0 missed questions in this round'))
+                        : el('div', { className: 'fc-mk-histmline' },
+                            el('span', { className: 'fc-mk-histmlbl bad' }, `ผิด ${att.missedNums.length} ข้อ:`),
+                            ...att.missedNums.map((num) => el('button', {
+                              type: 'button',
+                              className: 'fc-mk-qchip' + (isCur && aq?.num === num ? ' cur' : '') + (repeatSet.has(num) ? ' repeat' : ''),
+                              title: repeatSet.has(num) ? `Q${num} (Missed in prior round too)` : `Inspect Q${num}`,
+                              onclick: () => jumpToAttemptQuestion(att, num),
+                            }, `Q${num}`))))
+                      : el('div', { className: 'fc-mk-histmline' },
+                          el('span', { className: 'fc-mk-histmeta' }, `Summary recorded (${att.correct}/${att.total} correct · ${att.total - att.correct} missed). Detailed per-question picks are saved on every new attempt.`)),
+                    ...(att.repeatedMissed?.length
+                      ? [el('div', { className: 'fc-mk-histmline' },
+                          el('span', { className: 'fc-mk-histmlbl bad' }, `ผิดซ้ำจากรอบก่อน (${att.repeatedMissed.length}):`),
+                          ...att.repeatedMissed.map((num) => el('button', {
+                            type: 'button',
+                            className: 'fc-mk-qchip repeat' + (isCur && aq?.num === num ? ' cur' : ''),
+                            onclick: () => jumpToAttemptQuestion(att, num),
+                          }, `Q${num}`)))]
+                      : []),
+                    ...(att.fixedMissed?.length
+                      ? [el('div', { className: 'fc-mk-histmline' },
+                          el('span', { className: 'fc-mk-histmlbl' }, `แก้ได้แล้วในรอบนี้ (+${att.fixedMissed.length}):`),
+                          ...att.fixedMissed.map((num) => el('button', {
+                            type: 'button',
+                            className: 'fc-mk-qchip fixed' + (isCur && aq?.num === num ? ' cur' : ''),
+                            onclick: () => jumpToAttemptQuestion(att, num),
+                          }, `✓ Q${num}`)))]
+                      : [])));
+              })))
+        : null;
+
       const partFilterList = isFull
         ? [[0, 'All'], [1, 'P1'], [2, 'P2'], [3, 'P3'], [4, 'P4'], [5, 'P5'], [6, 'P6'], [7, 'P7']]
         : isListenOnly
@@ -1644,7 +2015,8 @@
           el('div', { className: 'fc-mk-hud' },
             el('div', { className: 'fc-mk-hud-l' },
               el('button', { type: 'button', className: 'linkish', onclick: () => { stopMockAll(); mockSession = null; paint(); } }, '← All 30 Mock Sets'),
-              el('strong', {}, `Mock Set ${mockSession.set} ${isFull ? 'Full TOEIC' : isListenOnly ? 'Listening' : 'Reading'} Score Report`)),
+              el('strong', {}, `Mock Set ${mockSession.set} ${isFull ? 'Full TOEIC' : isListenOnly ? 'Listening' : 'Reading'} Score Report`),
+              ...(histList.length ? [el('span', { className: 'fc-mk-partpill' }, `Round #${curAttemptNum} of ${histList.length}`)] : [])),
             el('div', { className: 'fc-mk-hud-r' },
               el('button', { type: 'button', className: 'fc-grade', onclick: () => launchMockEntry(mockSession.set, { section: isFull ? 'full' : isListenOnly ? 'listening' : 'reading', resume: false, allowFallback: mockSession.ttsFallback }) }, el('b', {}, `Retake Set ${mockSession.set}`)),
               ...(mockSession.set < 30 ? [el('button', { type: 'button', className: 'primary', onclick: () => launchMockEntry(mockSession.set + 1, { section: isFull ? 'full' : isListenOnly ? 'listening' : 'reading', allowFallback: mockSession.ttsFallback }) }, el('span', {}, `Next: Set ${mockSession.set + 1}`), el('span', { className: 'arrow', ariaHidden: 'true' }, '→'))] : []))),
@@ -1658,10 +2030,11 @@
                 : `${totalCorrectCount} / ${totalQCount} Correct (${r.pct}%)`),
               el('small', { style: { display: 'block', color: 'var(--mute)' } }, `${mockSession.examMode === 'exam' ? `Time used: ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}` : `Untimed Practice · ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}`}`))),
           el('div', { className: 'fc-mk-parts' }, ...partBoxes),
+          ...(historyBox ? [historyBox] : []),
           renderMockDiagnosisBox(),
           el('div', { className: 'fc-mk-revbar' },
             el('div', { className: 'fc-mk-modepills' },
-              ...[['missed', `Missed (${totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
+              ...[['missed', `Missed (${isLegacyView ? 0 : totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
                 type: 'button',
                 className: 'tag-pill' + (mockSession.revFilter === id ? ' active' : ''),
                 onclick: () => { mockSession.revFilter = id; paint(); },

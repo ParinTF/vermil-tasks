@@ -2284,4 +2284,225 @@ function parseMockCoachReply(rawText, kind = 'question') {
   return res;
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, studySample, CARD_LANGUAGES, HSK_BANDS, hskDeck, hskStudyItems, mandarinVoice, cardLanguage, studyLanguageCards, studyNewCount, studyNewReview, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, moveTabBeside, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+function normalizeMockHistory(scoreEntry, section = 'listening') {
+  if (!scoreEntry || typeof scoreEntry !== 'object') return [];
+  const isFull = section === 'full';
+  const defaultTotal = isFull ? 200 : 100;
+  let rawList = [];
+
+  if (Array.isArray(scoreEntry.history) && scoreEntry.history.length > 0) {
+    rawList = scoreEntry.history;
+  } else {
+    const hasLegacy = isFull
+      ? (scoreEntry.bestTotal || scoreEntry.lastTotal)
+      : (scoreEntry.bestScaled || scoreEntry.lastScaled || scoreEntry.bestRaw !== undefined || scoreEntry.lastRaw !== undefined);
+    if (hasLegacy) {
+      const bestScaled = isFull ? (scoreEntry.bestTotal || scoreEntry.lastTotal || 0) : (scoreEntry.bestScaled || scoreEntry.lastScaled || 0);
+      const lastScaled = isFull ? (scoreEntry.lastTotal || scoreEntry.bestTotal || 0) : (scoreEntry.lastScaled ?? scoreEntry.bestScaled ?? 0);
+      const bestRaw = scoreEntry.bestRaw ?? scoreEntry.lastRaw ?? 0;
+      const lastRaw = scoreEntry.lastRaw ?? scoreEntry.bestRaw ?? 0;
+      if ((scoreEntry.attempts || 1) > 1 && (bestScaled !== lastScaled || bestRaw !== lastRaw)) {
+        rawList = [
+          {
+            attempt: 1,
+            scaled: bestScaled,
+            listenScaled: scoreEntry.bestListen ?? null,
+            readScaled: scoreEntry.bestRead ?? null,
+            correct: bestRaw,
+            total: defaultTotal,
+            band: scoreEntry.band || (isFull ? toeicTotalCefr(bestScaled) : section === 'listening' ? toeicListeningCefr(bestScaled) : toeicCefrBand(bestScaled)),
+            parts: scoreEntry.parts || null,
+            legacy: true,
+          },
+          {
+            attempt: scoreEntry.attempts || 2,
+            scaled: lastScaled,
+            listenScaled: scoreEntry.bestListen ?? null,
+            readScaled: scoreEntry.bestRead ?? null,
+            correct: lastRaw,
+            total: defaultTotal,
+            band: isFull ? toeicTotalCefr(lastScaled) : section === 'listening' ? toeicListeningCefr(lastScaled) : toeicCefrBand(lastScaled),
+            parts: scoreEntry.parts || null,
+            legacy: true,
+          },
+        ];
+      } else {
+        rawList = [
+          {
+            attempt: 1,
+            scaled: lastScaled || bestScaled,
+            listenScaled: scoreEntry.bestListen ?? null,
+            readScaled: scoreEntry.bestRead ?? null,
+            correct: lastRaw || bestRaw,
+            total: defaultTotal,
+            band: scoreEntry.band || (isFull ? toeicTotalCefr(lastScaled || bestScaled) : section === 'listening' ? toeicListeningCefr(lastScaled || bestScaled) : toeicCefrBand(lastScaled || bestScaled)),
+            parts: scoreEntry.parts || null,
+            legacy: true,
+          },
+        ];
+      }
+    }
+  }
+
+  let peakScaled = 0;
+  for (const it of rawList) {
+    const sc = Number(it?.scaled ?? it?.totalScaled) || 0;
+    if (sc > peakScaled) peakScaled = sc;
+  }
+
+  return rawList.map((it, idx) => {
+    const scaled = Number(it?.scaled ?? it?.totalScaled) || 0;
+    const total = Number(it?.total) || defaultTotal;
+    const correct = Number(it?.correct) || 0;
+    const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
+    const band = it?.band || (isFull ? toeicTotalCefr(scaled) : section === 'listening' ? toeicListeningCefr(scaled) : toeicCefrBand(scaled));
+    const answers = Array.isArray(it?.answers) ? it.answers : null;
+    const flags = Array.isArray(it?.flags) ? it.flags : null;
+    const missedNums = Array.isArray(it?.missedNums)
+      ? it.missedNums.map(Number).filter((n) => n > 0)
+      : [];
+    const prev = idx > 0 ? rawList[idx - 1] : null;
+    const prevCorrect = prev ? (Number(prev.correct) || 0) : null;
+    const prevScaled = prev ? (Number(prev.scaled ?? prev.totalScaled) || 0) : null;
+    const prevMissed = prev && Array.isArray(prev.missedNums) ? new Set(prev.missedNums.map(Number)) : null;
+    const curMissedSet = new Set(missedNums);
+
+    const repeatedMissed = prevMissed && missedNums.length
+      ? missedNums.filter((n) => prevMissed.has(n))
+      : [];
+    const fixedMissed = prevMissed && (answers || missedNums.length || correct === total)
+      ? [...prevMissed].filter((n) => !curMissedSet.has(n))
+      : [];
+
+    return {
+      attempt: Number(it?.attempt) || idx + 1,
+      at: String(it?.at || ''),
+      examMode: it?.examMode === 'practice' ? 'practice' : 'exam',
+      elapsedSec: Number(it?.elapsedSec) || 0,
+      scaled,
+      listenScaled: it?.listenScaled !== undefined && it?.listenScaled !== null ? Number(it.listenScaled) : null,
+      readScaled: it?.readScaled !== undefined && it?.readScaled !== null ? Number(it.readScaled) : null,
+      correct,
+      total,
+      pct,
+      band,
+      parts: it?.parts || null,
+      answers,
+      flags,
+      missedNums,
+      hasAnswers: Boolean(answers && answers.length > 0),
+      isBest: scaled > 0 && scaled === peakScaled,
+      deltaRaw: prevCorrect !== null ? correct - prevCorrect : null,
+      deltaScaled: prevScaled !== null ? scaled - prevScaled : null,
+      repeatedMissed,
+      fixedMissed,
+      legacy: Boolean(it?.legacy),
+    };
+  });
+}
+
+function recordMockScoreEntry(prevEntry, {
+  section = 'listening',
+  report = {},
+  listenReport = null,
+  readReport = null,
+  questions = [],
+  answers = [],
+  flags = [],
+  examMode = 'exam',
+  at = '',
+} = {}, maxHistory = 20) {
+  const isFull = section === 'full';
+  const prior = normalizeMockHistory(prevEntry, section).map((h) => ({
+    attempt: h.attempt,
+    at: h.at,
+    examMode: h.examMode,
+    elapsedSec: h.elapsedSec,
+    scaled: h.scaled,
+    ...(h.listenScaled !== null ? { listenScaled: h.listenScaled } : {}),
+    ...(h.readScaled !== null ? { readScaled: h.readScaled } : {}),
+    correct: h.correct,
+    total: h.total,
+    band: h.band,
+    parts: h.parts,
+    ...(h.answers ? { answers: h.answers } : {}),
+    ...(h.flags ? { flags: h.flags } : {}),
+    ...(h.missedNums?.length ? { missedNums: h.missedNums } : {}),
+    ...(h.legacy ? { legacy: true } : {}),
+  }));
+
+  const nextAttemptNum = prior.length ? Math.max(...prior.map((h) => Number(h.attempt) || 0), prior.length) + 1 : 1;
+  const qs = Array.isArray(questions) ? questions : [];
+  const ans = Array.isArray(answers) ? answers : [];
+  const flg = Array.isArray(flags) ? flags : [];
+  const missedNums = qs.length
+    ? qs.filter((q, idx) => q && ans[idx] !== q.ans).map((q, idx) => Number(q.num) || idx + 1)
+    : Array.isArray(report?.missed)
+      ? report.missed.map((m) => Number(m.num)).filter((n) => n > 0)
+      : [];
+
+  const scaled = isFull ? (Number(report.totalScaled ?? report.scaled) || 0) : (Number(report.scaled) || 0);
+  const total = Number(report.total) || qs.length || (isFull ? 200 : 100);
+  const correct = Number(report.correct) || (qs.length ? qs.length - missedNums.length : 0);
+  const elapsedSec = Number(report.elapsedSec) || 0;
+  const band = report.band || (isFull ? toeicTotalCefr(scaled) : section === 'listening' ? toeicListeningCefr(scaled) : toeicCefrBand(scaled));
+  const combinedParts = isFull
+    ? { ...(listenReport?.parts || {}), ...(readReport?.parts || {}) }
+    : (report.parts || null);
+
+  const currentRecord = {
+    attempt: nextAttemptNum,
+    at: String(at || ''),
+    examMode: examMode === 'practice' ? 'practice' : 'exam',
+    elapsedSec,
+    scaled,
+    ...(isFull ? {
+      listenScaled: Number(report.listenScaled ?? listenReport?.scaled) || 0,
+      readScaled: Number(report.readScaled ?? readReport?.scaled) || 0,
+    } : {}),
+    correct,
+    total,
+    band,
+    parts: combinedParts,
+    ...(ans.length ? { answers: [...ans] } : {}),
+    ...(flg.length ? { flags: [...flg] } : {}),
+    missedNums,
+  };
+
+  const history = [...prior, currentRecord].slice(-Math.max(1, maxHistory));
+  const attempts = Math.max((Number(prevEntry?.attempts) || 0) + 1, nextAttemptNum);
+
+  if (isFull) {
+    const bestTotal = Math.max(prevEntry?.bestTotal || 0, scaled);
+    const bestListen = Math.max(prevEntry?.bestListen || 0, currentRecord.listenScaled || 0);
+    const bestRead = Math.max(prevEntry?.bestRead || 0, currentRecord.readScaled || 0);
+    const bestRaw = Math.max(prevEntry?.bestRaw || 0, correct);
+    return {
+      bestTotal,
+      bestListen,
+      bestRead,
+      bestRaw,
+      lastTotal: scaled,
+      lastRaw: correct,
+      band: toeicTotalCefr(bestTotal),
+      attempts,
+      parts: combinedParts,
+      history,
+    };
+  }
+
+  const bestScaled = Math.max(prevEntry?.bestScaled || 0, scaled);
+  const bestRaw = Math.max(prevEntry?.bestRaw || 0, correct);
+  return {
+    bestScaled,
+    bestRaw,
+    lastScaled: scaled,
+    lastRaw: correct,
+    band: section === 'listening' ? toeicListeningCefr(bestScaled) : toeicCefrBand(bestScaled),
+    attempts,
+    parts: combinedParts,
+    history,
+  };
+}
+
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, studySample, CARD_LANGUAGES, HSK_BANDS, hskDeck, hskStudyItems, mandarinVoice, cardLanguage, studyLanguageCards, studyNewCount, studyNewReview, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, normalizeMockHistory, recordMockScoreEntry, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, moveTabBeside, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };

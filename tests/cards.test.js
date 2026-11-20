@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, normalizeMockHistory, recordMockScoreEntry, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
@@ -976,4 +976,120 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
   const qBoxThread = findAll(rootEl, '#fc-mk-ai-qbox')[0];
   assert.ok(qBoxThread.textContent.includes('ทำไมข้อ B ถึงผิดครับ'));
   assert.ok(qBoxThread.textContent.includes('Wh-question ห้ามตอบ Yes/No'));
+
+  // 7. Return to Lobby -> verify Mock 1 card displays attempt history -> click Retake for Round 2 (68/100) -> verify Round 1 vs Round 2 comparison
+  const backLobbyBtn = findAll(rootEl, 'button').find((b) => b.textContent.includes('All 30 Mock Sets'));
+  backLobbyBtn.onclick();
+  const set1AfterR1 = findAll(findAll(rootEl, '.fc-mk-grid')[0], 'button')[0];
+  assert.ok(set1AfterR1.textContent.includes('1 attempt · View Report'));
+
+  // Clicking scored Mock 1 in lobby opens its Score Report & Attempt History instead of wiping
+  await set1AfterR1.onclick();
+  const histBoxR1 = findAll(rootEl, '#fc-mk-history')[0];
+  assert.ok(histBoxR1, 'Clicking scored set card must open Score Report with Attempt History');
+  assert.ok(histBoxR1.textContent.includes('Round #1'));
+
+  // Click Retake Set 1 and answer 68 questions right in Round #2
+  const retakeBtn = findAll(rootEl, 'button').find((b) => b.textContent.includes('Retake Set 1'));
+  await retakeBtn.onclick();
+  for (let qi = 0; qi < 68; qi++) {
+    const curChoices = findAll(rootEl, '.fc-qz-opt');
+    // Pick the right choice for the first 68 questions by reading the underlying dataset
+    const qObj = logic.buildListeningExam(1, TOEIC_LISTEN_VOL1)[qi];
+    curChoices[qObj.ans].onclick();
+    if (qi < 67) {
+      findAll(rootEl, '.fc-qz-next')[0].onclick();
+    }
+  }
+  const submitR2 = findAll(rootEl, '.fc-mk-subbtn')[0];
+  await submitR2.onclick();
+  await new Promise((r) => setTimeout(r, 10));
+
+  const histBoxR2 = findAll(rootEl, '#fc-mk-history')[0];
+  assert.ok(histBoxR2);
+  assert.ok(histBoxR2.textContent.includes('รอบ 1: 0/100  →  รอบ 2: 68/100'));
+  assert.ok(histBoxR2.textContent.includes('+68 ข้อ'));
+  assert.ok(histBoxR2.textContent.includes('ผิด 32 ข้อ:'));
+  assert.ok(histBoxR2.textContent.includes('ผิดซ้ำจากรอบก่อน (32):'));
+  assert.ok(histBoxR2.textContent.includes('แก้ได้แล้วในรอบนี้ (+68):'));
+
+  // Switch back to Round #1 and verify hero score switches to Round #1
+  const viewR1Btn = findAll(histBoxR2, 'button').find((b) => b.textContent === 'View Round #1');
+  assert.ok(viewR1Btn);
+  viewR1Btn.onclick();
+  const heroAfterSwitch = findAll(rootEl, '.fc-mk-hero')[0];
+  assert.ok(heroAfterSwitch.textContent.includes('0 / 100 Correct'));
+});
+
+test('Mock Attempt History preserves legacy pre-v3.7.10 score entries (e.g. 51/100) and tracks Round 2 (68/100) missed questions', () => {
+  const lSet1 = buildListeningExam(1, TOEIC_LISTEN_VOL1);
+  // Legacy entry from v3.7.9 with 51/100 (235/495) and parts breakdown, before history[] existed
+  const legacyEntry = {
+    bestScaled: 235,
+    bestRaw: 51,
+    lastScaled: 235,
+    lastRaw: 51,
+    band: 'A2',
+    attempts: 1,
+    parts: {
+      1: { correct: 6, total: 6 },
+      2: { correct: 15, total: 25 },
+      3: { correct: 17, total: 39 },
+      4: { correct: 13, total: 30 },
+    },
+  };
+
+  const normLegacy = normalizeMockHistory(legacyEntry, 'listening');
+  assert.equal(normLegacy.length, 1);
+  assert.equal(normLegacy[0].attempt, 1);
+  assert.equal(normLegacy[0].correct, 51);
+  assert.equal(normLegacy[0].scaled, 235);
+  assert.equal(normLegacy[0].hasAnswers, false);
+
+  // Now complete Round 2 with 68/100 correct
+  const r2Answers = lSet1.map((q, idx) => (idx < 68 ? q.ans : (q.ans + 1) % q.choices.length));
+  const r2Rep = scoreListeningExam(lSet1, r2Answers, 1520);
+  assert.equal(r2Rep.correct, 68);
+
+  const afterR2 = recordMockScoreEntry(legacyEntry, {
+    section: 'listening',
+    report: r2Rep,
+    questions: lSet1,
+    answers: r2Answers,
+    examMode: 'exam',
+    at: '2026-11-20T12:15',
+  });
+  assert.equal(afterR2.attempts, 2);
+  assert.equal(afterR2.bestRaw, 68);
+  assert.equal(afterR2.lastRaw, 68);
+
+  const hist2 = normalizeMockHistory(afterR2, 'listening');
+  assert.equal(hist2.length, 2);
+  assert.equal(hist2[0].attempt, 1);
+  assert.equal(hist2[0].correct, 51);
+  assert.equal(hist2[1].attempt, 2);
+  assert.equal(hist2[1].correct, 68);
+  assert.equal(hist2[1].deltaRaw, 17);
+  assert.equal(hist2[1].missedNums.length, 32);
+  assert.equal(hist2[1].missedNums[0], 69);
+
+  // Round 3: 75/100 correct (fixes Q69..Q75, still misses Q76..Q100)
+  const r3Answers = lSet1.map((q, idx) => (idx < 75 ? q.ans : (q.ans + 1) % q.choices.length));
+  const r3Rep = scoreListeningExam(lSet1, r3Answers, 1480);
+  const afterR3 = recordMockScoreEntry(afterR2, {
+    section: 'listening',
+    report: r3Rep,
+    questions: lSet1,
+    answers: r3Answers,
+    examMode: 'exam',
+    at: '2026-11-20T13:00',
+  });
+  const hist3 = normalizeMockHistory(afterR3, 'listening');
+  assert.equal(hist3.length, 3);
+  assert.equal(hist3[2].attempt, 3);
+  assert.equal(hist3[2].correct, 75);
+  assert.equal(hist3[2].deltaRaw, 7);
+  assert.deepEqual(hist3[2].fixedMissed, [69, 70, 71, 72, 73, 74, 75]);
+  assert.equal(hist3[2].repeatedMissed.length, 25);
+  assert.equal(hist3[2].repeatedMissed[0], 76);
 });
