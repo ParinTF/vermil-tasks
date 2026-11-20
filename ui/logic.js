@@ -2053,7 +2053,7 @@ function formatMockPassagesForAi(passages, maxChars = 1800) {
   return clipMockCoachText(parts.join('\n\n'), maxChars);
 }
 
-function summarizeMockMistakes(questions, answers) {
+function summarizeMockMistakes(questions, answers, fallbackReport = null) {
   const qs = Array.isArray(questions) ? questions : [];
   const ans = Array.isArray(answers) ? answers : [];
   const partMap = new Map();
@@ -2062,6 +2062,47 @@ function summarizeMockMistakes(questions, answers) {
   let correct = 0;
   let skippedCount = 0;
   const LETTERS = ['A', 'B', 'C', 'D'];
+  const hasPicked = ans.some((a) => a !== null && a !== undefined);
+  const fbParts = fallbackReport?.parts && typeof fallbackReport.parts === 'object' ? fallbackReport.parts : null;
+  const fbCorrect = Number(fallbackReport?.correct) || 0;
+  const isLegacySummaryOnly = !hasPicked && (fbCorrect > 0 || (fbParts && Object.values(fbParts).some((p) => Number(p?.correct) > 0)));
+
+  if (isLegacySummaryOnly) {
+    for (const q of qs) {
+      if (!q) continue;
+      const p = Number(q.part) || 0;
+      const pm = partMap.get(p) || { part: p, total: 0 };
+      pm.total++;
+      partMap.set(p, pm);
+    }
+    const partNums = [...new Set([...partMap.keys(), ...Object.keys(fbParts || {}).map(Number)])].filter((p) => p > 0);
+    const byPart = partNums.map((p) => {
+      const fp = fbParts?.[p];
+      const total = Number(fp?.total) || partMap.get(p)?.total || 0;
+      const partCorrect = Math.min(total, Number(fp?.correct) || 0);
+      const partMissed = Math.max(0, total - partCorrect);
+      const pct = total ? Math.round((partCorrect / total) * 100) : 0;
+      return { part: p, correct: partCorrect, total, missed: partMissed, pct };
+    }).sort((a, b) => a.pct - b.pct || b.missed - a.missed || a.part - b.part);
+
+    const total = qs.length || byPart.reduce((sum, p) => sum + p.total, 0);
+    const actualCorrect = fbCorrect || byPart.reduce((sum, p) => sum + p.correct, 0);
+    const missedCount = Math.max(0, total - actualCorrect);
+    const topTags = byPart
+      .filter((p) => p.missed > 0)
+      .map((p) => ({ tag: `Part ${p.part}`, missed: p.missed, total: p.total }));
+
+    return {
+      total,
+      correct: actualCorrect,
+      missedCount,
+      skippedCount: 0,
+      byPart,
+      topTags,
+      sampleMissed: [],
+      legacySummaryOnly: true,
+    };
+  }
 
   for (let i = 0; i < qs.length; i++) {
     const q = qs[i];
@@ -2138,6 +2179,7 @@ function summarizeMockMistakes(questions, answers) {
     byPart,
     topTags,
     sampleMissed,
+    legacySummaryOnly: false,
   };
 }
 
@@ -2145,10 +2187,16 @@ function buildMockDiagnosisPrompt(session) {
   const s = session || {};
   const qs = Array.isArray(s.questions) ? s.questions : [];
   const ans = Array.isArray(s.answers) ? s.answers : [];
-  const summary = summarizeMockMistakes(qs, ans);
   const isFull = Boolean(s.isFull && s.fullReport);
   const sectionLabel = isFull ? 'Full TOEIC (L&R)' : s.listenReport ? 'TOEIC Listening' : 'TOEIC Reading';
   const r = isFull ? s.fullReport : (s.report || {});
+  const combinedParts = isFull
+    ? { ...(s.listenReport?.parts || {}), ...(s.readReport?.parts || {}) }
+    : (r.parts || s.listenReport?.parts || s.readReport?.parts || s.legacyAttempt?.parts || null);
+  const summary = summarizeMockMistakes(qs, ans, {
+    correct: Number(r.correct ?? s.legacyAttempt?.correct) || 0,
+    parts: combinedParts,
+  });
   const scaledStr = isFull
     ? `${r.totalScaled || 0}/990 (Listening ${r.listenScaled || 0}/495, Reading ${r.readScaled || 0}/495, CEFR ${r.band || '?'})`
     : `${r.scaled || 0}/495 (CEFR ${r.band || '?'}, ${summary.correct}/${summary.total} correct)`;
@@ -2172,12 +2220,12 @@ function buildMockDiagnosisPrompt(session) {
   const rawPrompt = [
     `Mock Set ${s.set || 1} — ${sectionLabel}`,
     `Score: ${scaledStr}`,
-    `Skipped / Unanswered: ${summary.skippedCount}`,
+    ...(summary.legacySummaryOnly ? [] : [`Skipped / Unanswered: ${summary.skippedCount}`]),
     '',
     'Breakdown by Part (weakest first):',
     ...(partLines.length ? partLines : ['- No questions recorded']),
     '',
-    'Most Missed Question Types / Tags:',
+    summary.legacySummaryOnly ? 'Weakest Parts by Missed Count:' : 'Most Missed Question Types / Tags:',
     ...(tagLines.length ? tagLines : ['- Zero mistakes! Give reinforcement tips to maintain precision and speed.']),
     ...(sampleLines.length ? ['', 'Sample Missed Items:', ...sampleLines] : []),
   ].join('\n');

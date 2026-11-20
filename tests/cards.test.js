@@ -1046,6 +1046,28 @@ test('Mock Attempt History preserves legacy pre-v3.7.10 score entries (e.g. 51/1
   assert.equal(normLegacy[0].scaled, 235);
   assert.equal(normLegacy[0].hasAnswers, false);
 
+  // Verify AI Diagnosis prompt on legacy Round #1 (before per-question answers were saved) uses 51/100 & real part scores instead of 0/100
+  const legacyDiag = buildMockDiagnosisPrompt({
+    set: 1,
+    isFull: false,
+    report: { scaled: 235, band: 'A2', correct: 51, total: 100, parts: legacyEntry.parts },
+    listenReport: { scaled: 235, band: 'A2', correct: 51, total: 100, parts: legacyEntry.parts },
+    legacyAttempt: normLegacy[0],
+    questions: lSet1,
+    answers: new Array(100).fill(null),
+  });
+  assert.equal(legacyDiag.summary.correct, 51);
+  assert.equal(legacyDiag.summary.missedCount, 49);
+  assert.equal(legacyDiag.summary.skippedCount, 0);
+  assert.equal(legacyDiag.summary.legacySummaryOnly, true);
+  assert.ok(legacyDiag.prompt.includes('Score: 235/495 (CEFR A2, 51/100 correct)'));
+  assert.ok(legacyDiag.prompt.includes('- Part 4: 13/30 (43%, missed 17)'));
+  assert.ok(legacyDiag.prompt.includes('- Part 3: 17/39 (44%, missed 22)'));
+  assert.ok(legacyDiag.prompt.includes('- Part 2: 15/25 (60%, missed 10)'));
+  assert.ok(legacyDiag.prompt.includes('- Part 1: 6/6 (100%, missed 0)'));
+  assert.ok(!legacyDiag.prompt.includes('0/100 correct'));
+  assert.ok(!legacyDiag.prompt.includes('Skipped / Unanswered: 100'));
+
   // Now complete Round 2 with 68/100 correct
   const r2Answers = lSet1.map((q, idx) => (idx < 68 ? q.ans : (q.ans + 1) % q.choices.length));
   const r2Rep = scoreListeningExam(lSet1, r2Answers, 1520);

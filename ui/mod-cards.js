@@ -1810,10 +1810,18 @@
       const r = mockSession.report;
       const isFull = Boolean(mockSession.fullReport);
       const isListenOnly = !isFull && Boolean(mockSession.listenReport);
+      const isLegacyView = Boolean(mockSession.legacyAttempt);
+      const legacyParts = isLegacyView ? (mockSession.legacyAttempt?.parts || r.parts || {}) : null;
       const filteredList = mockSession.questions.map((q, idx) => ({ q, idx, pick: mockSession.answers[idx], flag: mockSession.flags[idx] }))
         .filter(({ q, pick, flag }) => {
           if (mockSession.revPart && q.part !== mockSession.revPart) return false;
-          if (mockSession.revFilter === 'missed') return pick !== q.ans;
+          if (mockSession.revFilter === 'missed') {
+            if (isLegacyView) {
+              const pt = legacyParts?.[q.part];
+              return !pt || (Number(pt.correct) || 0) < (Number(pt.total) || 1);
+            }
+            return pick !== q.ans;
+          }
           if (mockSession.revFilter === 'flagged') return flag;
           return true;
         });
@@ -1837,7 +1845,6 @@
             ...aq.scriptLines.map((line) => el('p', {}, line)))
         : null;
 
-      const isLegacyView = Boolean(mockSession.legacyAttempt);
       const reviewAudio = aq?.audioKey ? renderAudioBar(aq, { inReview: true }) : null;
       const reviewDetail = aq
         ? el('div', { className: 'fc-mk-split' + (leftPane ? '' : ' single') },
@@ -2034,7 +2041,7 @@
           renderMockDiagnosisBox(),
           el('div', { className: 'fc-mk-revbar' },
             el('div', { className: 'fc-mk-modepills' },
-              ...[['missed', `Missed (${isLegacyView ? 0 : totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
+              ...[['missed', `Missed (${totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
                 type: 'button',
                 className: 'tag-pill' + (mockSession.revFilter === id ? ' active' : ''),
                 onclick: () => { mockSession.revFilter = id; paint(); },
@@ -2047,7 +2054,7 @@
               }, lbl)))),
           ...(filteredList.length ? [el('div', { className: 'fc-mk-revstrip' }, ...filteredList.map(({ q, idx, pick, flag }) => el('button', {
             type: 'button',
-            className: 'fc-mk-bub' + (idx === aIdx ? ' cur' : '') + (pick === q.ans ? ' ok' : ' bad') + (flag ? ' flag' : ''),
+            className: 'fc-mk-bub' + (idx === aIdx ? ' cur' : '') + (isLegacyView ? '' : pick === q.ans ? ' ok' : ' bad') + (flag ? ' flag' : ''),
             onclick: () => { mockSession.index = idx; paint(); },
           }, String(q.num))))] : []),
           reviewDetail));
