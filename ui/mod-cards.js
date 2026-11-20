@@ -19,6 +19,8 @@
   let pendingPackSet = 0; // set waiting on volume download/preview choice
   let loadingMockSet = 0;
   let mockTimer = null;
+  let mockAiInfo = { checked: false, has_key: false, model: '' };
+  let mockAiInfoPromise = null;
 
   let packStatus = {}; // vol (1..6) -> { vol, installed, bytes }
   let packLoadingVol = 0;
@@ -708,6 +710,10 @@
         fullReport: null,
         revFilter: 'missed',
         revPart: 0,
+        aiDiagnosis: null,
+        aiDiagnosisBusy: false,
+        aiDiagnosisError: '',
+        aiQuestions: {},
       };
       quizSource = 'mock';
       paint();
@@ -747,6 +753,10 @@
       mockSession.docTab = 'all';
       mockSession.navOpen = false;
       mockSession.paused = false;
+      mockSession.aiDiagnosis = null;
+      mockSession.aiDiagnosisBusy = false;
+      mockSession.aiDiagnosisError = '';
+      mockSession.aiQuestions = {};
       persistMockProgress();
       paint();
     } catch (e) {
@@ -1276,8 +1286,271 @@
       return;
     }
 
+    async function ensureMockAiInfo(force = false) {
+      if (!window.__TAURI__?.core?.invoke) {
+        mockAiInfo = { checked: true, has_key: false, model: '' };
+        return mockAiInfo;
+      }
+      if (!force && mockAiInfo.checked) return mockAiInfo;
+      if (!force && mockAiInfoPromise) return mockAiInfoPromise;
+      mockAiInfoPromise = (async () => {
+        try {
+          const res = await tauriInvoke('get_assistant');
+          mockAiInfo = { checked: true, has_key: Boolean(res?.has_key), model: String(res?.model || '') };
+        } catch {
+          mockAiInfo = { checked: true, has_key: false, model: '' };
+        } finally {
+          mockAiInfoPromise = null;
+        }
+        if (mode === 'quiz' && quizSource === 'mock' && mockSession?.submitted) paint();
+        return mockAiInfo;
+      })();
+      return mockAiInfoPromise;
+    }
+
+    async function runMockDiagnosisAi() {
+      if (!mockSession?.submitted || mockSession.aiDiagnosisBusy) return;
+      const snap = mockSession;
+      const info = await ensureMockAiInfo(true);
+      if (!info.has_key) {
+        snap.aiDiagnosisError = window.__TAURI__?.core?.invoke
+          ? 'No Gemini API key configured yet. Open Settings -> Assistant to add your key.'
+          : 'Assistant coaching requires the Vermil desktop app with a Gemini API key in Settings -> Assistant.';
+        if (mockSession === snap) paint();
+        return;
+      }
+      const { system, prompt, summary } = buildMockDiagnosisPrompt(snap);
+      const previewLines = prompt.split('\n').slice(0, 10).join('\n');
+      const ok = await ask(
+        `Send your Mock Set ${snap.set} summary (${summary.missedCount} missed out of ${summary.total}) to Gemini (${info.model || 'Assistant'}) for post-exam coaching?\n\n${previewLines}${prompt.length > previewLines.length ? '\n…' : ''}`,
+        'Analyze with Assistant'
+      );
+      if (!ok || mockSession !== snap || !snap.submitted) return;
+      snap.aiDiagnosisBusy = true;
+      snap.aiDiagnosisError = '';
+      paint();
+      try {
+        const raw = await tauriInvoke('assistant_ask', { system, turns: [{ role: 'user', text: prompt }] });
+        if (mockSession !== snap || !snap.submitted) return;
+        const parsed = parseMockCoachReply(raw, 'diagnosis');
+        if (!parsed) {
+          snap.aiDiagnosisError = 'Assistant returned an unexpected format. Please try again.';
+        } else {
+          snap.aiDiagnosis = parsed;
+        }
+      } catch (e) {
+        if (mockSession === snap) snap.aiDiagnosisError = 'Assistant request failed: ' + (e?.message || e);
+      } finally {
+        snap.aiDiagnosisBusy = false;
+        if (mockSession === snap && snap.submitted) paint();
+      }
+    }
+
+    async function runMockQuestionAi(idx, qMode = 'explain', customText = '') {
+      if (!mockSession?.submitted) return;
+      const snap = mockSession;
+      const q = snap.questions[idx];
+      if (!q) return;
+      snap.aiQuestions ||= {};
+      const qState = (snap.aiQuestions[idx] ||= { busy: false, error: '', initial: null, thread: [], turns: [], system: '', draft: '' });
+      if (qState.busy) return;
+
+      const cleanCustom = String(customText || '').trim();
+      if (qMode === 'followup' && !cleanCustom) return;
+
+      const info = await ensureMockAiInfo(true);
+      if (!info.has_key) {
+        qState.error = window.__TAURI__?.core?.invoke
+          ? 'No Gemini API key configured yet. Open Settings -> Assistant to add your key.'
+          : 'Assistant coaching requires the Vermil desktop app with a Gemini API key in Settings -> Assistant.';
+        if (mockSession === snap) paint();
+        return;
+      }
+
+      const pick = snap.answers[idx];
+      const { system, prompt } = buildMockQuestionCoachPrompt(q, pick, { mode: qMode, questionText: cleanCustom });
+      const isFollowUp = Boolean(qState.initial && qState.turns.length);
+      const askLabel = cleanCustom || (
+        qMode === 'formula'
+          ? 'ขอสูตรลัด / คีย์เวิร์ดสังเกตสำหรับข้อนี้เพิ่มเติม'
+          : qMode === 'trap'
+            ? (pick !== q.ans ? 'วิเคราะห์จุดหลอกของตัวเลือกที่ฉันตอบผิด' : 'วิเคราะห์ตัวเลือกหลอกอื่นๆ ในข้อนี้')
+            : 'อธิบายวิธีทำ หลักการ และสูตรของข้อนี้เพิ่มเติม'
+      );
+      const turnText = isFollowUp ? `Follow-up on Q${q.num} (Part ${q.part}): ${askLabel}` : prompt;
+      const preview = isFollowUp ? askLabel : prompt.split('\n').slice(0, 9).join('\n');
+      const ok = await ask(
+        isFollowUp
+          ? `Send follow-up about Q${q.num} to Gemini (${info.model || 'Assistant'})?\n\n"${preview.slice(0, 260)}${preview.length > 260 ? '…' : ''}"`
+          : `Send Q${q.num} (Part ${q.part}) to Gemini (${info.model || 'Assistant'}) for step-by-step coaching?\n\n${preview}${prompt.length > preview.length ? '\n…' : ''}`,
+        'Ask Assistant'
+      );
+      if (!ok || mockSession !== snap || !snap.submitted || snap.questions[idx] !== q) return;
+
+      const baseTurns = qState.turns.length > 18 ? [...qState.turns.slice(0, 2), ...qState.turns.slice(-14)] : qState.turns;
+      const nextTurns = [...baseTurns, { role: 'user', text: turnText }];
+
+      qState.busy = true;
+      qState.error = '';
+      paint();
+      try {
+        const raw = await tauriInvoke('assistant_ask', { system: qState.system || system, turns: nextTurns });
+        if (mockSession !== snap || !snap.submitted || snap.questions[idx] !== q) return;
+        const parsed = parseMockCoachReply(raw, 'question');
+        if (!parsed) {
+          qState.error = 'Assistant returned an unexpected format. Please try again.';
+        } else {
+          if (!qState.system) qState.system = system;
+          qState.turns = [...nextTurns, { role: 'model', text: String(raw || '').slice(0, 4000) }];
+          if (!qState.initial) qState.initial = parsed;
+          else qState.thread.push({ q: askLabel, parsed });
+          if (qMode === 'followup') qState.draft = '';
+        }
+      } catch (e) {
+        if (mockSession === snap) qState.error = 'Assistant request failed: ' + (e?.message || e);
+      } finally {
+        qState.busy = false;
+        if (mockSession === snap && snap.submitted) paint();
+      }
+    }
+
+    function renderMockAiKeyNotice(customError = '') {
+      const hasTauri = Boolean(window.__TAURI__?.core?.invoke);
+      const showKeyTip = customError || (mockAiInfo.checked && !mockAiInfo.has_key);
+      if (!showKeyTip) return null;
+      return el('div', { className: 'fc-mk-ainote' + (customError ? ' bad' : '') },
+        el('span', {}, customError || (hasTauri
+          ? 'Add your Gemini API key in Settings -> Assistant to unlock post-exam coaching.'
+          : 'AI coaching uses Gemini via Settings -> Assistant in the Vermil app.')),
+        ...(hasTauri && !mockAiInfo.has_key
+          ? [el('button', { type: 'button', className: 'linkish', onclick: () => setView('settings') }, 'Open Settings')]
+          : []));
+    }
+
+    function renderMockDiagnosisBox() {
+      const diag = mockSession.aiDiagnosis;
+      const busy = Boolean(mockSession.aiDiagnosisBusy);
+      const preview = buildMockDiagnosisPrompt(mockSession).prompt;
+      const notice = renderMockAiKeyNotice(mockSession.aiDiagnosisError);
+
+      return el('section', { id: 'fc-mk-ai-diagnosis', className: 'fc-mk-aibox', ariaLabel: 'Post-exam Assistant Coach' },
+        el('div', { className: 'fc-mk-aihead' },
+          el('div', { className: 'fc-mk-aititle' },
+            el('strong', {},
+              '✦ Assistant Coach · What to Improve',
+              ...(mockAiInfo.has_key && mockAiInfo.model ? [el('span', { className: 'fc-mk-aimodel' }, mockAiInfo.model)] : [])),
+            el('small', {}, 'Diagnose weak parts, key principles, formulas & drills based on your finished score report.')),
+          el('div', { className: 'fc-mk-aiacts' },
+            el('button', {
+              id: 'fc-mk-ai-diag-btn',
+              type: 'button',
+              className: diag ? 'fc-grade' : 'primary',
+              disabled: busy,
+              onclick: runMockDiagnosisAi,
+            }, busy ? 'Analyzing…' : diag ? '↻ Re-analyze Report' : '✦ Analyze Score & Weaknesses'))),
+        ...(notice ? [notice] : []),
+        ...(diag ? [
+          ...(diag.summary ? [el('p', { className: 'fc-mk-aisum' }, diag.summary)] : []),
+          ...(diag.priorities?.length ? [el('div', { className: 'fc-mk-aigrid' }, ...diag.priorities.map((p) => el('div', { className: 'fc-mk-aicard' },
+            el('strong', {}, p.part || 'Focus Area'),
+            ...(p.focus ? [el('span', { className: 'fc-mk-ailabel' }, 'What to Improve'), el('p', {}, p.focus)] : []),
+            ...(p.principle ? [el('span', { className: 'fc-mk-ailabel' }, 'Principle'), el('p', {}, p.principle)] : []),
+            ...(p.formula ? [el('span', { className: 'fc-mk-ailabel' }, 'Formula / Pattern'), el('p', {}, p.formula)] : []),
+            ...(p.drill ? [el('span', { className: 'fc-mk-ailabel' }, 'Recommended Drill'), el('p', {}, p.drill)] : []))))] : []),
+          ...(diag.nextStep ? [el('p', { className: 'fc-mk-ainext' }, `Next Step: ${diag.nextStep}`)] : []),
+        ] : []),
+        el('details', { className: 'fc-mk-aipreview' },
+          el('summary', {}, 'Show what will be sent'),
+          el('pre', {}, preview)));
+    }
+
+    function renderMockQuestionAiBox(aq, aIdx, aPick) {
+      const qState = mockSession.aiQuestions?.[aIdx];
+      const busy = Boolean(qState?.busy);
+      const init = qState?.initial;
+      const preview = buildMockQuestionCoachPrompt(aq, aPick, { mode: 'explain' }).prompt;
+      const notice = renderMockAiKeyNotice(qState?.error || '');
+
+      const cardRows = [];
+      if (init) {
+        if (init.howToSolve) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'How to Solve · วิธีทำ'), el('p', {}, init.howToSolve)));
+        if (init.principle) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Principle · หลักการที่ใช้'), el('p', {}, init.principle)));
+        if (init.formula) cardRows.push(el('div', { className: 'fc-mk-aicard accent' }, el('strong', {}, 'Formula & Shortcut · สูตรลัด / จุดสังเกต'), el('p', {}, init.formula)));
+        if (init.whyWrong) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Trap Analysis · วิเคราะห์ตัวลวง'), el('p', {}, init.whyWrong)));
+        if (init.tip) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Exam Tip'), el('p', {}, init.tip)));
+        if (!cardRows.length && init.answer) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Assistant Explanation'), el('p', {}, init.answer)));
+      }
+
+      return el('div', { id: 'fc-mk-ai-qbox', className: 'fc-mk-aibox qbox' },
+        el('div', { className: 'fc-mk-aihead' },
+          el('div', { className: 'fc-mk-aititle' },
+            el('strong', {}, `✦ Assistant Tutor · Q${aq.num} (Part ${aq.part})`),
+            el('small', {}, 'Ask how to solve this item, what principle applies, or its shortcut formula.')),
+          ...(init ? [el('button', {
+            type: 'button',
+            className: 'linkish',
+            disabled: busy,
+            onclick: () => { if (mockSession.aiQuestions) { delete mockSession.aiQuestions[aIdx]; paint(); } },
+          }, 'Clear')] : [])),
+        el('div', { className: 'fc-mk-aichips' },
+          el('button', {
+            type: 'button',
+            className: 'fc-mk-aichip' + (!init ? ' hot' : ''),
+            disabled: busy,
+            onclick: () => runMockQuestionAi(aIdx, 'explain'),
+          }, busy ? 'Thinking…' : 'How to solve & Principle'),
+          el('button', {
+            type: 'button',
+            className: 'fc-mk-aichip',
+            disabled: busy,
+            onclick: () => runMockQuestionAi(aIdx, 'formula'),
+          }, 'Formula & Shortcuts'),
+          el('button', {
+            type: 'button',
+            className: 'fc-mk-aichip',
+            disabled: busy,
+            onclick: () => runMockQuestionAi(aIdx, 'trap'),
+          }, aPick !== aq.ans ? 'Why my pick missed' : 'Spot distractors')),
+        ...(notice ? [notice] : []),
+        ...(cardRows.length ? [el('div', { className: 'fc-mk-aigrid single' }, ...cardRows)] : []),
+        ...(qState?.thread?.length ? [el('div', { className: 'fc-mk-aithread' }, ...qState.thread.flatMap((t) => [
+          el('div', { className: 'fc-mk-aimsg me' }, el('small', {}, 'You'), el('p', {}, t.q)),
+          el('div', { className: 'fc-mk-aimsg' },
+            el('small', {}, 'Assistant'),
+            el('p', {}, t.parsed.answer || t.parsed.howToSolve || t.parsed.formula || t.parsed.principle || t.parsed.whyWrong),
+            ...(t.parsed.formula && t.parsed.answer && t.parsed.formula !== t.parsed.answer ? [el('p', {}, `Formula: ${t.parsed.formula}`)] : []),
+            ...(t.parsed.principle && t.parsed.answer && t.parsed.principle !== t.parsed.answer ? [el('p', {}, `Principle: ${t.parsed.principle}`)] : [])),
+        ]))] : []),
+        el('form', {
+          className: 'fc-mk-aiform',
+          onsubmit: (e) => {
+            e.preventDefault();
+            const val = mockSession.aiQuestions?.[aIdx]?.draft || e.currentTarget?.querySelector?.('input')?.value || '';
+            return runMockQuestionAi(aIdx, 'followup', val);
+          },
+        },
+          el('input', {
+            id: 'fc-mk-ai-input',
+            type: 'text',
+            maxLength: 600,
+            value: qState?.draft || '',
+            disabled: busy,
+            placeholder: 'Ask follow-up (e.g. ทำไมถึงตอบข้อนี้ / ขอสูตรจำเพิ่ม)…',
+            ariaLabel: 'Ask a follow-up question about this question',
+            oninput: (e) => {
+              const st = ((mockSession.aiQuestions ||= {})[aIdx] ||= { busy: false, error: '', initial: null, thread: [], turns: [], system: '', draft: '' });
+              st.draft = e.target.value;
+            },
+          }),
+          el('button', { type: 'submit', className: 'fc-grade', disabled: busy }, el('b', {}, busy ? 'Sending…' : 'Ask →'))),
+        el('details', { className: 'fc-mk-aipreview' },
+          el('summary', {}, 'Show what will be sent'),
+          el('pre', {}, preview)));
+    }
+
     // Score Report & Post-Exam Inspector when submitted
     if (mockSession.submitted && mockSession.report) {
+      if (!mockAiInfo.checked && !mockAiInfoPromise) ensureMockAiInfo(false);
       const r = mockSession.report;
       const isFull = Boolean(mockSession.fullReport);
       const isListenOnly = !isFull && Boolean(mockSession.listenReport);
@@ -1334,7 +1607,8 @@
                     : aPick === null || aPick === undefined
                       ? `Unanswered — Correct answer is (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`
                       : `✕ Your pick: (${LETTERS[aPick]})  →  Correct: (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`),
-                  el('div', { className: 'fc-qz-why' }, ...String(aq.why || '').split('\n').map((line) => el('p', {}, line)))))))
+                  el('div', { className: 'fc-qz-why' }, ...String(aq.why || '').split('\n').map((line) => el('p', {}, line)))),
+                renderMockQuestionAiBox(aq, aIdx, aPick))))
         : el('p', { className: 'fc-qz-perfect' }, 'No questions match this review filter — great work!');
 
       const partBoxes = [];
@@ -1384,6 +1658,7 @@
                 : `${totalCorrectCount} / ${totalQCount} Correct (${r.pct}%)`),
               el('small', { style: { display: 'block', color: 'var(--mute)' } }, `${mockSession.examMode === 'exam' ? `Time used: ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}` : `Untimed Practice · ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}`}`))),
           el('div', { className: 'fc-mk-parts' }, ...partBoxes),
+          renderMockDiagnosisBox(),
           el('div', { className: 'fc-mk-revbar' },
             el('div', { className: 'fc-mk-modepills' },
               ...[['missed', `Missed (${totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
@@ -1951,7 +2226,11 @@
       commandHooks.splice(commandHooks.indexOf(commandFn), 1);
       shortcutGroups.splice(shortcutGroups.indexOf(group), 1);
     },
-    show() { refreshPackStatus(); paint(); },
+    show() {
+      refreshPackStatus();
+      mockAiInfo.checked = false;
+      paint();
+    },
     keys(e) {
       const t = e.target.matches ? e.target : document.body;
       const ctrl = (e.ctrlKey || e.metaKey) && !e.altKey;

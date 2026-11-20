@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
-const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, xpAward } = require('../ui/logic.js');
+const { CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, importCardPack, stripGapCue, cleanChoiceLabel, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, xpAward } = require('../ui/logic.js');
 const { TOEIC_PACKS } = require('../ui/toeic-pack.js');
 const { DAILY_PACKS } = require('../ui/daily-pack.js');
 const { OXFORD_PACKS } = require('../ui/oxford-pack.js');
@@ -688,4 +688,292 @@ test('TOEFL iBT (2026) scoring helpers, adaptive routing, and all 10 4-skill set
   assert.equal(totalRepeat, 50);
   assert.equal(totalInterview, 40);
   assert.deepEqual(mcqs, [158, 157, 157, 158]);
+});
+
+test('Post-exam Mock AI Assistant Coach summarizes weak parts, bounds prompt sizes, and parses JSON replies', () => {
+  const lSet1 = buildListeningExam(1, TOEIC_LISTEN_VOL1);
+  // Mirror a 51/100 Listening performance: Part 1 (6/6), Part 2 (15/25), Part 3 (17/39), Part 4 (13/30)
+  const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
+  const targetRight = { 1: 6, 2: 15, 3: 17, 4: 13 };
+  const answers = lSet1.map((q) => {
+    counts[q.part]++;
+    if (counts[q.part] <= targetRight[q.part]) return q.ans;
+    if (counts[q.part] === targetRight[q.part] + 1) return null; // 1 skipped per missed part
+    return (q.ans + 1) % q.choices.length;
+  });
+
+  const rep = scoreListeningExam(lSet1, answers, 1653);
+  assert.equal(rep.correct, 51);
+  assert.equal(rep.scaled, 235);
+  assert.equal(rep.band, 'A2');
+
+  const summary = summarizeMockMistakes(lSet1, answers);
+  assert.equal(summary.total, 100);
+  assert.equal(summary.correct, 51);
+  assert.equal(summary.missedCount, 49);
+  assert.equal(summary.skippedCount, 3);
+  // Weakest parts first: Part 4 (43%), Part 3 (44%), Part 2 (60%), Part 1 (100%)
+  assert.deepEqual(summary.byPart.map((p) => p.part), [4, 3, 2, 1]);
+  assert.deepEqual(summary.byPart.map((p) => p.pct), [43, 44, 60, 100]);
+  assert.ok(summary.topTags.length >= 2);
+  assert.equal(summary.sampleMissed.length, 18);
+  const p2Sample = summary.sampleMissed.find((m) => m.part === 2);
+  assert.ok(p2Sample && !p2Sample.snippet.startsWith('Listen to the question'));
+
+  const diagPrompt = buildMockDiagnosisPrompt({
+    set: 1,
+    isFull: false,
+    report: rep,
+    listenReport: rep,
+    questions: lSet1,
+    answers,
+  });
+  assert.ok(diagPrompt.system.length > 100 && diagPrompt.system.length <= 60000);
+  assert.ok(diagPrompt.prompt.length > 200 && diagPrompt.prompt.length <= 8000);
+  assert.ok(diagPrompt.prompt.includes('Mock Set 1 — TOEIC Listening'));
+  assert.ok(diagPrompt.prompt.includes('235/495'));
+  assert.ok(diagPrompt.prompt.includes('Part 4: 13/30 (43%'));
+
+  // Question coach prompts across Part 2, Part 3 Graphic, and follow-up modes
+  const q7 = lSet1[6]; // Part 2 Q7
+  const pExplain = buildMockQuestionCoachPrompt(q7, (q7.ans + 1) % 3, { mode: 'explain' });
+  assert.ok(pExplain.system.length <= 60000 && pExplain.prompt.length <= 8000);
+  assert.ok(pExplain.prompt.includes('Q7 · Part 2'));
+  assert.ok(pExplain.prompt.includes('Audio Script:'));
+
+  const qGraphic = lSet1.find((q) => q.part === 3 && q.passages?.length);
+  assert.ok(qGraphic);
+  const pFormula = buildMockQuestionCoachPrompt(qGraphic, null, { mode: 'formula' });
+  assert.ok(pFormula.prompt.length <= 8000);
+  assert.ok(pFormula.prompt.includes('Document / Visual Context:'));
+  assert.ok(pFormula.prompt.includes('ข้อนี้มีสูตรยังไง'));
+
+  const pFollow = buildMockQuestionCoachPrompt(q7, q7.ans, { mode: 'followup', questionText: 'ทำไมข้อ B ถึงใช้กับ When ไม่ได้ครับ' });
+  assert.ok(pFollow.prompt.includes('Student follow-up question: ทำไมข้อ B ถึงใช้กับ When ไม่ได้ครับ'));
+
+  // Resilient JSON parsing
+  const parsedDiag = parseMockCoachReply('```json\n{"summary":"ควรเน้น Part 3-4","priorities":[{"part":"Part 3","focus":"จับ Keyword ก่อนฟัง","principle":"Paraphrasing","formula":"อ่านคำถามล่วงหน้า 3 ข้อ","drill":"ฝึกฟังวันละ 3 บทสนทนา"}],"nextStep":"ลุย Set 2"}\n```', 'diagnosis');
+  assert.equal(parsedDiag.summary, 'ควรเน้น Part 3-4');
+  assert.equal(parsedDiag.priorities.length, 1);
+  assert.equal(parsedDiag.priorities[0].formula, 'อ่านคำถามล่วงหน้า 3 ข้อ');
+  assert.equal(parsedDiag.nextStep, 'ลุย Set 2');
+
+  const parsedQ = parseMockCoachReply('Here is your JSON:\n{"answer":"ตอบ A เพราะถามเวลา","howToSolve":"1. ฟังคำขึ้นต้น When","principle":"Wh-question ต้องตอบเวลา ไม่ใช่ Yes/No","formula":"When -> ตัด Yes/No ทิ้งทันที","whyWrong":"ข้อ B เป็นตัวลวงเสียงคล้าย","tip":"โฟกัสคำแรกของประโยค"}', 'question');
+  assert.equal(parsedQ.formula, 'When -> ตัด Yes/No ทิ้งทันที');
+  assert.equal(parsedQ.principle, 'Wh-question ต้องตอบเวลา ไม่ใช่ Yes/No');
+  assert.equal(parseMockCoachReply('not valid json', 'question'), null);
+  assert.equal(parseMockCoachReply('{}', 'diagnosis'), null);
+});
+
+test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coach & Question Tutor after submit', async () => {
+  const fs = require('node:fs');
+  const vm = require('node:vm');
+  const logic = require('../ui/logic.js');
+
+  function makeEl(tag, props = {}, ...children) {
+    const node = {
+      tagName: String(tag).toUpperCase(),
+      children: [],
+      style: {},
+      classList: {
+        add(...c) { const set = new Set((node.className || '').split(/\s+/).filter(Boolean)); c.forEach((x) => set.add(x)); node.className = [...set].join(' '); },
+        remove(...c) { const set = new Set((node.className || '').split(/\s+/).filter(Boolean)); c.forEach((x) => set.delete(x)); node.className = [...set].join(' '); },
+        toggle(c, f) { if (f === undefined ? !this.contains(c) : f) this.add(c); else this.remove(c); },
+        contains(c) { return (node.className || '').split(/\s+/).includes(c); },
+      },
+      setAttribute(k, v) { this[k] = v; },
+      append(...kids) { kids.forEach((k) => this.appendChild(k)); },
+      appendChild(k) {
+        if (k === null || k === undefined || k === false) return null;
+        if (typeof k === 'string' || typeof k === 'number') {
+          const tn = { tagName: '#TEXT', textContent: String(k), children: [] };
+          this.children.push(tn);
+          return tn;
+        }
+        this.children.push(k);
+        return k;
+      },
+      replaceChildren(...kids) { this.children = []; this.append(...kids); },
+      querySelector(sel) { return findAll(this, sel)[0] || null; },
+      querySelectorAll(sel) { return findAll(this, sel); },
+      get textContent() {
+        if (this._text !== undefined && !this.children.length) return this._text;
+        return (this._text || '') + this.children.map((c) => c.textContent || '').join('');
+      },
+      set textContent(v) { this._text = String(v ?? ''); this.children = []; },
+      focus() {},
+      select() {},
+      blur() {},
+      isConnected: true,
+    };
+    for (const [k, v] of Object.entries(props || {})) {
+      if (k === 'style' && v && typeof v === 'object') Object.assign(node.style, v);
+      else if (k === 'dataset' && v && typeof v === 'object') node.dataset = { ...v };
+      else if (k === 'textContent') node.textContent = v;
+      else node[k] = v;
+    }
+    for (const ch of children.flat()) node.appendChild(ch);
+    return node;
+  }
+
+  function matches(node, sel) {
+    if (!node || !node.tagName || node.tagName === '#TEXT') return false;
+    if (sel.startsWith('#')) return node.id === sel.slice(1);
+    if (sel.startsWith('.')) return (node.className || '').split(/\s+/).includes(sel.slice(1));
+    return node.tagName.toLowerCase() === sel.toLowerCase();
+  }
+  function findAll(root, sel) {
+    const out = [];
+    function walk(n) {
+      if (!n || !n.children) return;
+      for (const c of n.children) {
+        if (matches(c, sel)) out.push(c);
+        walk(c);
+      }
+    }
+    walk(root);
+    return out;
+  }
+
+  const rootEl = makeEl('main', { id: 'cards-view' });
+  let currentView = 'cards';
+  const askCalls = [];
+  let hasKey = false;
+
+  const ctx = {
+    ...logic,
+    TOEIC_LISTEN_VOLS: { 1: TOEIC_LISTEN_VOL1 },
+    console,
+    setTimeout,
+    clearTimeout,
+    setInterval: () => 1,
+    clearInterval: () => {},
+    Math, Date, Number, String, Boolean, Array, Object, Map, Set, Promise, RegExp, JSON, Error,
+    el: makeEl,
+    $: (id) => (id === 'cards-view' ? rootEl : findAll(rootEl, '#' + id)[0] || null),
+    moduleData: { cards: {} },
+    saveModule: async () => {},
+    loadFile: async () => {},
+    enhanceSelect: () => {},
+    mobileSheet: () => {},
+    Audio: class { play() { return Promise.resolve(); } pause() {} addEventListener() {} },
+    emit: () => {},
+    tell: (msg) => { ctx._lastTell = msg; },
+    ask: async (msg, okLabel) => { askCalls.push({ msg, okLabel }); return true; },
+    setView: async (v) => { currentView = v; },
+    isField: () => false,
+    commandHooks: [],
+    shortcutGroups: [],
+    VermilFSRS7: {},
+    OXFORD_PHRASE_PACKS: [],
+    OXFORD_PACKS: [],
+    DAILY_PACKS: [],
+    TOEIC_PACKS: [],
+    TOEIC_QUIZ: [],
+    window: {
+      speechSynthesis: { cancel() {}, getVoices() { return []; }, speak() {} },
+      __TAURI__: {
+        core: {
+          invoke: async (cmd, args) => {
+            if (cmd === 'listening_pack_status') return [{ vol: 1, installed: true, bytes: 1000 }];
+            if (cmd === 'get_assistant') return { has_key: hasKey, model: hasKey ? 'gemini-2.5-flash' : '' };
+            if (cmd === 'assistant_ask') {
+              if (args.system.includes('priorities')) {
+                return JSON.stringify({
+                  summary: 'คะแนน Listening 235/495 ควรเร่งแก้ Part 3 และ Part 4 เป็นอันดับแรก',
+                  priorities: [
+                    { part: 'Part 3 · Conversations', focus: 'อ่านคำถาม 3 ข้อล่วงหน้าก่อนเสียงพูด', principle: 'จับ Paraphrase', formula: 'Who/Where -> ฟังประโยคแรก', drill: 'ฝึกทำวันละ 3 บทสนทนา' },
+                  ],
+                  nextStep: 'ทบทวนข้อที่ผิดใน Set 1 แล้วลองทำ Set 2',
+                });
+              }
+              const lastTurn = args.turns[args.turns.length - 1].text;
+              if (lastTurn.includes('Follow-up on Q')) {
+                return JSON.stringify({
+                  answer: 'เพราะตัวเลือก B เป็น Yes/No ซึ่งใช้ตอบคำถามที่ขึ้นต้นด้วย When ไม่ได้ครับ',
+                  howToSolve: '',
+                  principle: 'Wh-question ห้ามตอบ Yes/No',
+                  formula: 'When/Where/Why -> ตัด Yes/No ทิ้งทันที',
+                  whyWrong: '',
+                  tip: '',
+                });
+              }
+              return JSON.stringify({
+                answer: 'ข้อนี้ถามเวลาจึงต้องตอบช่วงเวลา',
+                howToSolve: '1. ฟังคำแรกของโจทย์\n2. ตัดตัวเลือกที่ตอบไม่ตรงคำถาม',
+                principle: 'Question-Response Direct Time Match',
+                formula: 'When/What time -> มองหา By / At / Tomorrow / Next week',
+                whyWrong: 'ตัวเลือกที่คุณเลือกใช้คำพ้องเสียงหลอก (Sound-alike trap)',
+                tip: 'ตั้งสติฟังคำแรกของ Part 2 ทุกข้อ',
+              });
+            }
+            return null;
+          },
+        },
+      },
+    },
+  };
+  ctx.globalThis = ctx;
+  let modDef = null;
+  ctx.defineModule = (_id, def) => { modDef = def; };
+
+  vm.createContext(ctx);
+  vm.runInContext(fs.readFileSync(require('node:path').join(__dirname, '../ui/mod-cards.js'), 'utf8'), ctx);
+
+  await modDef.start();
+  const testModeBtn = findAll(rootEl, 'button').find((b) => b.textContent === 'Test');
+  testModeBtn.onclick();
+  const grid = findAll(rootEl, '.fc-mk-grid')[0];
+  const startBtn = findAll(grid, 'button')[0];
+  await startBtn.onclick();
+
+  // 1. DURING ACTIVE EXAM: zero AI elements rendered
+  assert.equal(findAll(rootEl, '#fc-mk-ai-diagnosis').length, 0);
+  assert.equal(findAll(rootEl, '#fc-mk-ai-qbox').length, 0);
+  assert.equal(findAll(rootEl, '.fc-mk-aibox').length, 0);
+
+  // Submit the exam
+  const submitBtn = findAll(rootEl, '.fc-mk-subbtn')[0];
+  await submitBtn.onclick();
+  await new Promise((r) => setTimeout(r, 10));
+
+  // 2. AFTER SUBMITTING EXAM: both Overall Diagnosis and Per-Question Tutor render
+  assert.equal(findAll(rootEl, '#fc-mk-ai-diagnosis').length, 1);
+  assert.equal(findAll(rootEl, '#fc-mk-ai-qbox').length, 1);
+
+  // 3. No API key yet -> Open Settings button navigates to settings
+  const openSettingsBtn = findAll(rootEl, 'button').find((b) => b.textContent === 'Open Settings');
+  assert.ok(openSettingsBtn);
+  openSettingsBtn.onclick();
+  assert.equal(currentView, 'settings');
+
+  // 4. Enable API key and return to Cards view
+  hasKey = true;
+  modDef.show();
+  await new Promise((r) => setTimeout(r, 10));
+
+  const diagBtn = findAll(rootEl, '#fc-mk-ai-diag-btn')[0];
+  await diagBtn.onclick();
+  assert.ok(askCalls.length >= 1);
+  const diagBox = findAll(rootEl, '#fc-mk-ai-diagnosis')[0];
+  assert.ok(diagBox.textContent.includes('คะแนน Listening 235/495'));
+  assert.ok(diagBox.textContent.includes('Who/Where -> ฟังประโยคแรก'));
+
+  // 5. Per-question 'How to solve & Principle' chip
+  const qBox = findAll(rootEl, '#fc-mk-ai-qbox')[0];
+  const solveChip = findAll(qBox, '.fc-mk-aichip')[0];
+  await solveChip.onclick();
+  const qBoxAfter = findAll(rootEl, '#fc-mk-ai-qbox')[0];
+  assert.ok(qBoxAfter.textContent.includes('How to Solve · วิธีทำ'));
+  assert.ok(qBoxAfter.textContent.includes('When/What time -> มองหา By / At / Tomorrow / Next week'));
+  assert.ok(qBoxAfter.textContent.includes('Sound-alike trap'));
+
+  // 6. Multi-turn follow-up question in thread
+  const input = findAll(qBoxAfter, '#fc-mk-ai-input')[0];
+  input.oninput({ target: { value: 'ทำไมข้อ B ถึงผิดครับ' } });
+  const form = findAll(qBoxAfter, 'form')[0];
+  await form.onsubmit({ preventDefault() {}, currentTarget: form });
+  const qBoxThread = findAll(rootEl, '#fc-mk-ai-qbox')[0];
+  assert.ok(qBoxThread.textContent.includes('ทำไมข้อ B ถึงผิดครับ'));
+  assert.ok(qBoxThread.textContent.includes('Wh-question ห้ามตอบ Yes/No'));
 });
