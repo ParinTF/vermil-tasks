@@ -23,16 +23,26 @@ const isOverdue = (t) => t.due && new Date(t.due) < new Date();
 const isLater = (t) => t.hideUntil && t.hideUntil > localDay(new Date());
 
 // In-app replacement for confirm(): resolves true when the action button is pressed, false on Cancel or Esc.
-function ask(text, ok = 'OK', cancel = 'Cancel') {
+function ask(text, ok = 'OK', cancel = 'Cancel', content = null) {
   const dlg = $('dlg');
-  if (dlg.open) dlg.close();
+  if (dlg.open) dlg.close('');
+  dlg.onclose?.();
   $('dlg-text').textContent = text;
+  if (content) $('dlg-text').after(content);
   $('dlg-ok').textContent = ok;
   $('dlg-cancel').textContent = cancel;
   $('dlg-cancel').hidden = !cancel;
   dlg.returnValue = '';
-  dlg.showModal();
-  return new Promise((resolve) => { dlg.onclose = () => resolve(dlg.returnValue === 'ok'); });
+  return new Promise((resolve) => {
+    dlg.onclose = () => {
+      // A close event from a previous prompt may arrive after this one opened.
+      if (dlg.open) return;
+      dlg.onclose = null;
+      content?.remove();
+      resolve(dlg.returnValue === 'ok');
+    };
+    dlg.showModal();
+  });
 }
 const tell = (text) => ask(text, 'OK', ''); // replacement for tell()
 $('dlg-ok').onclick = () => $('dlg').close('ok');

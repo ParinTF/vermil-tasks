@@ -1204,14 +1204,15 @@
     const isFull = Boolean(mockSession.isFull || section === 'full');
     const isListen = !isFull && (section === 'listening' || mockSession.stage === 'listening');
     mockSession.activeAttempt = att.attempt || 1;
-    mockSession.legacyAttempt = !att.hasAnswers ? att : null;
+    const len = mockSession.questions.length;
+    const hasAnswers = att.hasAnswers && att.answers.length === len;
+    mockSession.legacyAttempt = hasAnswers ? null : att;
     mockSession.aiDiagnosis = null;
     mockSession.aiDiagnosisBusy = false;
     mockSession.aiDiagnosisError = '';
     mockSession.aiQuestions = {};
 
-    const len = mockSession.questions.length;
-    if (att.hasAnswers && att.answers.length === len) {
+    if (hasAnswers) {
       mockSession.answers = [...att.answers];
       mockSession.flags = Array.isArray(att.flags) && att.flags.length === len ? [...att.flags] : new Array(len).fill(false);
       mockSession.elapsed = att.elapsedSec || 0;
@@ -1313,7 +1314,7 @@
         mockSession.listenReport = null;
         mockSession.fullReport = null;
       }
-      mockSession.revFilter = 'all';
+      mockSession.revFilter = att.missedNums.length ? 'missed' : 'all';
       mockSession.revPart = 0;
       mockSession.index = 0;
     }
@@ -1548,7 +1549,7 @@
         return mockAiInfo;
       }
       if (!force && mockAiInfo.checked) return mockAiInfo;
-      if (!force && mockAiInfoPromise) return mockAiInfoPromise;
+      if (mockAiInfoPromise) return mockAiInfoPromise;
       mockAiInfoPromise = (async () => {
         try {
           const res = await tauriInvoke('get_assistant');
@@ -1558,16 +1559,28 @@
         } finally {
           mockAiInfoPromise = null;
         }
-        if (mode === 'quiz' && quizSource === 'mock' && mockSession?.submitted) paint();
+        if (!force && mode === 'quiz' && quizSource === 'mock' && mockSession?.submitted) paint();
         return mockAiInfo;
       })();
       return mockAiInfoPromise;
     }
 
+    function renderMockAiRequest({ system, turns }) {
+      return el('div', { className: 'fc-mk-airequest', tabIndex: 0, role: 'region', ariaLabel: 'Full request to Gemini' },
+        ...turns.flatMap(({ role, text }) => [
+          el('strong', {}, role === 'model' ? 'Previous Assistant reply' : 'Message to Gemini'),
+          el('pre', {}, text),
+        ]),
+        el('details', {}, el('summary', {}, 'Assistant instructions'), el('pre', {}, system)));
+    }
+
     async function runMockDiagnosisAi() {
       if (!mockSession?.submitted || mockSession.aiDiagnosisBusy) return;
       const snap = mockSession;
+      const answers = snap.answers;
+      const isCurrent = () => mockSession === snap && snap.submitted && snap.answers === answers;
       const info = await ensureMockAiInfo(true);
+      if (!isCurrent() || snap.aiDiagnosisBusy) return;
       if (!info.has_key) {
         snap.aiDiagnosisError = window.__TAURI__?.core?.invoke
           ? 'No Gemini API key configured yet. Open Settings -> Assistant to add your key.'
@@ -1576,18 +1589,18 @@
         return;
       }
       const { system, prompt, summary } = buildMockDiagnosisPrompt(snap);
-      const previewLines = prompt.split('\n').slice(0, 10).join('\n');
+      const request = { system, turns: [{ role: 'user', text: prompt }] };
       const ok = await ask(
-        `Send your Mock Set ${snap.set} summary (${summary.missedCount} missed out of ${summary.total}) to Gemini (${info.model || 'Assistant'}) for post-exam coaching?\n\n${previewLines}${prompt.length > previewLines.length ? '\n…' : ''}`,
-        'Analyze with Assistant'
+        `Send Mock Set ${snap.set}, Round #${snap.activeAttempt || 1} (${summary.missedCount} of ${summary.total} missed) to Gemini (${info.model || 'Assistant'})?`,
+        'Analyze with Assistant', 'Cancel', renderMockAiRequest(request)
       );
-      if (!ok || mockSession !== snap || !snap.submitted) return;
+      if (!ok || !isCurrent() || snap.aiDiagnosisBusy) return;
       snap.aiDiagnosisBusy = true;
       snap.aiDiagnosisError = '';
       paint();
       try {
-        const raw = await tauriInvoke('assistant_ask', { system, turns: [{ role: 'user', text: prompt }] });
-        if (mockSession !== snap || !snap.submitted) return;
+        const raw = await tauriInvoke('assistant_ask', request);
+        if (!isCurrent()) return;
         const parsed = parseMockCoachReply(raw, 'diagnosis');
         if (!parsed) {
           snap.aiDiagnosisError = 'Assistant returned an unexpected format. Please try again.';
@@ -1595,10 +1608,12 @@
           snap.aiDiagnosis = parsed;
         }
       } catch (e) {
-        if (mockSession === snap) snap.aiDiagnosisError = 'Assistant request failed: ' + (e?.message || e);
+        if (isCurrent()) snap.aiDiagnosisError = 'Assistant request failed: ' + (e?.message || e);
       } finally {
-        snap.aiDiagnosisBusy = false;
-        if (mockSession === snap && snap.submitted) paint();
+        if (isCurrent()) {
+          snap.aiDiagnosisBusy = false;
+          paint();
+        }
       }
     }
 
@@ -1607,6 +1622,8 @@
       const snap = mockSession;
       const q = snap.questions[idx];
       if (!q) return;
+      const answers = snap.answers;
+      const isCurrent = () => mockSession === snap && snap.submitted && snap.answers === answers;
       snap.aiQuestions ||= {};
       const qState = (snap.aiQuestions[idx] ||= { busy: false, error: '', initial: null, thread: [], turns: [], system: '', draft: '' });
       if (qState.busy) return;
@@ -1615,6 +1632,7 @@
       if (qMode === 'followup' && !cleanCustom) return;
 
       const info = await ensureMockAiInfo(true);
+      if (!isCurrent() || qState.busy) return;
       if (!info.has_key) {
         qState.error = window.__TAURI__?.core?.invoke
           ? 'No Gemini API key configured yet. Open Settings -> Assistant to add your key.'
@@ -1623,35 +1641,33 @@
         return;
       }
 
-      const pick = snap.answers[idx];
-      const { system, prompt } = buildMockQuestionCoachPrompt(q, pick, { mode: qMode, questionText: cleanCustom });
+      const pick = answers[idx];
+      const answerKnown = !snap.legacyAttempt;
+      const { system, prompt } = buildMockQuestionCoachPrompt(q, pick, { mode: qMode, questionText: cleanCustom, answerKnown });
       const isFollowUp = Boolean(qState.initial && qState.turns.length);
       const askLabel = cleanCustom || (
         qMode === 'formula'
-          ? 'ขอสูตรลัด / คีย์เวิร์ดสังเกตสำหรับข้อนี้เพิ่มเติม'
+          ? 'Explain which keywords or patterns help solve this question.'
           : qMode === 'trap'
-            ? (pick !== q.ans ? 'วิเคราะห์จุดหลอกของตัวเลือกที่ฉันตอบผิด' : 'วิเคราะห์ตัวเลือกหลอกอื่นๆ ในข้อนี้')
-            : 'อธิบายวิธีทำ หลักการ และสูตรของข้อนี้เพิ่มเติม'
+            ? (answerKnown && pick != null && pick !== q.ans ? 'Explain why my answer was wrong.' : 'Explain the distractors in this question.')
+            : 'Explain how to solve this question step by step.'
       );
       const turnText = isFollowUp ? `Follow-up on Q${q.num} (Part ${q.part}): ${askLabel}` : prompt;
-      const preview = isFollowUp ? askLabel : prompt.split('\n').slice(0, 9).join('\n');
-      const ok = await ask(
-        isFollowUp
-          ? `Send follow-up about Q${q.num} to Gemini (${info.model || 'Assistant'})?\n\n"${preview.slice(0, 260)}${preview.length > 260 ? '…' : ''}"`
-          : `Send Q${q.num} (Part ${q.part}) to Gemini (${info.model || 'Assistant'}) for step-by-step coaching?\n\n${preview}${prompt.length > preview.length ? '\n…' : ''}`,
-        'Ask Assistant'
-      );
-      if (!ok || mockSession !== snap || !snap.submitted || snap.questions[idx] !== q) return;
-
       const baseTurns = qState.turns.length > 18 ? [...qState.turns.slice(0, 2), ...qState.turns.slice(-14)] : qState.turns;
       const nextTurns = [...baseTurns, { role: 'user', text: turnText }];
+      const request = { system: qState.system || system, turns: nextTurns };
+      const ok = await ask(
+        `Send ${isFollowUp ? 'a follow-up about ' : ''}Q${q.num} (Part ${q.part}) to Gemini (${info.model || 'Assistant'})?`,
+        'Ask Assistant', 'Cancel', renderMockAiRequest(request)
+      );
+      if (!ok || !isCurrent() || qState.busy) return;
 
       qState.busy = true;
       qState.error = '';
       paint();
       try {
-        const raw = await tauriInvoke('assistant_ask', { system: qState.system || system, turns: nextTurns });
-        if (mockSession !== snap || !snap.submitted || snap.questions[idx] !== q) return;
+        const raw = await tauriInvoke('assistant_ask', request);
+        if (!isCurrent()) return;
         const parsed = parseMockCoachReply(raw, 'question');
         if (!parsed) {
           qState.error = 'Assistant returned an unexpected format. Please try again.';
@@ -1663,10 +1679,10 @@
           if (qMode === 'followup') qState.draft = '';
         }
       } catch (e) {
-        if (mockSession === snap) qState.error = 'Assistant request failed: ' + (e?.message || e);
+        if (isCurrent()) qState.error = 'Assistant request failed: ' + (e?.message || e);
       } finally {
         qState.busy = false;
-        if (mockSession === snap && snap.submitted) paint();
+        if (isCurrent()) paint();
       }
     }
 
@@ -1683,10 +1699,9 @@
           : []));
     }
 
-    function renderMockDiagnosisBox() {
+    function renderMockDiagnosisBox({ system, prompt }) {
       const diag = mockSession.aiDiagnosis;
       const busy = Boolean(mockSession.aiDiagnosisBusy);
-      const preview = buildMockDiagnosisPrompt(mockSession).prompt;
       const notice = renderMockAiKeyNotice(mockSession.aiDiagnosisError);
 
       return el('section', { id: 'fc-mk-ai-diagnosis', className: 'fc-mk-aibox', ariaLabel: 'Post-exam Assistant Coach' },
@@ -1695,7 +1710,7 @@
             el('strong', {},
               '✦ Assistant Coach · What to Improve',
               ...(mockAiInfo.has_key && mockAiInfo.model ? [el('span', { className: 'fc-mk-aimodel' }, mockAiInfo.model)] : [])),
-            el('small', {}, 'Diagnose weak parts, key principles, formulas & drills based on your finished score report.')),
+            el('small', {}, 'Review weak areas, how to recognize each question type, and what to practise next.')),
           el('div', { className: 'fc-mk-aiacts' },
             el('button', {
               id: 'fc-mk-ai-diag-btn',
@@ -1710,32 +1725,38 @@
           ...(diag.priorities?.length ? [el('div', { className: 'fc-mk-aigrid' }, ...diag.priorities.map((p) => el('div', { className: 'fc-mk-aicard' },
             el('strong', {}, p.part || 'Focus Area'),
             ...(p.focus ? [el('span', { className: 'fc-mk-ailabel' }, 'What to Improve'), el('p', {}, p.focus)] : []),
-            ...(p.principle ? [el('span', { className: 'fc-mk-ailabel' }, 'Principle'), el('p', {}, p.principle)] : []),
-            ...(p.formula ? [el('span', { className: 'fc-mk-ailabel' }, 'Formula / Pattern'), el('p', {}, p.formula)] : []),
+            ...(p.principle ? [el('span', { className: 'fc-mk-ailabel' }, 'What to Listen or Look For'), el('p', {}, p.principle)] : []),
+            ...(p.formula ? [el('span', { className: 'fc-mk-ailabel' }, 'Step-by-Step Method'), el('p', {}, p.formula)] : []),
             ...(p.drill ? [el('span', { className: 'fc-mk-ailabel' }, 'Recommended Drill'), el('p', {}, p.drill)] : []))))] : []),
           ...(diag.nextStep ? [el('p', { className: 'fc-mk-ainext' }, `Next Step: ${diag.nextStep}`)] : []),
         ] : []),
         el('details', { className: 'fc-mk-aipreview' },
-          el('summary', {}, 'Show what will be sent'),
-          el('pre', {}, preview)));
+          el('summary', {}, 'Show what will be sent to Gemini'),
+          renderMockAiRequest({ system, turns: [{ role: 'user', text: prompt }] })));
+    }
+
+    function renderMockTutorReply(reply) {
+      return [
+        ...(reply.answer ? [el('p', { className: 'fc-mk-aisum' }, reply.answer)] : []),
+        ...[
+          ['How to Solve', reply.howToSolve],
+          ['Principle', reply.principle],
+          ['Keywords & Patterns', reply.formula],
+          ['Why the Distractors Fail', reply.whyWrong],
+          ['Exam Tip', reply.tip],
+        ].filter(([, text]) => text).map(([label, text]) => el('div', { className: 'fc-mk-aicard' },
+          el('strong', {}, label), el('p', {}, text))),
+      ];
     }
 
     function renderMockQuestionAiBox(aq, aIdx, aPick) {
       const qState = mockSession.aiQuestions?.[aIdx];
       const busy = Boolean(qState?.busy);
       const init = qState?.initial;
-      const preview = buildMockQuestionCoachPrompt(aq, aPick, { mode: 'explain' }).prompt;
+      const answerKnown = !mockSession.legacyAttempt;
+      const wrongPick = answerKnown && aPick != null && aPick !== aq.ans;
+      const preview = !init && buildMockQuestionCoachPrompt(aq, aPick, { answerKnown });
       const notice = renderMockAiKeyNotice(qState?.error || '');
-
-      const cardRows = [];
-      if (init) {
-        if (init.howToSolve) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'How to Solve · วิธีทำ'), el('p', {}, init.howToSolve)));
-        if (init.principle) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Principle · หลักการที่ใช้'), el('p', {}, init.principle)));
-        if (init.formula) cardRows.push(el('div', { className: 'fc-mk-aicard accent' }, el('strong', {}, 'Formula & Shortcut · สูตรลัด / จุดสังเกต'), el('p', {}, init.formula)));
-        if (init.whyWrong) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Trap Analysis · วิเคราะห์ตัวลวง'), el('p', {}, init.whyWrong)));
-        if (init.tip) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Exam Tip'), el('p', {}, init.tip)));
-        if (!cardRows.length && init.answer) cardRows.push(el('div', { className: 'fc-mk-aicard' }, el('strong', {}, 'Assistant Explanation'), el('p', {}, init.answer)));
-      }
 
       return el('div', { id: 'fc-mk-ai-qbox', className: 'fc-mk-aibox qbox' },
         el('div', { className: 'fc-mk-aihead' },
@@ -1766,16 +1787,14 @@
             className: 'fc-mk-aichip',
             disabled: busy,
             onclick: () => runMockQuestionAi(aIdx, 'trap'),
-          }, aPick !== aq.ans ? 'Why my pick missed' : 'Spot distractors')),
+          }, wrongPick ? 'Why my answer was wrong' : 'Spot distractors')),
         ...(notice ? [notice] : []),
-        ...(cardRows.length ? [el('div', { className: 'fc-mk-aigrid single' }, ...cardRows)] : []),
+        ...(init ? [el('div', { className: 'fc-mk-aigrid single' }, ...renderMockTutorReply(init))] : []),
         ...(qState?.thread?.length ? [el('div', { className: 'fc-mk-aithread' }, ...qState.thread.flatMap((t) => [
           el('div', { className: 'fc-mk-aimsg me' }, el('small', {}, 'You'), el('p', {}, t.q)),
           el('div', { className: 'fc-mk-aimsg' },
             el('small', {}, 'Assistant'),
-            el('p', {}, t.parsed.answer || t.parsed.howToSolve || t.parsed.formula || t.parsed.principle || t.parsed.whyWrong),
-            ...(t.parsed.formula && t.parsed.answer && t.parsed.formula !== t.parsed.answer ? [el('p', {}, `Formula: ${t.parsed.formula}`)] : []),
-            ...(t.parsed.principle && t.parsed.answer && t.parsed.principle !== t.parsed.answer ? [el('p', {}, `Principle: ${t.parsed.principle}`)] : [])),
+            ...renderMockTutorReply(t.parsed)),
         ]))] : []),
         el('form', {
           className: 'fc-mk-aiform',
@@ -1791,7 +1810,7 @@
             maxLength: 600,
             value: qState?.draft || '',
             disabled: busy,
-            placeholder: 'Ask follow-up (e.g. ทำไมถึงตอบข้อนี้ / ขอสูตรจำเพิ่ม)…',
+            placeholder: 'Ask a follow-up about this question…',
             ariaLabel: 'Ask a follow-up question about this question',
             oninput: (e) => {
               const st = ((mockSession.aiQuestions ||= {})[aIdx] ||= { busy: false, error: '', initial: null, thread: [], turns: [], system: '', draft: '' });
@@ -1799,9 +1818,9 @@
             },
           }),
           el('button', { type: 'submit', className: 'fc-grade', disabled: busy }, el('b', {}, busy ? 'Sending…' : 'Ask →'))),
-        el('details', { className: 'fc-mk-aipreview' },
-          el('summary', {}, 'Show what will be sent'),
-          el('pre', {}, preview)));
+        ...(preview ? [el('details', { className: 'fc-mk-aipreview' },
+          el('summary', {}, 'Preview an explanation request'),
+          renderMockAiRequest({ system: preview.system, turns: [{ role: 'user', text: preview.prompt }] }))] : []));
     }
 
     // Score Report & Post-Exam Inspector when submitted
@@ -1811,17 +1830,12 @@
       const isFull = Boolean(mockSession.fullReport);
       const isListenOnly = !isFull && Boolean(mockSession.listenReport);
       const isLegacyView = Boolean(mockSession.legacyAttempt);
-      const legacyParts = isLegacyView ? (mockSession.legacyAttempt?.parts || r.parts || {}) : null;
+      const diagnosis = buildMockDiagnosisPrompt(mockSession);
+      const missedByIndex = new Map(diagnosis.summary.missed.map((item) => [item.index, item]));
       const filteredList = mockSession.questions.map((q, idx) => ({ q, idx, pick: mockSession.answers[idx], flag: mockSession.flags[idx] }))
-        .filter(({ q, pick, flag }) => {
+        .filter(({ q, idx, flag }) => {
           if (mockSession.revPart && q.part !== mockSession.revPart) return false;
-          if (mockSession.revFilter === 'missed') {
-            if (isLegacyView) {
-              const pt = legacyParts?.[q.part];
-              return !pt || (Number(pt.correct) || 0) < (Number(pt.total) || 1);
-            }
-            return pick !== q.ans;
-          }
+          if (mockSession.revFilter === 'missed') return missedByIndex.has(idx);
           if (mockSession.revFilter === 'flagged') return flag;
           return true;
         });
@@ -1830,6 +1844,11 @@
       const aq = activeItem?.q;
       const aIdx = activeItem?.idx ?? 0;
       const aPick = mockSession.answers[aIdx];
+      const selectReviewQuestion = (idx) => {
+        mockSession.index = idx;
+        paint();
+        $('fc-mk-review-question')?.focus?.();
+      };
 
       const leftPane = aq?.part === 1
         ? renderPart1PhotoPane(aq)
@@ -1852,8 +1871,8 @@
             el('div', { className: 'fc-mk-qpane' },
               el('div', { className: 'fc-card fc-qz-card' },
                 el('div', { className: 'fc-card-meta' },
-                  el('span', {}, `Q${aq.num} · Part ${aq.part} · ${aq.tag}`),
-                  el('span', {}, isLegacyView ? `Answer: (${LETTERS[aq.ans]})` : aPick === aq.ans ? '✓ Correct' : aPick === null ? '— Skipped' : '✕ Missed')),
+                  el('span', { id: 'fc-mk-review-question', tabIndex: -1 }, `Q${aq.num} · ${mockQuestionType(aq)}`),
+                  el('span', {}, isLegacyView ? `Answer: (${LETTERS[aq.ans]})` : aPick === aq.ans ? '✓ Correct' : aPick == null ? '— Skipped' : '✕ Missed')),
                 ...(reviewAudio ? [reviewAudio] : []),
                 el('div', { className: 'fc-qz-q' }, aq.prompt ? aq.prompt : aq.q),
                 el('div', { className: 'fc-qz-choices' }, ...aq.choices.map((ch, ci) => {
@@ -1875,24 +1894,20 @@
                         : `✕ Your pick: (${LETTERS[aPick]})  →  Correct: (${LETTERS[aq.ans]}) ${aq.choices[aq.ans]}`),
                   el('div', { className: 'fc-qz-why' }, ...String(aq.why || '').split('\n').map((line) => el('p', {}, line)))),
                 renderMockQuestionAiBox(aq, aIdx, aPick))))
-        : el('p', { className: 'fc-qz-perfect' }, 'No questions match this review filter — great work!');
+        : el('p', { className: 'fc-qz-perfect' }, 'No questions match this review filter.');
 
-      const partBoxes = [];
-      if (mockSession.listenReport) {
-        const lp = mockSession.listenReport.parts;
-        partBoxes.push(
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 1 · Photos'), el('b', {}, `${lp[1].correct} / ${lp[1].total}`), el('span', {}, `${Math.round(lp[1].correct / (lp[1].total || 1) * 100)}%`)),
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 2 · Q&A'), el('b', {}, `${lp[2].correct} / ${lp[2].total}`), el('span', {}, `${Math.round(lp[2].correct / (lp[2].total || 1) * 100)}%`)),
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 3 · Conv'), el('b', {}, `${lp[3].correct} / ${lp[3].total}`), el('span', {}, `${Math.round(lp[3].correct / (lp[3].total || 1) * 100)}%`)),
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 4 · Talks'), el('b', {}, `${lp[4].correct} / ${lp[4].total}`), el('span', {}, `${Math.round(lp[4].correct / (lp[4].total || 1) * 100)}%`)));
-      }
-      if (mockSession.readReport) {
-        const rp = mockSession.readReport.parts;
-        partBoxes.push(
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 5 · Sentences'), el('b', {}, `${rp[5].correct} / ${rp[5].total}`), el('span', {}, `${Math.round(rp[5].correct / (rp[5].total || 1) * 100)}%`)),
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 6 · Text'), el('b', {}, `${rp[6].correct} / ${rp[6].total}`), el('span', {}, `${Math.round(rp[6].correct / (rp[6].total || 1) * 100)}%`)),
-          el('div', { className: 'fc-mk-partbox' }, el('small', {}, 'Part 7 · Reading'), el('b', {}, `${rp[7].correct} / ${rp[7].total}`), el('span', {}, `Single ${rp[7].singleCorrect}/${rp[7].singleTotal} · Multi ${rp[7].multiCorrect}/${rp[7].multiTotal}`)));
-      }
+      const partScores = isLegacyView
+        ? mockSession.legacyAttempt.parts
+        : { ...mockSession.listenReport?.parts, ...mockSession.readReport?.parts };
+      const partBoxes = ['Photos', 'Q&A', 'Conversations', 'Talks', 'Sentences', 'Text', 'Reading'].flatMap((label, i) => {
+        const p = partScores?.[i + 1];
+        if (!p?.total) return [];
+        const detail = p.singleTotal != null && p.multiTotal != null
+          ? `Single ${p.singleCorrect}/${p.singleTotal} · Multi ${p.multiCorrect}/${p.multiTotal}`
+          : `${Math.round(p.correct / p.total * 100)}%`;
+        return [el('div', { className: 'fc-mk-partbox' },
+          el('small', {}, `Part ${i + 1} · ${label}`), el('b', {}, `${p.correct} / ${p.total}`), el('span', {}, detail))];
+      });
 
       const heroScore = isFull ? mockSession.fullReport.totalScaled : r.scaled;
       const heroMax = isFull ? 990 : 495;
@@ -1910,14 +1925,15 @@
         }
         const qIdx = mockSession.questions.findIndex((q) => q.num === qNum);
         if (qIdx >= 0) {
-          mockSession.index = qIdx;
           mockSession.revPart = 0;
-          if (mockSession.revFilter === 'flagged') mockSession.revFilter = 'all';
-          if (mockSession.revFilter === 'missed' && mockSession.answers[qIdx] === mockSession.questions[qIdx].ans) {
-            mockSession.revFilter = 'all';
-          }
+          const isMissed = mockSession.legacyAttempt
+            ? mockSession.legacyAttempt.missedNums.includes(qNum)
+            : mockSession.answers[qIdx] !== mockSession.questions[qIdx].ans;
+          if (mockSession.revFilter === 'flagged' || !isMissed) mockSession.revFilter = 'all';
+          selectReviewQuestion(qIdx);
+        } else {
+          paint();
         }
-        paint();
       };
 
       const historyBox = histList.length
@@ -1929,7 +1945,7 @@
                   ...(histList.length > 1
                     ? [el('span', { className: 'fc-mk-histtrend' }, histList.map((h) => `รอบ ${h.attempt}: ${h.correct}/${h.total}`).join('  →  '))]
                     : [])),
-                el('small', {}, 'Click any round to load its full answer sheet, or click a missed question chip (Q#) to inspect what went wrong.')),
+                el('small', {}, 'Choose a round to review its results. Select a question number to open it.')),
               el('button', {
                 type: 'button',
                 className: 'fc-grade',
@@ -1989,7 +2005,7 @@
                               onclick: () => jumpToAttemptQuestion(att, num),
                             }, `Q${num}`))))
                       : el('div', { className: 'fc-mk-histmline' },
-                          el('span', { className: 'fc-mk-histmeta' }, `Summary recorded (${att.correct}/${att.total} correct · ${att.total - att.correct} missed). Detailed per-question picks are saved on every new attempt.`)),
+                          el('span', { className: 'fc-mk-histmeta' }, `Score saved (${att.correct}/${att.total} correct · ${att.total - att.correct} missed). Question numbers and individual answers are unavailable for this round.`)),
                     ...(att.repeatedMissed?.length
                       ? [el('div', { className: 'fc-mk-histmline' },
                           el('span', { className: 'fc-mk-histmlbl bad' }, `ผิดซ้ำจากรอบก่อน (${att.repeatedMissed.length}):`),
@@ -2016,6 +2032,22 @@
         : isListenOnly
           ? [[0, 'All Parts'], [1, 'Part 1'], [2, 'Part 2'], [3, 'Part 3'], [4, 'Part 4']]
           : [[0, 'All Parts'], [5, 'Part 5'], [6, 'Part 6'], [7, 'Part 7']];
+      const reviewFilters = [
+        ...(!isLegacyView || missedByIndex.size ? [['missed', `Missed (${missedByIndex.size})`]] : []),
+        ...(!isLegacyView ? [['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`]] : []),
+        ['all', `${isLegacyView ? 'Answer key' : 'All'} (${totalQCount})`],
+      ];
+      const missedList = mockSession.revFilter === 'missed' && filteredList.length
+        ? el('ul', { id: 'fc-mk-missed-questions', className: 'fc-mk-missed-list', ariaLabel: 'Missed questions' },
+            ...filteredList.map(({ idx }) => {
+              const item = missedByIndex.get(idx);
+              return el('li', {}, el('button', {
+                type: 'button',
+                ariaCurrent: idx === aIdx ? 'true' : 'false',
+                onclick: () => selectReviewQuestion(idx),
+              }, el('strong', {}, `Q${item.num} · ${item.tag}`), el('span', {}, `Your answer: ${item.pickLabel}`), el('span', {}, `Correct: ${item.ansLabel}`)));
+            }))
+        : null;
 
       stage.replaceChildren(
         el('div', { className: 'fc-mk-report' },
@@ -2036,23 +2068,25 @@
                 ? `L ${mockSession.fullReport.listenScaled}/495 + R ${mockSession.fullReport.readScaled}/495 · ${totalCorrectCount}/200 Correct`
                 : `${totalCorrectCount} / ${totalQCount} Correct (${r.pct}%)`),
               el('small', { style: { display: 'block', color: 'var(--mute)' } }, `${mockSession.examMode === 'exam' ? `Time used: ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}` : `Untimed Practice · ${formatClock(isFull ? mockSession.fullReport.elapsedSec : r.elapsedSec)}`}`))),
-          el('div', { className: 'fc-mk-parts' }, ...partBoxes),
+          ...(partBoxes.length ? [el('div', { className: 'fc-mk-parts' }, ...partBoxes)] : []),
           ...(historyBox ? [historyBox] : []),
-          renderMockDiagnosisBox(),
+          renderMockDiagnosisBox(diagnosis),
           el('div', { className: 'fc-mk-revbar' },
             el('div', { className: 'fc-mk-modepills' },
-              ...[['missed', `Missed (${totalQCount - totalCorrectCount})`], ['flagged', `Flagged (${mockSession.flags.filter(Boolean).length})`], ['all', `All (${totalQCount})`]].map(([id, lbl]) => el('button', {
+              ...reviewFilters.map(([id, lbl]) => el('button', {
                 type: 'button',
                 className: 'tag-pill' + (mockSession.revFilter === id ? ' active' : ''),
+                ariaPressed: String(mockSession.revFilter === id),
                 onclick: () => { mockSession.revFilter = id; paint(); },
               }, lbl))),
             el('div', { className: 'fc-mk-modepills' },
               ...partFilterList.map(([p, lbl]) => el('button', {
                 type: 'button',
                 className: 'tag-pill' + (mockSession.revPart === p ? ' active' : ''),
+                ariaPressed: String(mockSession.revPart === p),
                 onclick: () => { mockSession.revPart = p; paint(); },
               }, lbl)))),
-          ...(filteredList.length ? [el('div', { className: 'fc-mk-revstrip' }, ...filteredList.map(({ q, idx, pick, flag }) => el('button', {
+          ...(missedList ? [missedList] : filteredList.length ? [el('div', { className: 'fc-mk-revstrip' }, ...filteredList.map(({ q, idx, pick, flag }) => el('button', {
             type: 'button',
             className: 'fc-mk-bub' + (idx === aIdx ? ' cur' : '') + (isLegacyView ? '' : pick === q.ans ? ' ok' : ' bad') + (flag ? ' flag' : ''),
             onclick: () => { mockSession.index = idx; paint(); },

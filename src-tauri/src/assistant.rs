@@ -62,6 +62,14 @@ fn build_request(system: &str, turns: &[Turn]) -> Value {
     })
 }
 
+fn request_fits(system: &str, turns: &[Turn]) -> bool {
+    // A single exam report can use the same text budget as a full conversation.
+    let turn_limit = if turns.len() == 1 { 320_000 } else { 8_000 };
+    system.chars().count() <= 60_000
+        && (1..=40).contains(&turns.len())
+        && turns.iter().all(|t| t.text.chars().count() <= turn_limit)
+}
+
 /// The answer's text, or why there is none (a blocked request, or a stop before any text).
 fn parse_reply(v: &Value) -> Result<String, String> {
     let first = &v["candidates"][0];
@@ -152,7 +160,7 @@ pub async fn assistant_models(app: AppHandle) -> Result<Vec<String>, String> {
 pub async fn assistant_ask(app: AppHandle, system: String, turns: Vec<Turn>) -> Result<String, String> {
     let c = keyed(&app)?;
     let model = if c.model.is_empty() { DEFAULT_MODEL.to_string() } else { c.model.clone() };
-    if system.chars().count() > 60_000 || turns.is_empty() || turns.len() > 40 || turns.iter().any(|t| t.text.chars().count() > 8_000) {
+    if !request_fits(&system, &turns) {
         return Err("that is too much text to send".into());
     }
     let mut url = reqwest::Url::parse(&format!("{API}/models/")).map_err(|e| e.to_string())?;
@@ -186,6 +194,18 @@ mod tests {
         assert_eq!(r["contents"][1]["role"], "model");
         assert_eq!(r["contents"][2]["role"], "user"); // an unknown role is sent as the user's
         assert_eq!(r["generationConfig"]["responseMimeType"], "application/json");
+    }
+
+    #[test]
+    fn a_full_exam_report_fits_in_one_message() {
+        let mut turns = vec![Turn { role: "user".into(), text: "Question text and answers.\n".repeat(4000) }];
+        assert!(request_fits("coach", &turns));
+        assert_eq!(build_request("coach", &turns)["contents"][0]["parts"][0]["text"], turns[0].text);
+        turns.push(Turn { role: "model".into(), text: "feedback".into() });
+        assert!(!request_fits("coach", &turns));
+        turns.pop();
+        turns[0].text = "x".repeat(320_001);
+        assert!(!request_fits("coach", &turns));
     }
 
     #[test]

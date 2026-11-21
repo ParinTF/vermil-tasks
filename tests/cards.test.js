@@ -690,7 +690,7 @@ test('TOEFL iBT (2026) scoring helpers, adaptive routing, and all 10 4-skill set
   assert.deepEqual(mcqs, [158, 157, 157, 158]);
 });
 
-test('Post-exam Mock AI Assistant Coach summarizes weak parts, bounds prompt sizes, and parses JSON replies', () => {
+test('Post-exam Mock AI Assistant Coach sends all missed question details and parses full replies', () => {
   const lSet1 = buildListeningExam(1, TOEIC_LISTEN_VOL1);
   // Mirror a 51/100 Listening performance: Part 1 (6/6), Part 2 (15/25), Part 3 (17/39), Part 4 (13/30)
   const counts = { 1: 0, 2: 0, 3: 0, 4: 0 };
@@ -712,13 +712,14 @@ test('Post-exam Mock AI Assistant Coach summarizes weak parts, bounds prompt siz
   assert.equal(summary.correct, 51);
   assert.equal(summary.missedCount, 49);
   assert.equal(summary.skippedCount, 3);
+  assert.equal(summary.missed.length, 49);
+  assert.equal(summary.missed[0].num, 22);
+  assert.equal(summary.missed[0].pickLabel, 'Skipped');
+  assert.match(summary.missed[0].tag, /^Part 2 · /);
   // Weakest parts first: Part 4 (43%), Part 3 (44%), Part 2 (60%), Part 1 (100%)
   assert.deepEqual(summary.byPart.map((p) => p.part), [4, 3, 2, 1]);
   assert.deepEqual(summary.byPart.map((p) => p.pct), [43, 44, 60, 100]);
   assert.ok(summary.topTags.length >= 2);
-  assert.equal(summary.sampleMissed.length, 18);
-  const p2Sample = summary.sampleMissed.find((m) => m.part === 2);
-  assert.ok(p2Sample && !p2Sample.snippet.startsWith('Listen to the question'));
 
   const diagPrompt = buildMockDiagnosisPrompt({
     set: 1,
@@ -729,13 +730,42 @@ test('Post-exam Mock AI Assistant Coach summarizes weak parts, bounds prompt siz
     answers,
   });
   assert.ok(diagPrompt.system.length > 100 && diagPrompt.system.length <= 60000);
-  assert.ok(diagPrompt.prompt.length > 200 && diagPrompt.prompt.length <= 8000);
+  assert.ok(diagPrompt.prompt.length > 8000 && diagPrompt.prompt.length <= 320000);
   assert.ok(diagPrompt.prompt.includes('Mock Set 1 — TOEIC Listening'));
   assert.ok(diagPrompt.prompt.includes('235/495'));
   assert.ok(diagPrompt.prompt.includes('Part 4: 13/30 (43%'));
+  assert.ok(diagPrompt.prompt.includes('All Missed Questions by Type:'));
+  const missedIndex = diagPrompt.prompt.split('All Missed Questions by Type:\n')[1].split('\n\n')[0];
+  assert.deepEqual([...missedIndex.matchAll(/\bQ(\d+)\b/g)].map((m) => Number(m[1])).sort((a, b) => a - b), summary.missed.map((m) => m.num));
+  const details = diagPrompt.prompt.split('Missed Question Details:\n\n')[1];
+  assert.equal([...details.matchAll(/^Question: Q\d+ · /gm)].length, 49);
+  for (const { index, tag } of summary.missed) {
+    const q = lSet1[index];
+    const choices = q.choices.map((choice, i) => `(${'ABCD'[i]}) ${choice}`);
+    assert.ok(details.includes([
+      `Question: Q${q.num} · ${tag}`, `Stem: ${q.prompt || q.q}`, 'Choices:', ...choices,
+      `Student Pick: ${answers[index] === null ? 'Skipped' : choices[answers[index]]}`,
+      `Correct Answer: ${choices[q.ans]}`,
+    ].join('\n')), `Full request details for Q${q.num}`);
+  }
+  const transcript = lSet1.find((q) => q.num === 100).scriptLines.join('\n');
+  assert.equal(details.split(transcript).length, 2, 'Shared transcript is sent once');
+
+  const rSet1 = buildMockExam(1, { p5Pool: TOEIC_QUIZ, p6Passages: TOEIC_MOCK_P6, p7Groups: TOEIC_MOCK_VOL1 });
+  const fullPrompt = buildMockDiagnosisPrompt({
+    isFull: true, fullReport: {}, questions: [...lSet1, ...rSet1], answers: new Array(200).fill(null),
+  }).prompt;
+  assert.ok(fullPrompt.length <= 320000);
+  assert.equal([...fullPrompt.matchAll(/^Question: Q\d+ · /gm)].length, 200);
+  assert.match(fullPrompt, /Document \/ Visual Context:/);
 
   // Question coach prompts across Part 2, Part 3 Graphic, and follow-up modes
   const q7 = lSet1[6]; // Part 2 Q7
+  assert.equal(q7.tag, 'Part 2 · Where question');
+  assert.deepEqual([10, 12, 14, 15, 20, 24, 28].map((num) => lSet1[num - 1].tag), [
+    'Part 2 · Choice question', 'Part 2 · Negative question', 'Part 2 · Request form',
+    'Part 2 · Statement response', 'Part 2 · Suggestion', 'Part 2 · Yes/no question', 'Part 2 · What time question',
+  ]);
   const pExplain = buildMockQuestionCoachPrompt(q7, (q7.ans + 1) % 3, { mode: 'explain' });
   assert.ok(pExplain.system.length <= 60000 && pExplain.prompt.length <= 8000);
   assert.ok(pExplain.prompt.includes('Q7 · Part 2'));
@@ -747,6 +777,11 @@ test('Post-exam Mock AI Assistant Coach summarizes weak parts, bounds prompt siz
   assert.ok(pFormula.prompt.length <= 8000);
   assert.ok(pFormula.prompt.includes('Document / Visual Context:'));
   assert.ok(pFormula.prompt.includes('ข้อนี้มีสูตรยังไง'));
+  const longDoc = {
+    ...qGraphic,
+    passages: [{ blocks: ['Long reading context. '.repeat(100), { type: 'table', rows: Array.from({ length: 12 }, (_, i) => [`Row ${i + 1}`]) }] }],
+  };
+  assert.match(buildMockQuestionCoachPrompt(longDoc, null).prompt, /^Row 12$/m);
 
   const pFollow = buildMockQuestionCoachPrompt(q7, q7.ans, { mode: 'followup', questionText: 'ทำไมข้อ B ถึงใช้กับ When ไม่ได้ครับ' });
   assert.ok(pFollow.prompt.includes('Student follow-up question: ทำไมข้อ B ถึงใช้กับ When ไม่ได้ครับ'));
@@ -761,6 +796,9 @@ test('Post-exam Mock AI Assistant Coach summarizes weak parts, bounds prompt siz
   const parsedQ = parseMockCoachReply('Here is your JSON:\n{"answer":"ตอบ A เพราะถามเวลา","howToSolve":"1. ฟังคำขึ้นต้น When","principle":"Wh-question ต้องตอบเวลา ไม่ใช่ Yes/No","formula":"When -> ตัด Yes/No ทิ้งทันที","whyWrong":"ข้อ B เป็นตัวลวงเสียงคล้าย","tip":"โฟกัสคำแรกของประโยค"}', 'question');
   assert.equal(parsedQ.formula, 'When -> ตัด Yes/No ทิ้งทันที');
   assert.equal(parsedQ.principle, 'Wh-question ต้องตอบเวลา ไม่ใช่ Yes/No');
+  const longExplanation = 'ข้อสังเกตจากบทพูด\n'.repeat(120).trim();
+  assert.equal(parseMockCoachReply(JSON.stringify({ answer: 'Please review this item.', whyWrong: longExplanation })).whyWrong, longExplanation);
+  assert.equal(parseMockCoachReply(JSON.stringify({ priorities: [{ formula: longExplanation }] }), 'diagnosis').priorities[0].formula, longExplanation);
   assert.equal(parseMockCoachReply('not valid json', 'question'), null);
   assert.equal(parseMockCoachReply('{}', 'diagnosis'), null);
 });
@@ -838,6 +876,8 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
   const rootEl = makeEl('main', { id: 'cards-view' });
   let currentView = 'cards';
   const askCalls = [];
+  const assistantCalls = [];
+  let confirmSend = true;
   let hasKey = false;
 
   const ctx = {
@@ -859,7 +899,7 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
     Audio: class { play() { return Promise.resolve(); } pause() {} addEventListener() {} },
     emit: () => {},
     tell: (msg) => { ctx._lastTell = msg; },
-    ask: async (msg, okLabel) => { askCalls.push({ msg, okLabel }); return true; },
+    ask: async (msg, okLabel, _cancel, content) => { askCalls.push({ msg, okLabel, content }); return confirmSend; },
     setView: async (v) => { currentView = v; },
     isField: () => false,
     commandHooks: [],
@@ -878,6 +918,7 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
             if (cmd === 'listening_pack_status') return [{ vol: 1, installed: true, bytes: 1000 }];
             if (cmd === 'get_assistant') return { has_key: hasKey, model: hasKey ? 'gemini-2.5-flash' : '' };
             if (cmd === 'assistant_ask') {
+              assistantCalls.push(args);
               if (args.system.includes('priorities')) {
                 return JSON.stringify({
                   summary: 'คะแนน Listening 235/495 ควรเร่งแก้ Part 3 และ Part 4 เป็นอันดับแรก',
@@ -894,8 +935,8 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
                   howToSolve: '',
                   principle: 'Wh-question ห้ามตอบ Yes/No',
                   formula: 'When/Where/Why -> ตัด Yes/No ทิ้งทันที',
-                  whyWrong: '',
-                  tip: '',
+                  whyWrong: 'The choice responds to a different question.',
+                  tip: 'Listen for the time phrase after the first speaker pauses.',
                 });
               }
               return JSON.stringify({
@@ -953,8 +994,23 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
   await new Promise((r) => setTimeout(r, 10));
 
   const diagBtn = findAll(rootEl, '#fc-mk-ai-diag-btn')[0];
+  const missedList = findAll(rootEl, '#fc-mk-missed-questions')[0];
+  assert.equal(findAll(missedList, 'button').length, 100);
+  assert.match(missedList.textContent, /Q100.*Skipped.*Correct/);
+  const inspectQ100 = findAll(missedList, 'button').at(-1);
+  inspectQ100.onclick();
+  assert.match(findAll(rootEl, '#fc-mk-review-question')[0].textContent, /Q100 · Part 4/);
+
+  confirmSend = false;
   await diagBtn.onclick();
-  assert.ok(askCalls.length >= 1);
+  assert.equal(assistantCalls.length, 0);
+  confirmSend = true;
+  await diagBtn.onclick();
+  assert.equal(assistantCalls.length, 1);
+  const preview = findAll(askCalls.at(-1).content, 'pre');
+  assert.equal(preview[0].textContent, assistantCalls[0].turns[0].text);
+  assert.equal(preview[1].textContent, assistantCalls[0].system);
+  assert.match(preview[0].textContent, /Question: Q100 · Part 4[^\n]*\nStem: [^\n]+\nChoices:\n\(A\)[\s\S]+?Student Pick: Skipped\nCorrect Answer: \([A-D]\)/);
   const diagBox = findAll(rootEl, '#fc-mk-ai-diagnosis')[0];
   assert.ok(diagBox.textContent.includes('คะแนน Listening 235/495'));
   assert.ok(diagBox.textContent.includes('Who/Where -> ฟังประโยคแรก'));
@@ -964,7 +1020,8 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
   const solveChip = findAll(qBox, '.fc-mk-aichip')[0];
   await solveChip.onclick();
   const qBoxAfter = findAll(rootEl, '#fc-mk-ai-qbox')[0];
-  assert.ok(qBoxAfter.textContent.includes('How to Solve · วิธีทำ'));
+  assert.ok(qBoxAfter.textContent.includes('How to Solve'));
+  assert.ok(qBoxAfter.textContent.includes('ข้อนี้ถามเวลาจึงต้องตอบช่วงเวลา'));
   assert.ok(qBoxAfter.textContent.includes('When/What time -> มองหา By / At / Tomorrow / Next week'));
   assert.ok(qBoxAfter.textContent.includes('Sound-alike trap'));
 
@@ -976,6 +1033,11 @@ test('Mock Exam UI hides Assistant during active test and enables Post-Exam Coac
   const qBoxThread = findAll(rootEl, '#fc-mk-ai-qbox')[0];
   assert.ok(qBoxThread.textContent.includes('ทำไมข้อ B ถึงผิดครับ'));
   assert.ok(qBoxThread.textContent.includes('Wh-question ห้ามตอบ Yes/No'));
+  assert.ok(qBoxThread.textContent.includes('The choice responds to a different question.'));
+  assert.ok(qBoxThread.textContent.includes('Listen for the time phrase after the first speaker pauses.'));
+  const followUpPre = findAll(askCalls.at(-1).content, 'pre');
+  const followUpRequest = assistantCalls.at(-1);
+  assert.deepEqual(followUpPre.map((item) => item.textContent), [...followUpRequest.turns.map((turn) => turn.text), followUpRequest.system]);
 
   // 7. Return to Lobby -> verify Mock 1 card displays attempt history -> click Retake for Round 2 (68/100) -> verify Round 1 vs Round 2 comparison
   const backLobbyBtn = findAll(rootEl, 'button').find((b) => b.textContent.includes('All 30 Mock Sets'));
@@ -1060,6 +1122,9 @@ test('Mock Attempt History preserves legacy pre-v3.7.10 score entries (e.g. 51/1
   assert.equal(legacyDiag.summary.missedCount, 49);
   assert.equal(legacyDiag.summary.skippedCount, 0);
   assert.equal(legacyDiag.summary.legacySummaryOnly, true);
+  assert.equal(legacyDiag.summary.missed.length, 0);
+  assert.match(legacyDiag.prompt, /Question-level answers were not saved/);
+  assert.doesNotMatch(legacyDiag.prompt, /All Missed Questions by Type|Missed Question Details/);
   assert.ok(legacyDiag.prompt.includes('Score: 235/495 (CEFR A2, 51/100 correct)'));
   assert.ok(legacyDiag.prompt.includes('- Part 4: 13/30 (43%, missed 17)'));
   assert.ok(legacyDiag.prompt.includes('- Part 3: 17/39 (44%, missed 22)'));
@@ -1067,6 +1132,14 @@ test('Mock Attempt History preserves legacy pre-v3.7.10 score entries (e.g. 51/1
   assert.ok(legacyDiag.prompt.includes('- Part 1: 6/6 (100%, missed 0)'));
   assert.ok(!legacyDiag.prompt.includes('0/100 correct'));
   assert.ok(!legacyDiag.prompt.includes('Skipped / Unanswered: 100'));
+  const knownMissed = buildMockDiagnosisPrompt({ questions: lSet1, legacyAttempt: { ...normLegacy[0], parts: null, missedNums: [7] } });
+  assert.match(knownMissed.prompt, /Recorded Missed Questions by Type:\n- Part 2 · Where question: Q7/);
+  assert.match(knownMissed.prompt, /No part scores were saved/);
+  assert.equal(knownMissed.summary.missed[0].pickLabel, 'Unavailable');
+  assert.match(knownMissed.prompt, /Student Pick: Unavailable/);
+  const legacyTutor = buildMockQuestionCoachPrompt(lSet1[6], null, { mode: 'trap', answerKnown: false });
+  assert.match(legacyTutor.prompt, /Student Pick: Unavailable/);
+  assert.doesNotMatch(legacyTutor.prompt, /Skipped|\(Missed\)/);
 
   // Now complete Round 2 with 68/100 correct
   const r2Answers = lSet1.map((q, idx) => (idx < 68 ? q.ans : (q.ans + 1) % q.choices.length));

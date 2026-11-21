@@ -1752,6 +1752,21 @@ function toeicTotalCefr(total = 10) {
   return 'A1';
 }
 
+function listeningResponseType(prompt = '') {
+  // shortcut: These labels follow common surface forms; use authored tags if finer distinctions are needed.
+  const text = prompt.trim();
+  if (!text) return 'Question-Response';
+  if (/^(?:why don['’]t (?:we|you)|how about|what about|shall we|let['’]s)\b/i.test(text)) return 'Suggestion';
+  if (!text.endsWith('?')) return 'Statement response';
+  const word = /^(how (?:many|much|long|often|far|soon)|what time|who|whom|what|when|where|why|which|whose|how)\b/i.exec(text)?.[0];
+  if (word) return `${word} question`;
+  if (/^(?:would you prefer|should (?:i|we))\b.*\bor\b/i.test(text)) return 'Choice question';
+  if (/^[a-z]+n['’]t\b/i.test(text)) return 'Negative question';
+  if (/^(?:can|could|would|will) you\b/i.test(text)) return 'Request form';
+  if (/^(?:is|are|was|were|do|does|did|have|has|had|can|could|will|would|should|may)\b/i.test(text)) return 'Yes/no question';
+  return 'Question-Response';
+}
+
 function buildListeningExam(setNum = 1, rawItems = []) {
   const s = Number(setNum) || 1;
   const vol = Math.ceil(s / 5);
@@ -1791,7 +1806,7 @@ function buildListeningExam(setNum = 1, rawItems = []) {
       vol,
       num: qNum++,
       part: 2,
-      tag: 'Part 2 · Question-Response',
+      tag: `Part 2 · ${listeningResponseType(item.prompt || '')}`,
       audioKey: `${item.id}.mp3`,
       accent: item.accent || 'us / uk',
       q: 'Listen to the question or statement and select the best response.',
@@ -2023,7 +2038,7 @@ function clipMockCoachText(text, max = 1200) {
   return s.slice(0, Math.max(0, max - 1)).trimEnd() + '…';
 }
 
-function formatMockPassagesForAi(passages, maxChars = 1800) {
+function formatMockPassagesForAi(passages) {
   if (!Array.isArray(passages) || !passages.length) return '';
   const parts = [];
   for (let i = 0; i < passages.length; i++) {
@@ -2040,7 +2055,7 @@ function formatMockPassagesForAi(passages, maxChars = 1800) {
       else if (b?.type === 'list' && Array.isArray(b.items)) lines.push(b.items.map((it) => `- ${it}`).join('\n'));
       else if (b?.type === 'table') {
         if (Array.isArray(b.headers)) lines.push(b.headers.join(' | '));
-        for (const row of (b.rows || []).slice(0, 8)) lines.push((row || []).join(' | '));
+        for (const row of (b.rows || [])) lines.push((row || []).join(' | '));
       } else if (b?.type === 'chat') {
         for (const m of (b.msgs || [])) lines.push(`${m[0]} (${m[1]}): ${m[2]}`);
       } else if (b?.type === 'box') {
@@ -2050,7 +2065,40 @@ function formatMockPassagesForAi(passages, maxChars = 1800) {
     }
     parts.push(lines.join('\n'));
   }
-  return clipMockCoachText(parts.join('\n\n'), maxChars);
+  return parts.join('\n\n');
+}
+
+function mockQuestionType({ part, tag }) {
+  const prefix = `Part ${part || '?'}`;
+  const label = String(tag || '').trim();
+  if (!label || label === prefix) return prefix;
+  return label.startsWith(`${prefix} · `) ? label : `${prefix} · ${label}`;
+}
+
+function mockChoiceLabel(question, index) {
+  return `(${['A', 'B', 'C', 'D'][index] || '?'}) ${question.choices?.[index] || ''}`;
+}
+
+function mockQuestionDetails(q, studentPick, correctAnswer) {
+  const stem = q.prompt || q.q;
+  const choices = (q.choices || []).map((_, i) => mockChoiceLabel(q, i)).join('\n');
+  return [
+    `Question: Q${q.num || '?'} · ${mockQuestionType(q)}`,
+    stem ? `Stem: ${stem}` : '',
+    choices ? `Choices:\n${choices}` : '',
+    `Student Pick: ${studentPick}`,
+    `Correct Answer: ${correctAnswer}`,
+    q.why ? `App Explanation: ${q.why}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function mockQuestionContext(q) {
+  const passages = formatMockPassagesForAi(q.passages);
+  const script = q.scriptLines?.join('\n');
+  return [
+    passages ? `Document / Visual Context:\n${passages}` : '',
+    script ? `Audio Script:\n${script}` : '',
+  ].filter(Boolean).join('\n\n');
 }
 
 function summarizeMockMistakes(questions, answers, fallbackReport = null) {
@@ -2061,13 +2109,21 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
   const missed = [];
   let correct = 0;
   let skippedCount = 0;
-  const LETTERS = ['A', 'B', 'C', 'D'];
+  const missedItem = (q, index, tag, pickLabel) => ({
+    num: q.num || index + 1,
+    index,
+    part: Number(q.part) || 0,
+    tag,
+    pickLabel,
+    ansLabel: mockChoiceLabel(q, q.ans),
+  });
   const hasPicked = ans.some((a) => a !== null && a !== undefined);
   const fbParts = fallbackReport?.parts && typeof fallbackReport.parts === 'object' ? fallbackReport.parts : null;
   const fbCorrect = Number(fallbackReport?.correct) || 0;
-  const isLegacySummaryOnly = !hasPicked && (fbCorrect > 0 || (fbParts && Object.values(fbParts).some((p) => Number(p?.correct) > 0)));
+  const isLegacySummaryOnly = fallbackReport?.summaryOnly || (!hasPicked && (fbCorrect > 0 || (fbParts && Object.values(fbParts).some((p) => Number(p?.correct) > 0))));
 
   if (isLegacySummaryOnly) {
+    const savedMissed = new Set(fallbackReport?.missedNums || []);
     for (const q of qs) {
       if (!q) continue;
       const p = Number(q.part) || 0;
@@ -2075,7 +2131,7 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
       pm.total++;
       partMap.set(p, pm);
     }
-    const partNums = [...new Set([...partMap.keys(), ...Object.keys(fbParts || {}).map(Number)])].filter((p) => p > 0);
+    const partNums = Object.keys(fbParts || {}).map(Number).filter((p) => p > 0);
     const byPart = partNums.map((p) => {
       const fp = fbParts?.[p];
       const total = Number(fp?.total) || partMap.get(p)?.total || 0;
@@ -2085,8 +2141,8 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
       return { part: p, correct: partCorrect, total, missed: partMissed, pct };
     }).sort((a, b) => a.pct - b.pct || b.missed - a.missed || a.part - b.part);
 
-    const total = qs.length || byPart.reduce((sum, p) => sum + p.total, 0);
-    const actualCorrect = fbCorrect || byPart.reduce((sum, p) => sum + p.correct, 0);
+    const total = Number(fallbackReport?.total) || qs.length || byPart.reduce((sum, p) => sum + p.total, 0);
+    const actualCorrect = fallbackReport?.correct == null ? byPart.reduce((sum, p) => sum + p.correct, 0) : fbCorrect;
     const missedCount = Math.max(0, total - actualCorrect);
     const topTags = byPart
       .filter((p) => p.missed > 0)
@@ -2099,7 +2155,7 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
       skippedCount: 0,
       byPart,
       topTags,
-      sampleMissed: [],
+      missed: qs.flatMap((q, i) => q && savedMissed.has(q.num) ? [missedItem(q, i, mockQuestionType(q), 'Unavailable')] : []),
       legacySummaryOnly: true,
     };
   }
@@ -2120,23 +2176,13 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
     else pm.missed++;
     partMap.set(p, pm);
 
-    const tag = String(q.tag || `Part ${p}`).trim();
+    const tag = mockQuestionType(q);
     const tm = tagMap.get(tag) || { tag, missed: 0, total: 0 };
     tm.total++;
     if (!ok) tm.missed++;
     tagMap.set(tag, tm);
 
-    if (!ok) {
-      const stem = q.prompt || (p <= 2 && q.scriptLines?.[0]) || q.q || q.scriptLines?.[0] || '';
-      missed.push({
-        num: q.num || i + 1,
-        part: p,
-        tag,
-        pickLabel: skipped ? 'Skipped' : `${LETTERS[pick] || '?'} (${clipMockCoachText(q.choices?.[pick] || '', 55)})`,
-        ansLabel: `${LETTERS[q.ans] || '?'} (${clipMockCoachText(q.choices?.[q.ans] || '', 55)})`,
-        snippet: clipMockCoachText(stem, 110),
-      });
-    }
+    if (!ok) missed.push(missedItem(q, i, tag, skipped ? 'Skipped' : mockChoiceLabel(q, pick)));
   }
 
   const byPart = [...partMap.values()]
@@ -2148,29 +2194,6 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
     .sort((a, b) => b.missed - a.missed || a.tag.localeCompare(b.tag))
     .slice(0, 10);
 
-  const sampleMissed = [];
-  const buckets = new Map();
-  for (const m of missed) {
-    const arr = buckets.get(m.part) || [];
-    arr.push(m);
-    buckets.set(m.part, arr);
-  }
-  const partOrder = byPart.map((p) => p.part);
-  let cursor = 0;
-  while (sampleMissed.length < 18) {
-    let added = false;
-    for (const p of partOrder) {
-      const arr = buckets.get(p);
-      if (arr && cursor < arr.length) {
-        sampleMissed.push(arr[cursor]);
-        added = true;
-        if (sampleMissed.length >= 18) break;
-      }
-    }
-    if (!added) break;
-    cursor++;
-  }
-
   return {
     total: qs.length,
     correct,
@@ -2178,7 +2201,7 @@ function summarizeMockMistakes(questions, answers, fallbackReport = null) {
     skippedCount,
     byPart,
     topTags,
-    sampleMissed,
+    missed,
     legacySummaryOnly: false,
   };
 }
@@ -2189,54 +2212,75 @@ function buildMockDiagnosisPrompt(session) {
   const ans = Array.isArray(s.answers) ? s.answers : [];
   const isFull = Boolean(s.isFull && s.fullReport);
   const sectionLabel = isFull ? 'Full TOEIC (L&R)' : s.listenReport ? 'TOEIC Listening' : 'TOEIC Reading';
-  const r = isFull ? s.fullReport : (s.report || {});
+  const r = isFull ? s.fullReport : (s.report || s.legacyAttempt || {});
   const combinedParts = isFull
     ? { ...(s.listenReport?.parts || {}), ...(s.readReport?.parts || {}) }
-    : (r.parts || s.listenReport?.parts || s.readReport?.parts || s.legacyAttempt?.parts || null);
+    : (r.parts || s.listenReport?.parts || s.readReport?.parts || null);
   const summary = summarizeMockMistakes(qs, ans, {
     correct: Number(r.correct ?? s.legacyAttempt?.correct) || 0,
-    parts: combinedParts,
+    total: r.total || s.legacyAttempt?.total,
+    parts: s.legacyAttempt ? s.legacyAttempt.parts : combinedParts,
+    summaryOnly: Boolean(s.legacyAttempt),
+    missedNums: s.legacyAttempt?.missedNums,
   });
   const scaledStr = isFull
-    ? `${r.totalScaled || 0}/990 (Listening ${r.listenScaled || 0}/495, Reading ${r.readScaled || 0}/495, CEFR ${r.band || '?'})`
+    ? `${r.totalScaled || 0}/990 (Listening ${r.listenScaled || 0}/495, Reading ${r.readScaled || 0}/495, CEFR ${r.band || '?'}, ${summary.correct}/${summary.total} correct)`
     : `${r.scaled || 0}/495 (CEFR ${r.band || '?'}, ${summary.correct}/${summary.total} correct)`;
 
   const partLines = summary.byPart.map((p) => `- Part ${p.part}: ${p.correct}/${p.total} (${p.pct}%, missed ${p.missed})`);
   const tagLines = summary.topTags.map((t) => `- ${t.tag}: missed ${t.missed}/${t.total}`);
-  const sampleLines = summary.sampleMissed.map((m) =>
-    `- Q${m.num} [P${m.part} · ${m.tag}]: picked ${m.pickLabel} -> ans ${m.ansLabel}${m.snippet ? ' | ' + m.snippet : ''}`
-  );
+  const byType = new Map();
+  for (const m of summary.missed) {
+    if (!byType.has(m.tag)) byType.set(m.tag, []);
+    byType.get(m.tag).push(`Q${m.num}${m.pickLabel === 'Skipped' ? ' (skipped)' : ''}`);
+  }
+  const seenGroups = new Set();
+  const details = summary.missed.map((m) => {
+    const q = qs[m.index];
+    const group = `${q.part}:${q.groupId || q.num}`;
+    const context = q.part > 2 && !seenGroups.has(group) ? mockQuestionContext(q) : '';
+    seenGroups.add(group);
+    return [
+      context ? `Context for Q${q.groupRange || q.num}:\n${context}` : '',
+      mockQuestionDetails(q, m.pickLabel, m.ansLabel),
+    ].filter(Boolean).join('\n\n');
+  });
 
   const system = [
     'You are an expert Thai TOEIC Coach giving post-test feedback AFTER the student submitted a mock exam.',
     'Write clearly in natural Thai (keep helpful English keywords/examples).',
-    'Focus on: (1) what to improve first from weak parts & missed question types, (2) core solving principles for those parts, (3) memorable formulas/signal patterns, (4) concrete drills.',
+    'Explain which parts and question types to prioritize and why, using actual counts and question numbers from the report. Distinguish low accuracy from high missed counts and skipped items from wrong picks.',
+    'For each priority, explain how to recognize the type and what it tests. Work through a missed question by quoting its stem and the relevant English clue, comparing the recorded choice with the correct answer, and explaining the reasoning in Thai. Give a numbered method and a practice drill with a measurable target.',
+    'Use the full missed-question details and shared context supplied below. Refer to the actual question numbers. For skipped items explain how to start. Never invent a pick, missing question details, or reasons the learner made a mistake. If only scores are saved, explain each weak part using a clearly labeled practice example.',
     'Reply ONLY with valid JSON matching this schema:',
     '{"summary":"string (2-3 Thai sentences diagnosing overall result and #1 bottleneck)",',
-    '"priorities":[{"part":"string","focus":"string (ควรปรับปรุงอะไร)","principle":"string (หลักการที่ต้องใช้)","formula":"string (สูตรลัด/แพตเทิร์น/คีย์เวิร์ด)","drill":"string (แนวฝึกซ้อมต่อ)"}],',
+    '"priorities":[{"part":"string (part and question type if known)","focus":"string (evidence and why to prioritize it)","principle":"string (how to recognize the type and what it tests)","formula":"string (numbered solving steps with a clue or example)","drill":"string (practice task and measurable target)"}],',
     '"nextStep":"string (1-2 Thai sentences for the next mock set)"}',
   ].join(' ');
 
-  const rawPrompt = [
+  const prompt = [
     `Mock Set ${s.set || 1} — ${sectionLabel}`,
+    `Round #${s.activeAttempt || s.legacyAttempt?.attempt || 1}`,
     `Score: ${scaledStr}`,
     ...(summary.legacySummaryOnly ? [] : [`Skipped / Unanswered: ${summary.skippedCount}`]),
     '',
-    'Breakdown by Part (weakest first):',
-    ...(partLines.length ? partLines : ['- No questions recorded']),
+    'Breakdown by Part (lowest accuracy first):',
+    ...(partLines.length ? partLines : ['- No part scores were saved.']),
     '',
-    summary.legacySummaryOnly ? 'Weakest Parts by Missed Count:' : 'Most Missed Question Types / Tags:',
-    ...(tagLines.length ? tagLines : ['- Zero mistakes! Give reinforcement tips to maintain precision and speed.']),
-    ...(sampleLines.length ? ['', 'Sample Missed Items:', ...sampleLines] : []),
+    ...(summary.legacySummaryOnly
+      ? [byType.size ? 'Question-level answers were not saved. The missed question numbers are recorded. The question text and answer key come from the exam.' : 'Question-level answers were not saved for this round. Only use the saved scores.']
+      : tagLines.length
+        ? ['Most Missed Question Types:', ...tagLines]
+        : ['Zero mistakes. Give reinforcement tips to maintain precision and speed.']),
+    ...(byType.size ? ['', summary.legacySummaryOnly ? 'Recorded Missed Questions by Type:' : 'All Missed Questions by Type:',
+      ...[...byType].map(([type, items]) => `- ${type}: ${items.join(', ')}`)] : []),
+    ...(details.length ? ['', 'Missed Question Details:', '', details.join('\n\n')] : []),
   ].join('\n');
-
-  const prompt = clipMockCoachText(rawPrompt, 7200);
   return { system, prompt, summary };
 }
 
-function buildMockQuestionCoachPrompt(question, userPick, { mode = 'explain', questionText = '' } = {}) {
+function buildMockQuestionCoachPrompt(question, userPick, { mode = 'explain', questionText = '', answerKnown = true } = {}) {
   const q = question || {};
-  const LETTERS = ['A', 'B', 'C', 'D'];
   const skipped = userPick === null || userPick === undefined;
   const isRight = !skipped && userPick === q.ans;
   const custom = clipMockCoachText(questionText, 1200);
@@ -2246,14 +2290,14 @@ function buildMockQuestionCoachPrompt(question, userPick, { mode = 'explain', qu
     : mode === 'formula'
       ? 'Focus on memorizable formulas, signal words, question-response patterns, and quick elimination shortcuts (ข้อนี้มีสูตรยังไง / จุดสังเกตคืออะไร).'
       : mode === 'trap'
-        ? (isRight
+        ? (!answerKnown || skipped || isRight
           ? 'Analyze the trickiest distractors in the wrong choices and how learners commonly get trapped on this item.'
           : 'Analyze why the student pick is a classic TOEIC distractor trap and what exact clue distinguishes it from the right answer.')
         : 'Explain step-by-step how to solve this exact question (ข้อนี้ทำยังไง), which listening/grammar principle applies (ใช้หลักการไหน), shortcut formula (สูตรลัด), why traps fail, and a reusable tip.';
 
   const system = [
     'You are an expert Thai TOEIC Tutor helping a learner review a single item AFTER submitting their mock test.',
-    'Explain clearly in natural Thai with exact English evidence from the question.',
+    'Explain in natural Thai what this question type asks the learner to identify. Cite the exact English clue in the supplied text, explain its meaning in Thai and how it points to the answer, then give a numbered solving sequence. Contrast the recorded wrong choice with the answer using a specific clue. For a skipped or unavailable pick, discuss the main distractor without attributing it to the student. Use only the supplied text and say when a clue requires unavailable audio or a visual.',
     'Reply ONLY with valid JSON matching this schema:',
     '{"answer":"string (direct clear answer in Thai, especially complete for follow-up questions)",',
     '"howToSolve":"string (ข้อนี้ทำยังไง: step-by-step solving sequence)",',
@@ -2263,25 +2307,14 @@ function buildMockQuestionCoachPrompt(question, userPick, { mode = 'explain', qu
     '"tip":"string (เทคนิคสั้นๆ นำไปใช้กับข้ออื่นใน Part นี้ได้)"}',
   ].join(' ');
 
-  const choicesBlock = (q.choices || []).map((c, i) => `(${LETTERS[i] || i + 1}) ${c}`).join('\n');
-  const scriptBlock = Array.isArray(q.scriptLines) && q.scriptLines.length
-    ? clipMockCoachText(q.scriptLines.join('\n'), 1800)
-    : '';
-  const passageBlock = formatMockPassagesForAi(q.passages, 1800);
-
+  const pickLabel = !answerKnown ? 'Unavailable (this round did not save individual answers)'
+    : skipped ? 'Skipped (no answer)' : mockChoiceLabel(q, userPick);
+  const answerLabel = mockChoiceLabel(q, q.ans) + (answerKnown ? ` (${isRight ? 'Correct' : 'Missed'})` : '');
   const rawPrompt = [
-    `Question: Q${q.num || '?'} · Part ${q.part || '?'} · ${q.tag || 'General'}`,
-    q.prompt ? `Prompt: ${clipMockCoachText(q.prompt, 400)}` : '',
-    q.q ? `Stem: ${clipMockCoachText(q.q, 600)}` : '',
-    passageBlock ? `Document / Visual Context:\n${passageBlock}` : '',
-    scriptBlock ? `Audio Script:\n${scriptBlock}` : '',
-    choicesBlock ? `Choices:\n${choicesBlock}` : '',
-    `Student Pick: ${skipped ? 'Skipped (no answer)' : `(${LETTERS[userPick] || '?'}) ${q.choices?.[userPick] || ''}`}`,
-    `Correct Answer: (${LETTERS[q.ans] || '?'}) ${q.choices?.[q.ans] || ''} (${isRight ? 'Correct' : 'Missed'})`,
-    q.why ? `Brief App Note: ${clipMockCoachText(q.why, 500)}` : '',
-    '',
+    mockQuestionDetails(q, pickLabel, answerLabel),
     `Tutor Goal: ${taskInstruction}`,
-  ].filter(Boolean).join('\n');
+    mockQuestionContext(q),
+  ].filter(Boolean).join('\n\n');
 
   const prompt = clipMockCoachText(rawPrompt, 7200);
   return { system, prompt };
@@ -2303,30 +2336,31 @@ function parseMockCoachReply(rawText, kind = 'question') {
     }
   }
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return null;
+  const text = (value) => typeof value === 'string' ? value.trim() : '';
 
   if (kind === 'diagnosis') {
-    const summary = String(obj.summary || obj.overview || obj.reply || obj.answer || '').trim().slice(0, 1500);
+    const summary = text(obj.summary || obj.overview || obj.reply || obj.answer);
     const priorities = Array.isArray(obj.priorities)
-      ? obj.priorities.slice(0, 6).map((p) => ({
-          part: String(p?.part || p?.area || '').trim().slice(0, 120),
-          focus: String(p?.focus || p?.improve || '').trim().slice(0, 500),
-          principle: String(p?.principle || '').trim().slice(0, 500),
-          formula: String(p?.formula || p?.pattern || '').trim().slice(0, 500),
-          drill: String(p?.drill || p?.action || '').trim().slice(0, 500),
+      ? obj.priorities.map((p) => ({
+          part: text(p?.part || p?.area),
+          focus: text(p?.focus || p?.improve),
+          principle: text(p?.principle),
+          formula: text(p?.formula || p?.pattern),
+          drill: text(p?.drill || p?.action),
         })).filter((p) => p.part || p.focus || p.principle || p.formula || p.drill)
       : [];
-    const nextStep = String(obj.nextStep || obj.next_step || '').trim().slice(0, 800);
+    const nextStep = text(obj.nextStep || obj.next_step);
     if (!summary && !priorities.length && !nextStep) return null;
     return { summary, priorities, nextStep };
   }
 
   const res = {
-    answer: String(obj.answer || obj.reply || obj.summary || '').trim().slice(0, 1800),
-    howToSolve: String(obj.howToSolve || obj.how_to_solve || obj.steps || '').trim().slice(0, 1800),
-    principle: String(obj.principle || obj.rule || '').trim().slice(0, 1200),
-    formula: String(obj.formula || obj.shortcut || obj.pattern || '').trim().slice(0, 1200),
-    whyWrong: String(obj.whyWrong || obj.why_wrong || obj.trap || '').trim().slice(0, 1200),
-    tip: String(obj.tip || '').trim().slice(0, 800),
+    answer: text(obj.answer || obj.reply || obj.summary),
+    howToSolve: text(obj.howToSolve || obj.how_to_solve || obj.steps),
+    principle: text(obj.principle || obj.rule),
+    formula: text(obj.formula || obj.shortcut || obj.pattern),
+    whyWrong: text(obj.whyWrong || obj.why_wrong || obj.trap),
+    tip: text(obj.tip),
   };
   if (!res.answer && !res.howToSolve && !res.principle && !res.formula && !res.whyWrong && !res.tip) return null;
   return res;
@@ -2553,4 +2587,4 @@ function recordMockScoreEntry(prevEntry, {
   };
 }
 
-if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, studySample, CARD_LANGUAGES, HSK_BANDS, hskDeck, hskStudyItems, mandarinVoice, cardLanguage, studyLanguageCards, studyNewCount, studyNewReview, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, normalizeMockHistory, recordMockScoreEntry, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, moveTabBeside, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
+if (typeof module !== 'undefined') module.exports = { secondsBetween, clockHMS, hoursLabel, timeRange, timeReport, PACKING_TEMPLATES, tripDays, tripState, packingProgress, paidTotals, billState, birthdayInfo, touchState, filterLibrary, libraryYear, weightTrend, medDue, dosesDue, parseIngredients, topItems, weekDays, reviewText, parseConvert, convertUnit, convertLabel, goalProgress, MOODS, moodAverage, nextEventDay, eventDaysIn, renewalsIn, countdownLabel, addCycle, rollForward, monthlyCost, daysUntil, budgetStatus, habitDue, habitStreak, habitBest, habitDay, heatLevel, habitRate, currencySign, priceLabel, pctLabel, signedLabel, portfolio, parseAmount, moneyLabel, moneyMonth, MONEY_ACCOUNTS, moneyAccounts, cleanLinkUrl, linkHost, filterLinks, CARD_BOX_DAYS, cardDue, reviewCard, fsrsRetrievability, fsrsReview, fsrsPreview, deckSummary, studyQueue, studySample, CARD_LANGUAGES, HSK_BANDS, hskDeck, hskStudyItems, mandarinVoice, cardLanguage, studyLanguageCards, studyNewCount, studyNewReview, importCardPack, stripGapCue, cleanChoiceLabel, shuffleWith, buildCardQuiz, buildCuratedQuiz, scoreQuiz, toeicReadingScore, toeicCefrBand, toeicListeningScore, toeicListeningCefr, toeicTotalScore, toeicTotalCefr, shuffleExamChoices, buildMockExam, scoreMockExam, buildListeningExam, scoreListeningExam, scoreFullToeicExam, snapToeflBand, toeflCefrBand, toeflComparable120, toeflOverallBand, toeflAdaptiveBranch, toeflBandScore, scoreToeflWordGap, scoreToeflBuildSentence, parseToeflAiEval, mockQuestionType, summarizeMockMistakes, buildMockDiagnosisPrompt, buildMockQuestionCoachPrompt, parseMockCoachReply, normalizeMockHistory, recordMockScoreEntry, clock, minutesLabel, focusSummary, minutesOf, taskMinutes, snapMinutes, withTime, layoutDay, rankItems, checkProgress, plainToHtml, escapeHtml, colorKey, NOTE_COLORS, DEFAULT_COLOR, monthGrid, shiftDay, shiftMonth, groupByDay, localDay, parseDay, nextOccurrence, streak, parseQuick, inView, dailyCounts, niceMax, autoDaily, autoMetric, autoMatches, autoFill, autoDue, autoAllowed, autoSummary, ASSIST_BRIEFING, briefingDue, xpLevel, xpAward, xpBadges, xpStreak, XP_RULES, planWeek, placeDue, capLines, moneyDetail, timeDetail, assistantPrompt, assistantRange, ASSIST_PERIODS, parseAssistantReply, describeAction, assistantTurns, repeatDue, withRepeats, stockNow, projectSummary, projectBoard, NOTE_TEMPLATES, sortNotes, timeLog, timeLogLine, reviewRange, reviewBuckets, hotkeyFromEvent, orderTabs, moveTabBeside, setWeekStart, zeroFill, insightFindings, insightSentence, parseSubtasks, subtaskProgress, extractTags, taskTags };
